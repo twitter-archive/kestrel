@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="scarling" default="default" basedir=".">
+    <description> Scarling simple transactional queue server. </description>
+    
+    <property name="build.dir" value="build" />
+    <property name="test.dir" value="build-test" />
+    <property name="docs.dir" value="docs" />
+    
+    <property environment="env" />
+    <property name="scala.home" value="${env.SCALA_HOME}" />
+    <property name="scala-compiler.jar" value="${scala.home}/lib/scala-compiler.jar" />
+    <property name="scala-library.jar" value="${scala.home}/lib/scala-library.jar" />
+    <path id="scala.classpath">
+        <pathelement location="${scala-compiler.jar}" />
+        <pathelement location="${scala-library.jar}" />
+    </path>
+    <taskdef resource="scala/tools/ant/antlib.xml">
+        <classpath refid="scala.classpath" />
+    </taskdef>
+    
+    <target name="init">
+        <mkdir dir="${build.dir}" />
+        <mkdir dir="${test.dir}" />
+    </target>
+
+    <target name="compile" depends="init">
+        <scalac srcdir="src" destdir="${build.dir}" force="changed" deprecation="on">
+            <classpath>
+                <path refid="scala.classpath" />
+                <pathelement location="libs/configgy-0.9.jar" />
+            </classpath>
+            <include name="**/*.scala" />
+        </scalac>
+    </target>
+
+    <target name="compile-tests" depends="compile">
+        <scalac srcdir="test" destdir="${test.dir}" force="changed">
+            <classpath>
+                <path refid="scala.classpath" />
+                <pathelement location="${build.dir}" />
+            </classpath>
+            <include name="**/*.scala" />
+        </scalac>
+    </target>
+    
+    <target name="test" depends="compile-tests">
+       <java classname="scala.tools.nsc.MainGenericRunner" fork="true" failonerror="true">
+           <classpath>
+               <path refid="scala.classpath" />
+               <pathelement location="libs/configgy-0.9.jar" />
+               <pathelement location="${build.dir}" />
+               <pathelement location="${test.dir}" />
+           </classpath>
+           <arg line="com.twitter.TestRunner" />
+       </java>
+    </target>
+    
+    <target name="jar" depends="test">
+        <jar destfile="scarling.jar">
+            <fileset dir="${build.dir}" />
+        </jar>
+    </target>
+    
+    <target name="docs">
+        <mkdir dir="${docs.dir}" />
+        <scaladoc srcdir="src" destdir="${docs.dir}">
+            <classpath refid="scala.classpath" />
+        </scaladoc>
+    </target>
+
+    <target name="clean" depends="init">
+        <delete dir="${build.dir}"/>
+        <delete dir="${test.dir}"/>
+    </target>
+
+</project>
