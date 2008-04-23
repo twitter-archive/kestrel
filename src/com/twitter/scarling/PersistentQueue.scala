@@ -101,7 +101,7 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
             return
         }
 
-        log.info("Rolling journal file for %s", name)
+        log.info("Rolling journal file for '%s'", name)
         journal.close
         
         val backupFile = new File(queuePath + "." + System.currentTimeMillis)
@@ -111,7 +111,7 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
     }
     
     private def replayJournal: Unit = {
-        log.info("Replaying transaction journal for %s", name)
+        log.info("Replaying transaction journal for '%s'", name)
         queueSize = 0
         
         try {
@@ -145,13 +145,13 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
                 }
             }
             
-            log.info("Finished transaction journal for %s", name)
+            log.info("Finished transaction journal for '%s'", name)
         } catch {
             case e: FileNotFoundException => {
-                log.info("No transaction journal for %s; starting with empty queue.", name)
+                log.info("No transaction journal for '%s'; starting with empty queue.", name)
             }
             case e: IOException => {
-                log.error(e, "Exception replaying journal for %s", name)
+                log.error(e, "Exception replaying journal for '%s'", name)
                 log.error("DATA MAY HAVE BEEN LOST!")
                 // FIXME: would it be better to just stop the server here?
             }
