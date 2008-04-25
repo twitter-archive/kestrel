@@ -3,12 +3,29 @@ package com.twitter.scarling
 import java.io.{ByteArrayOutputStream, DataInputStream, DataOutputStream,
     File, FileInputStream, FileNotFoundException, FileOutputStream,
     IOException}
+import java.nio.{ByteBuffer, ByteOrder}
 import scala.collection.mutable.Queue
 
 import net.lag.logging.Logger
 
 
+// why does java make this so hard? :/
+// this is not threadsafe so may only be used as a local var.
+class IntReader(private val order: ByteOrder) {
+    val buffer = new Array[Byte](4)
+    val byteBuffer = ByteBuffer.wrap(buffer)
+    byteBuffer.order(order)
+    
+    def readInt(in: DataInputStream) = {
+        in.readFully(buffer)
+        byteBuffer.rewind
+        byteBuffer.getInt
+    }
+}
+
+
 class PersistentQueue(private val persistencePath: String, val name: String) {
+    private val log = Logger.get
     
     /* when a journal reaches maxJournalSize, the queue will wait until
      * it is empty, and will then rotate the journal.
@@ -17,8 +34,6 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
     
     private val CMD_ADD = 0
     private val CMD_REMOVE = 1
-    
-    private val log = Logger.get
     
     private val queuePath: String = new File(persistencePath, name).getCanonicalPath()
     
@@ -118,6 +133,7 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
             val fileIn = new FileInputStream(queuePath)
             val in = new DataInputStream(fileIn)
             var offset = 0
+            val intReader = new IntReader(ByteOrder.LITTLE_ENDIAN)
             
             var eof = false
             while (!eof) {
@@ -126,7 +142,7 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
                         eof = true
                     }
                     case CMD_ADD => {
-                        val size = in.readInt()
+                        val size = intReader.readInt(in)
                         val data = new Array[Byte](size)
                         in.readFully(data)
                         queue += data
@@ -145,7 +161,7 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
                 }
             }
             
-            log.info("Finished transaction journal for '%s'", name)
+            log.info("Finished transaction journal for '%s' (%d items, %d bytes)", name, size, offset)
         } catch {
             case e: FileNotFoundException => {
                 log.info("No transaction journal for '%s'; starting with empty queue.", name)

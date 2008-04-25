@@ -3,12 +3,15 @@ package com.twitter
 import scala.testing.SUnit._
 
 import com.twitter.scarling._
+import net.lag.logging.Logger
 
 
 object TestRunner {
     def sum(x: Seq[Int]) = (0 /: x) { _ + _ }
         
     def main(args:Array[String]): Unit = {
+        // turn down logging
+        Logger.get("").setLevel(Logger.FATAL)
         val results = new TestResult
 
         val suite = new TestSuite(PersistentQueueTests)

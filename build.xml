@@ -37,6 +37,7 @@
         <scalac srcdir="test" destdir="${test.dir}" force="changed">
             <classpath>
                 <path refid="scala.classpath" />
+                <pathelement location="libs/configgy-0.9.jar" />
                 <pathelement location="${build.dir}" />
             </classpath>
             <include name="**/*.scala" />
