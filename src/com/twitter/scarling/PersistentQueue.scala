@@ -83,9 +83,9 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
      * Remove an item from the queue, transactionally. If no item is
      * available, an empty byte array is returned.
      */
-    def remove: Array[Byte] = synchronized {
+    def remove: Option[Array[Byte]] = synchronized {
         if (queue.isEmpty) {
-            return new Array[Byte](0)
+            return None
         }
         
         journal.write(CMD_REMOVE)
@@ -95,7 +95,7 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
         val item = queue.dequeue
         queueSize -= item.length
         checkRoll
-        item
+        Some(item)
     }
 
     /**
