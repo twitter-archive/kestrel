@@ -13,14 +13,7 @@ abstract class Tests extends Test with Assert {
     def test(desc: String)(t: => Unit) : Unit = {
         // careful: this pushes the tests in reverse order like a stack, so
         // we have to reverse them back later.
-        tests = Pair(desc, () => {
-            setUp
-            try {
-                t
-            } finally {
-                tearDown
-            }
-        }) :: tests
+        tests = Pair(desc, () => runUnitTest(t)) :: tests
     }
 
     def setUp = { }
@@ -64,19 +57,43 @@ abstract class Tests extends Test with Assert {
             throw new AssertionError("expected '" + expected + "', got '" + actual + "'")
         }
     }
-
-    def withTempFolder(f: (String) => Any): Unit = {
-        var folderName: String = null
-        do {
-            folderName = "/tmp/scala-test-" + System.currentTimeMillis
-        } while (! new File(folderName).mkdir) 
-        try {
-            f(folderName)
-        } finally {
-            for (val filename <- new File(folderName).listFiles) {
-                filename.delete
+    
+    private val _folderName = new ThreadLocal[File]
+    
+    // recursively delete a folder. should be built in. bad java.
+    private def deleteFolder(folder: File): Unit = {
+        for (val f <- folder.listFiles) {
+            if (f.isDirectory) {
+                deleteFolder(f)
+            } else {
+                f.delete
             }
-            new File(folderName).delete
+        }
+        folder.delete
+    }
+    
+    private def runUnitTest(f: => Unit): Unit = {
+        // make a temporary folder for this test
+        var folder: File = null
+        do {
+            folder = new File("./scala-test-" + System.currentTimeMillis)
+        } while (! folder.mkdir)
+        _folderName.set(folder)
+
+        var success = false
+        try {
+            setUp
+            f
+            success = true
+        } finally {
+            tearDown
+        }
+        
+        // if the test failed, leave the folder around for debugging.
+        if (success) {
+            deleteFolder(folder)
         }
     }
+    
+    def currentFolder = { _folderName.get }
 }
