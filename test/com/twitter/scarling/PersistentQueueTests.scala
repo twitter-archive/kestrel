@@ -35,7 +35,7 @@ object PersistentQueueTests extends Tests {
         val f = new FileInputStream(new File(currentFolder, "work"))
         val data = new Array[Byte](17)
         f.read(data)
-        expect("0:0:0:0:11:104:101:108:108:111:32:107:105:116:116:121:1") { data.mkString(":") }
+        expect("0:11:0:0:0:104:101:108:108:111:32:107:105:116:116:121:1") { data.mkString(":") }
     }
     
     test("journal rotation") {

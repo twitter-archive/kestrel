@@ -24,6 +24,19 @@ class IntReader(private val order: ByteOrder) {
 }
 
 
+class IntWriter(private val order: ByteOrder) {
+    val buffer = new Array[Byte](4)
+    val byteBuffer = ByteBuffer.wrap(buffer)
+    byteBuffer.order(order)
+    
+    def writeInt(out: DataOutputStream, n: Int) = {
+        byteBuffer.rewind
+        byteBuffer.putInt(n)
+        out.write(buffer)
+    }
+}
+
+
 class PersistentQueue(private val persistencePath: String, val name: String) {
     private val log = Logger.get
     
@@ -51,6 +64,9 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
     private var byteBuffer = new ByteArrayOutputStream(16)
     private var buffer = new DataOutputStream(byteBuffer)
     
+    // sad way to write little-endian ints when journaling queue adds
+    private val intWriter = new IntWriter(ByteOrder.LITTLE_ENDIAN)
+    
     replayJournal
     
     
@@ -68,7 +84,7 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
     def add(value: Array[Byte]): Unit = synchronized {
         byteBuffer.reset()
         buffer.write(CMD_ADD)
-        buffer.writeInt(value.length)
+        intWriter.writeInt(buffer, value.length)
         byteBuffer.writeTo(journal)
         journal.write(value)
         journal.getFD.sync
