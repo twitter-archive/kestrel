@@ -18,6 +18,13 @@
         <classpath refid="scala.classpath" />
     </taskdef>
     
+    <path id="deps">
+        <pathelement location="libs/configgy-0.9.jar" />
+        <pathelement location="libs/mina-core-1.1.7.jar" />
+        <pathelement location="libs/slf4j-api-1.5.0.jar" />
+        <pathelement location="libs/slf4j-jdk14-1.5.0.jar" />
+    </path>
+    
     <target name="init">
         <mkdir dir="${build.dir}" />
         <mkdir dir="${test.dir}" />
@@ -27,7 +34,7 @@
         <scalac srcdir="src" destdir="${build.dir}" force="changed" deprecation="on">
             <classpath>
                 <path refid="scala.classpath" />
-                <pathelement location="libs/configgy-0.9.jar" />
+                <path refid="deps" />
             </classpath>
             <include name="**/*.scala" />
         </scalac>
@@ -37,7 +44,7 @@
         <scalac srcdir="test" destdir="${test.dir}" force="changed">
             <classpath>
                 <path refid="scala.classpath" />
-                <pathelement location="libs/configgy-0.9.jar" />
+                <path refid="deps" />
                 <pathelement location="${build.dir}" />
             </classpath>
             <include name="**/*.scala" />
@@ -48,7 +55,7 @@
        <java classname="scala.tools.nsc.MainGenericRunner" fork="true" failonerror="true">
            <classpath>
                <path refid="scala.classpath" />
-               <pathelement location="libs/configgy-0.9.jar" />
+               <path refid="deps" />
                <pathelement location="${build.dir}" />
                <pathelement location="${test.dir}" />
            </classpath>
@@ -67,6 +74,17 @@
         <scaladoc srcdir="src" destdir="${docs.dir}">
             <classpath refid="scala.classpath" />
         </scaladoc>
+    </target>
+    
+    <target name="run">
+        <!-- temporary -->
+        <java classname="com.twitter.scarling.Scarling" fork="true" failonerror="true">
+            <classpath>
+                <path refid="scala.classpath" />
+                <path refid="deps" />
+                <pathelement location="${build.dir}" />
+            </classpath>
+        </java>
     </target>
 
     <target name="clean" depends="init">
