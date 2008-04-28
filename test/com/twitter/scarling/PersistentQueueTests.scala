@@ -65,4 +65,24 @@ object PersistentQueueTests extends Tests {
         expect(0) { q.journalSize }
         expect(0) { new File(currentFolder.getPath, "rolling").length }
     }
+    
+    test("journal is okay after restart") {
+        val q = new PersistentQueue(currentFolder.getPath, "rolling")
+        q.add("first".getBytes)
+        q.add("second".getBytes)
+        expect("first") { new String(q.remove.get) }
+        expect(22) { q.journalSize }
+        q.close
+        
+        val q2 = new PersistentQueue(currentFolder.getPath, "rolling")
+        expect(22) { q2.journalSize }
+        expect("second") { new String(q2.remove.get) }
+        expect(23) { q2.journalSize }
+        expect(0) { q2.size }
+        q2.close
+
+        val q3 = new PersistentQueue(currentFolder.getPath, "rolling")
+        expect(23) { q3.journalSize }
+        expect(0) { q3.size }
+    }
 }

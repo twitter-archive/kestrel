@@ -24,6 +24,7 @@ class IntReader(private val order: ByteOrder) {
 }
 
 
+// again, must be either behind a lock, or in a local var
 class IntWriter(private val order: ByteOrder) {
     val buffer = new Array[Byte](4)
     val byteBuffer = ByteBuffer.wrap(buffer)
@@ -123,8 +124,7 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
     
     
     private def openJournal: Unit = {
-        journal = new FileOutputStream(queuePath)
-        _journalSize = 0
+        journal = new FileOutputStream(queuePath, true)
     }
     
     private def checkRoll: Unit = {
@@ -138,6 +138,7 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
         val backupFile = new File(queuePath + "." + System.currentTimeMillis)
         new File(queuePath).renameTo(backupFile)
         openJournal
+        _journalSize = 0
         backupFile.delete
     }
     
@@ -164,7 +165,6 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
                         queue += data
                         queueSize += data.length
                         offset += (5 + data.length)
-                        _totalItems += 1
                     }
                     case CMD_REMOVE => {
                         queueSize -= queue.dequeue.length
@@ -177,6 +177,7 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
                 }
             }
             
+            _journalSize = offset
             log.info("Finished transaction journal for '%s' (%d items, %d bytes)", name, size, offset)
         } catch {
             case e: FileNotFoundException => {
