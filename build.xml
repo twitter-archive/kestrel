@@ -76,7 +76,7 @@
         </scaladoc>
     </target>
     
-    <target name="run">
+    <target name="run" depends="test">
         <!-- temporary -->
         <java classname="com.twitter.scarling.Scarling" fork="true" failonerror="true">
             <classpath>
