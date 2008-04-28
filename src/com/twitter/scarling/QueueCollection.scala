@@ -11,13 +11,16 @@ import net.lag.logging.Logger
 class InaccessibleQueuePath extends Exception("Inaccessible queue path")
 
 
-private case class QAdd(item: Array[Byte])
-private case object QRemove
-private case object QShutdown
-private case object QDone
 
 
 class QueueCollection(private val queueFolder: String) {
+    private case class QAdd(item: Array[Byte])
+    private case object QRemove
+    private case object QShutdown
+    private case object QDone
+    private case object QStats
+    private case class QStatsReply(size: Int, bytes: Int, totalItems: Int, journalSize: Int)
+
     private val log = Logger.get
     
     private val path = new File(queueFolder)
@@ -53,16 +56,8 @@ class QueueCollection(private val queueFolder: String) {
         queueActors.keys.toList
     }
     
-    private def addCurrentBytes(n: Int) = synchronized {
-        _currentBytes += n
-    }
-    
-    private def addCurrentItems(n: Int) = synchronized {
-        _currentItems += n
-    }
-    
     /**
-     * Get a named queue, creating it if necessary.
+     * Get a named queue's actor, creating it if necessary.
      */
     private def queue(name: String): Option[Actor] = synchronized {
         if (shuttingDown) {
@@ -74,8 +69,11 @@ class QueueCollection(private val queueFolder: String) {
             case None => {
                 val qActor = actor {
                     val queue = new PersistentQueue(path.getPath, name)
-                    addCurrentBytes(queue.bytes)
-                    addCurrentItems(queue.size)
+
+                    QueueCollection.this.synchronized {
+                        _currentBytes += queue.bytes
+                        _currentItems += queue.size
+                    }
                     
                     loop {
                         react {
@@ -89,6 +87,7 @@ class QueueCollection(private val queueFolder: String) {
                                 reply(QDone)
                                 exit()
                             }
+                            case QStats => reply(new QStatsReply(queue.size, queue.bytes, queue.totalItems, queue.journalSize))
                         }
                     }
                 }
@@ -111,7 +110,7 @@ class QueueCollection(private val queueFolder: String) {
             case Some(q) => {
                 // must be synchronous so we know it's in the queue journal
                 q !? new QAdd(item)
-                synchronized {
+                QueueCollection.this.synchronized {
                     _currentBytes += item.length
                     _currentItems += 1
                     _totalAdded += 1
@@ -128,14 +127,14 @@ class QueueCollection(private val queueFolder: String) {
     def remove(key: String): Option[Array[Byte]] = {
         queue(key) match {
             case None => {
-                synchronized {
+                QueueCollection.this.synchronized {
                     _queueMisses += 1
                 }
                 None
             }
             case Some(q) => {
                 val item = (q !? QRemove).asInstanceOf[Option[Array[Byte]]]
-                synchronized {
+                QueueCollection.this.synchronized {
                     item match {
                         case None => _queueMisses += 1
                         case Some(x) => {
@@ -146,6 +145,16 @@ class QueueCollection(private val queueFolder: String) {
                     }
                 }
                 item
+            }
+        }
+    }
+    
+    def stats(key: String): (Int, Int, Int, Int) = {
+        queue(key) match {
+            case None => (0, 0, 0, 0)
+            case Some(q) => {
+                val qStats = (q !? QStats).asInstanceOf[QStatsReply]
+                (qStats.size, qStats.bytes, qStats.totalItems, qStats.journalSize)
             }
         }
     }
