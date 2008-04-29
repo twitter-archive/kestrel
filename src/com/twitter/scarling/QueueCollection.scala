@@ -11,8 +11,6 @@ import net.lag.logging.Logger
 class InaccessibleQueuePath extends Exception("Inaccessible queue path")
 
 
-
-
 class QueueCollection(private val queueFolder: String) {
     private case class QAdd(item: Array[Byte])
     private case object QRemove

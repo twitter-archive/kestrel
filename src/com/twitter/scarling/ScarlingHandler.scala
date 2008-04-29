@@ -11,47 +11,11 @@ import org.apache.mina.common._
 import org.apache.mina.transport.socket.nio.SocketSessionConfig
 
 
-object ScarlingHandler {
-    private var _nextSessionID: Int = 0
-    private var _sessions: Int = 0
-    private var _totalConnections: Int = 0
-    private var _getRequests: Int = 0
-    private var _setRequests: Int = 0
-    
-    def nextSessionID = synchronized {
-        _nextSessionID += 1
-        _nextSessionID
-    }
-    
-    def addSession = synchronized {
-        _sessions += 1
-        _totalConnections += 1
-    }
-    
-    def removeSession = synchronized {
-        _sessions -= 1
-    }
-    
-    def addGetRequest = synchronized {
-        _getRequests += 1
-    }
-    
-    def addSetRequest = synchronized {
-        _setRequests += 1
-    }
-    
-    def sessionCount = synchronized { _sessions }
-    def totalConnectionCount = synchronized { _totalConnections }
-    def getRequests = synchronized { _getRequests }
-    def setRequests = synchronized { _setRequests }
-}
-
-
 class ScarlingHandler(val session: IoSession) extends Actor {
     private val log = Logger.get
     
     private val IDLE_TIMEOUT = 60
-    private val sessionID = ScarlingHandler.nextSessionID
+    private val sessionID = ScarlingStats.sessionID.incr
     private val remoteAddress = session.getRemoteAddress.asInstanceOf[InetSocketAddress]
     
 
@@ -59,7 +23,8 @@ class ScarlingHandler(val session: IoSession) extends Actor {
 		session.getConfig.asInstanceOf[SocketSessionConfig].setReceiveBufferSize(2048)
 	}
     session.setIdleTime(IdleStatus.BOTH_IDLE, IDLE_TIMEOUT)
-    ScarlingHandler.addSession
+    ScarlingStats.sessions.incr
+    ScarlingStats.totalConnections.incr
     log.debug("New session %d from %s:%d", sessionID, remoteAddress.getHostName, remoteAddress.getPort)
     start
     
@@ -76,7 +41,7 @@ class ScarlingHandler(val session: IoSession) extends Actor {
                 
                 case MinaMessage.SessionClosed => {
                     log.debug("End of session %d", sessionID)
-                    ScarlingHandler.removeSession
+                    ScarlingStats.sessions.decr
                     exit()
                 }
                 
@@ -100,7 +65,7 @@ class ScarlingHandler(val session: IoSession) extends Actor {
         buffer.put(data)
         buffer.put("\r\nEND\r\n".getBytes)
         buffer.flip
-        Scarling.addBytesWritten(buffer.capacity)
+        ScarlingStats.bytesWritten.incr(buffer.capacity)
         session.write(new memcache.Response(buffer))
     }
     
@@ -114,7 +79,7 @@ class ScarlingHandler(val session: IoSession) extends Actor {
     }
     
     private def get(name: String): Unit = {
-        ScarlingHandler.addGetRequest
+        ScarlingStats.getRequests.incr
         val now = (System.currentTimeMillis / 1000).toInt
         Scarling.queues.remove(name) match {
             case None => writeResponse("END\r\n")
@@ -131,7 +96,7 @@ class ScarlingHandler(val session: IoSession) extends Actor {
     }
     
     private def set(name: String, flags: Int, expiry: Int, data: Array[Byte]) = {
-        ScarlingHandler.addSetRequest
+        ScarlingStats.setRequests.incr
         if (Scarling.queues.add(name, pack(expiry, data))) {
             writeResponse("STORED\r\n")
         } else {
@@ -147,14 +112,14 @@ class ScarlingHandler(val session: IoSession) extends Actor {
         report += (("curr_items", Scarling.queues.currentItems.toString))
         report += (("total_items", Scarling.queues.totalAdded.toString))
         report += (("bytes", Scarling.queues.currentBytes.toString))
-        report += (("curr_connections", ScarlingHandler.sessionCount.toString))
-        report += (("total_connections", ScarlingHandler.totalConnectionCount.toString))
-        report += (("cmd_get", ScarlingHandler.getRequests.toString))
-        report += (("cmd_set", ScarlingHandler.setRequests.toString))
+        report += (("curr_connections", ScarlingStats.sessions.toString))
+        report += (("total_connections", ScarlingStats.totalConnections.toString))
+        report += (("cmd_get", ScarlingStats.getRequests.toString))
+        report += (("cmd_set", ScarlingStats.setRequests.toString))
         report += (("get_hits", Scarling.queues.queueHits.toString))
         report += (("get_misses", Scarling.queues.queueMisses.toString))
-        report += (("bytes_read", Scarling.bytesRead.toString))
-        report += (("bytes_written", Scarling.bytesWritten.toString))
+        report += (("bytes_read", ScarlingStats.bytesRead.toString))
+        report += (("bytes_written", ScarlingStats.bytesWritten.toString))
         report += (("limit_maxbytes", "0"))                         // ???
         
         for (qName <- Scarling.queues.queues) {

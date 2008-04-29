@@ -27,11 +27,11 @@ class ProtocolCodecFactory extends DemuxingProtocolCodecFactory {
 class Encoder extends MessageEncoder {
     def encode(session: IoSession, message: AnyRef, out: ProtocolEncoderOutput) = {
         val buffer = message.asInstanceOf[Response].data
-        Scarling.addBytesWritten(buffer.remaining)
+        ScarlingStats.bytesWritten.incr(buffer.remaining)
         out.write(buffer)
     }
     
-    def getMessageTypes: java.util.Set[Class[_]] = java.util.Collections.singleton(classOf[Response])
+    def getMessageTypes: java.util.Set[Class[T] forSome { type T }] = java.util.Collections.singleton(classOf[Response])
 }
 
 
@@ -86,7 +86,7 @@ class Decoder extends MessageDecoderAdapter {
         val bytes = new Array[Byte](in.remaining)
         in.get(bytes)
         state.buffer ++= bytes
-        Scarling.addBytesRead(bytes.length)
+        ScarlingStats.bytesRead.incr(bytes.length)
         
         state.line match {
             case None => decodeLine(state, out)

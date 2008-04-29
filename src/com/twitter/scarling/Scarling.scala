@@ -2,13 +2,36 @@ package com.twitter.scarling
 
 import java.net.InetSocketAddress
 import java.util.concurrent.Executors
-import scala.actors.Actor
+import scala.actors.{Actor, Scheduler}
 import scala.actors.Actor._
 import scala.collection.mutable
 import org.apache.mina.common._
 import org.apache.mina.filter.codec.ProtocolCodecFilter
 import org.apache.mina.transport.socket.nio.{SocketAcceptor, SocketAcceptorConfig, SocketSessionConfig}
 import net.lag.logging.Logger
+
+
+class Counter {
+    private var value = 0
+    
+    def get = synchronized { value }
+    def set(n: Int) = synchronized { value = n }
+    def incr = synchronized { value += 1; value }
+    def incr(n: Int) = synchronized { value += n; value }
+    def decr = synchronized { value -= 1; value }
+    override def toString = synchronized { value.toString }
+}
+
+
+object ScarlingStats {
+    val bytesRead = new Counter
+    val bytesWritten = new Counter
+    val sessions = new Counter
+    val totalConnections = new Counter
+    val getRequests = new Counter
+    val setRequests = new Counter
+    val sessionID = new Counter
+}
 
 
 object Scarling {
@@ -19,8 +42,6 @@ object Scarling {
     
     private[scarling] val queues = new QueueCollection("/tmp")
     
-    private var _bytesRead = 0
-    private var _bytesWritten = 0
     private val _expiryStats = new mutable.HashMap[String, Int]
     private val _startTime = System.currentTimeMillis
     
@@ -30,10 +51,11 @@ object Scarling {
     ByteBuffer.setUseDirectBuffers(false)
     ByteBuffer.setAllocator(new SimpleByteBufferAllocator())
 
-    val acceptor: IoAcceptor = new SocketAcceptor(Runtime.getRuntime().availableProcessors() + 1, Executors.newCachedThreadPool())
+    val acceptorExecutor = Executors.newCachedThreadPool()
+    val acceptor: IoAcceptor = new SocketAcceptor(Runtime.getRuntime().availableProcessors() + 1, acceptorExecutor)
 
     def main(args: Array[String]) = {
-        //Logger.get("").setLevel(Logger.DEBUG)
+        Logger.get("").setLevel(Logger.TRACE)
         
         // mina garbage:
         acceptor.getDefaultConfig.setThreadModel(ThreadModel.MANUAL)
@@ -49,17 +71,11 @@ object Scarling {
         log.info("Shutting down!")
         queues.shutdown
         acceptor.unbindAll
-        System.exit(0)
+        Scheduler.shutdown
+        acceptorExecutor.shutdown
+        Console.println("foo")
     }
 
-    def addBytesRead(n: Int) = synchronized {
-        _bytesRead += n
-    }
-    
-    def addBytesWritten(n: Int) = synchronized {
-        _bytesWritten += n
-    }
-    
     def addExpiry(name: String): Unit = synchronized {
         if (! _expiryStats.contains(name)) {
             _expiryStats(name) = 1
@@ -75,8 +91,5 @@ object Scarling {
         }
     }
 
-    def bytesRead = synchronized { _bytesRead }
-    def bytesWritten = synchronized { _bytesWritten }
-    
     def uptime = (System.currentTimeMillis - _startTime) / 1000
 }
