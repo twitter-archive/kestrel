@@ -55,13 +55,14 @@ object Scarling {
     val acceptor: IoAcceptor = new SocketAcceptor(Runtime.getRuntime().availableProcessors() + 1, acceptorExecutor)
 
     def main(args: Array[String]) = {
-        Logger.get("").setLevel(Logger.TRACE)
+        //Logger.get("").setLevel(Logger.TRACE)
         
         // mina garbage:
         acceptor.getDefaultConfig.setThreadModel(ThreadModel.MANUAL)
         val saConfig = new SocketAcceptorConfig
         saConfig.setReuseAddress(true)
-        saConfig.getFilterChain.addLast("codec", new ProtocolCodecFilter(new memcache.ProtocolCodecFactory))
+        saConfig.getSessionConfig.setTcpNoDelay(true)
+        saConfig.getFilterChain.addLast("codec", new ProtocolCodecFilter(new memcache.Encoder, new memcache.Decoder))
         acceptor.bind(new InetSocketAddress(listenAddress, listenPort), new IoHandlerActorAdapter((session: IoSession) => new ScarlingHandler(session)), saConfig)
 
         log.info("Scarling started.")
@@ -73,7 +74,6 @@ object Scarling {
         acceptor.unbindAll
         Scheduler.shutdown
         acceptorExecutor.shutdown
-        Console.println("foo")
     }
 
     def addExpiry(name: String): Unit = synchronized {
