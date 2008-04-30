@@ -7,7 +7,6 @@ import org.apache.mina.common._
 // Actor messages for the Mina "events"
 abstract sealed class MinaMessage
 object MinaMessage {
-    case object SessionCreated extends MinaMessage
     case object SessionOpened extends MinaMessage
     case class MessageReceived(message: AnyRef) extends MinaMessage
     case class MessageSent(message: AnyRef) extends MinaMessage
