@@ -31,7 +31,11 @@ class ScarlingHandler(val session: IoSession) extends Actor {
     def act = {
         loop {
             react {
+                case MinaMessage.SessionOpened =>
+                
                 case MinaMessage.MessageReceived(msg) => handle(msg.asInstanceOf[memcache.Request])
+                
+                case MinaMessage.MessageSent(msg) =>
                 
                 case MinaMessage.ExceptionCaught(cause) => {
                     log.error("Exception caught on session %d: %s", sessionID, cause.getMessage)
@@ -122,7 +126,7 @@ class ScarlingHandler(val session: IoSession) extends Actor {
         report += (("bytes_written", ScarlingStats.bytesWritten.toString))
         report += (("limit_maxbytes", "0"))                         // ???
         
-        for (qName <- Scarling.queues.queues) {
+        for (qName <- Scarling.queues.queueNames) {
             val (size, bytes, totalItems, journalSize) = Scarling.queues.stats(qName)
             report += (("queue_" + qName + "_items", size.toString))
             report += (("queue_" + qName + "_total_items", totalItems.toString))

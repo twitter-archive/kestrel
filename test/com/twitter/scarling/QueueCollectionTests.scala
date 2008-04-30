@@ -27,12 +27,12 @@ object QueueCollectionTests extends Tests {
     
     
     test("queue creation") {
-        expect(List()) { qc.queues }
+        expect(List()) { qc.queueNames }
 
         qc.add("work1", "stuff".getBytes)
         qc.add("work2", "other stuff".getBytes)
 
-        expect(List("work1", "work2")) { sorted(qc.queues) }
+        expect(List("work1", "work2")) { sorted(qc.queueNames) }
         expect(16) { qc.currentBytes }
         expect(2) { qc.currentItems }
         expect(2) { qc.totalAdded }
@@ -51,13 +51,13 @@ object QueueCollectionTests extends Tests {
         qc.add("ducklings", "huey".getBytes)
         qc.add("ducklings", "dewey".getBytes)
         qc.add("ducklings", "louie".getBytes)
-        expect(List("ducklings")) { qc.queues }
+        expect(List("ducklings")) { qc.queueNames }
         expect(14) { qc.currentBytes }
         expect(3) { qc.currentItems }
         qc.shutdown
         
         qc = new QueueCollection(currentFolder.getPath)
-        expect(List()) { qc.queues }
+        expect(List()) { qc.queueNames }
         expect("huey") { new String(qc.remove("ducklings").get) }
         // now the queue should be suddenly instantiated:
         expect(10) { qc.currentBytes }

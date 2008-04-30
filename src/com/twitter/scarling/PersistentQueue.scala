@@ -68,7 +68,9 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
     // sad way to write little-endian ints when journaling queue adds
     private val intWriter = new IntWriter(ByteOrder.LITTLE_ENDIAN)
     
-    replayJournal
+    // force get/set operations to block while we're replaying any existing journal
+    private val initialized = new Event
+    private var closed = false
     
     
     def size = synchronized { queue.length }
@@ -82,44 +84,61 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
     /**
      * Add a value to the end of the queue, transactionally.
      */
-    def add(value: Array[Byte]): Unit = synchronized {
-        byteBuffer.reset()
-        buffer.write(CMD_ADD)
-        intWriter.writeInt(buffer, value.length)
-        byteBuffer.writeTo(journal)
-        journal.write(value)
-        journal.getFD.sync
-        _journalSize += (5 + value.length)
+    def add(value: Array[Byte]): Boolean = {
+        initialized.waitFor
+        synchronized {
+            if (closed) {
+                return false
+            }
         
-        _totalItems += 1
-        queue += value
-        queueSize += value.length
+            byteBuffer.reset()
+            buffer.write(CMD_ADD)
+            intWriter.writeInt(buffer, value.length)
+            byteBuffer.writeTo(journal)
+            journal.write(value)
+            journal.getFD.sync
+            _journalSize += (5 + value.length)
+        
+            _totalItems += 1
+            queue += value
+            queueSize += value.length
+            true
+        }
     }
     
     /**
      * Remove an item from the queue, transactionally. If no item is
      * available, an empty byte array is returned.
      */
-    def remove: Option[Array[Byte]] = synchronized {
-        if (queue.isEmpty) {
-            return None
+    def remove: Option[Array[Byte]] = {
+        initialized.waitFor
+        synchronized {
+            if (queue.isEmpty || closed) {
+                return None
+            }
+        
+            journal.write(CMD_REMOVE)
+            journal.getFD.sync
+            _journalSize += 1
+        
+            val item = queue.dequeue
+            queueSize -= item.length
+            checkRoll
+            Some(item)
         }
-        
-        journal.write(CMD_REMOVE)
-        journal.getFD.sync
-        _journalSize += 1
-        
-        val item = queue.dequeue
-        queueSize -= item.length
-        checkRoll
-        Some(item)
     }
 
     /**
      * Close the queue's journal file. Not safe to call on an active queue.
      */
-    def close = {
+    def close = synchronized {
+        closed = true
         journal.close()
+    }
+    
+    def setup: Unit = synchronized {
+        replayJournal
+        initialized.set
     }
     
     
@@ -143,7 +162,6 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
     }
     
     private def replayJournal: Unit = {
-        log.info("Replaying transaction journal for '%s'", name)
         queueSize = 0
         
         try {
@@ -152,6 +170,7 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
             var offset = 0
             val intReader = new IntReader(ByteOrder.LITTLE_ENDIAN)
             
+            log.info("Replaying transaction journal for '%s'", name)
             var eof = false
             while (!eof) {
                 in.read() match {

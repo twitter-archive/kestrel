@@ -10,6 +10,7 @@ object PersistentQueueTests extends Tests {
     
     test("add and remove one item") {
         val q = new PersistentQueue(currentFolder.getPath, "work")
+        q.setup
 
         expect(0) { q.size }
         expect(0) { q.totalItems }
@@ -40,6 +41,7 @@ object PersistentQueueTests extends Tests {
     
     test("journal rotation") {
         val q = new PersistentQueue(currentFolder.getPath, "rolling")
+        q.setup
         q.maxJournalSize = 64
         
         q.add(new Array[Byte](32))
@@ -68,6 +70,7 @@ object PersistentQueueTests extends Tests {
     
     test("journal is okay after restart") {
         val q = new PersistentQueue(currentFolder.getPath, "rolling")
+        q.setup
         q.add("first".getBytes)
         q.add("second".getBytes)
         expect("first") { new String(q.remove.get) }
@@ -75,6 +78,7 @@ object PersistentQueueTests extends Tests {
         q.close
         
         val q2 = new PersistentQueue(currentFolder.getPath, "rolling")
+        q2.setup
         expect(22) { q2.journalSize }
         expect("second") { new String(q2.remove.get) }
         expect(23) { q2.journalSize }
@@ -82,6 +86,7 @@ object PersistentQueueTests extends Tests {
         q2.close
 
         val q3 = new PersistentQueue(currentFolder.getPath, "rolling")
+        q3.setup
         expect(23) { q3.journalSize }
         expect(0) { q3.size }
     }
