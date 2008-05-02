@@ -32,13 +32,35 @@ class Encoder extends ProtocolEncoder {
  */
 class Decoder extends ProtocolDecoder {
     private class State {
-        var buffer = new mutable.ArrayBuffer[Byte]
+        var buffer = ByteBuffer.allocate(1024)
+        buffer.setAutoExpand(true)
+        
         var line: Option[Array[String]] = None
         var dataBytes = 0
         
         def reset = {
             line = None
             dataBytes = 0
+            resetBuffer
+        }
+        
+        def resetBuffer = {
+            // truncate the buffer
+            if (buffer.position == 0) {
+                // leave it alone
+            } else if (buffer.position < buffer.limit) {
+                val remainingBytes = new Array[Byte](buffer.limit - buffer.position)
+                buffer.get(remainingBytes)
+                buffer.clear
+                buffer.put(remainingBytes)
+            } else {
+                buffer.clear
+            }
+        }
+        
+        def unflipBuffer = {
+            buffer.position(buffer.limit)
+            buffer.limit(buffer.capacity)
         }
     }
     
@@ -47,7 +69,7 @@ class Decoder extends ProtocolDecoder {
     private val KNOWN_COMMANDS = List("GET", "SET", "STATS", "SHUTDOWN")
     private val DATA_COMMANDS = List("SET")
     
-    
+
     def dispose(session: IoSession): Unit = {
         session.removeAttribute(STATE_KEY)
     }
@@ -63,10 +85,9 @@ class Decoder extends ProtocolDecoder {
             session.setAttribute(STATE_KEY, state)
         }
         
-        val bytes = new Array[Byte](in.remaining)
-        in.get(bytes)
-        state.buffer ++= bytes
-        ScarlingStats.bytesRead.incr(bytes.length)
+        ScarlingStats.bytesRead.incr(in.remaining)
+        state.buffer.put(in)
+        state.buffer.flip
         
         state.line match {
             case None => decodeLine(state, out)
@@ -75,17 +96,23 @@ class Decoder extends ProtocolDecoder {
     }
     
     private def decodeLine(state: State, out: ProtocolDecoderOutput): Unit = {
-        val lf = state.buffer.indexOf('\n')
-        if (lf <= 0) {
+        val lf = bufferIndexOf(state.buffer, '\n')
+        if (lf < 0) {
+            state.unflipBuffer
             return
         }
 
         var end = lf
-        if (state.buffer(end - 1) == '\r') {
+        if ((end > 0) && (state.buffer.get(end - 1) == '\r')) {
             end -= 1
         }
-        val line = new String(state.buffer.slice(0, end).toArray, "ISO-8859-1")
-        state.buffer.trimStart(lf + 1)
+        
+        // pull off the line into a string
+        val lineBytes = new Array[Byte](end)
+        state.buffer.get(lineBytes)
+        val line = new String(lineBytes, "ISO-8859-1")
+        state.buffer.position(state.buffer.position + (lf - end) + 1)
+        
         val segments = line.split(" ")
         segments(0) = segments(0).toUpperCase
             
@@ -108,15 +135,29 @@ class Decoder extends ProtocolDecoder {
     }
     
     private def decodeData(state: State, out: ProtocolDecoderOutput): Unit = {
-        if (state.buffer.length < state.dataBytes) {
+        if (state.buffer.remaining < state.dataBytes) {
             // still need more.
+            state.resetBuffer
             return
         }
         
         // final 2 bytes are just "\r\n" mandated by protocol.
-        val data = state.buffer.slice(0, state.dataBytes - 2)
-        out.write(Request(state.line.get.toList, Some(data.toArray)))
-        state.buffer.trimStart(state.dataBytes)
+        val bytes = new Array[Byte](state.dataBytes - 2)
+        state.buffer.get(bytes)
+        state.buffer.position(state.buffer.position + 2)
+        
+        out.write(Request(state.line.get.toList, Some(bytes)))
         state.reset
+    }
+    
+    private def bufferIndexOf(buffer: ByteBuffer, b: Byte): Int = {
+        var i = buffer.position 
+        while (i < buffer.limit) {
+            if (buffer.get(i) == b) {
+                return i - buffer.position
+            }
+            i += 1
+        }
+        return -1
     }
 }
