@@ -59,15 +59,22 @@ object PutMany {
     }
     
     def main(args: Array[String]) = {
+        if (args.length < 1) {
+            Console.println("usage: put-many <N>")
+            Console.println("    spin up N clients and put 10k items spread across N queues")
+            System.exit(1)
+        }
+        
+        val clientCount = args(0).toInt
+        
         var threadList: List[Thread] = Nil
         val startTime = System.currentTimeMillis
         
-        // do 100 pushes each to 100 different queues = 10k pushes total
-        for (i <- 0 until 100) {
+        for (i <- 0 until clientCount) {
             val t = new Thread {
                 override def run = {
                     val socket = SocketChannel.open(new InetSocketAddress("localhost", 22122))
-                    put(socket, "spam" + i, 100)
+                    put(socket, "spam" + i, 10000 / clientCount)
                 }
             }
             threadList = t :: threadList
@@ -77,10 +84,6 @@ object PutMany {
             t.join
         }
         
-        // do 10k pushes to the same queue
-        //val socket = SocketChannel.open(new InetSocketAddress("localhost", 22122))
-        //put(socket, "spam", 10000)
-
         val endTime = System.currentTimeMillis
         Console.println("Finished in " + (endTime - startTime) + " msec.")
     }
