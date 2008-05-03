@@ -1,0 +1,70 @@
+
+Scarling
+--------
+
+Scarling is my attempt to port Blaine Cook's "starling" message queue
+system from ruby to scala.  http://rubyforge.org/projects/starling/
+
+In Blaine's words:
+
+    Starling is a powerful but simple messaging server that enables reliable 
+    distributed queuing with an absolutely minimal overhead. It speaks the
+    MemCache protocol for maximum cross-platform compatibility. Any language
+    that speaks MemCache can take advantage of Starling's queue facilities.
+
+He goes on to claim that starling is "slow" but "fast enough". I did not find
+it to be slow at anything but processing old journal files, so I assume this
+is modesty.
+
+The concept of starling is to have a single server handle reliable, ordered
+message queues. When you put a cluster of these servers together, *with no
+cross communication*, and pick a server at random whenever you do a SET or
+GET, you end up with a reliable, *loosely ordered* message queue. In many
+situations, loose ordering is sufficient.
+
+Scarling is built using scala actors on top of Apache Mina (a rough equivalent
+of Danger's ziggurat or Ruby's eventmachine). My first draft was dramatically
+slower than starling, but once I learned to trust Mina and use their
+ByteBuffer objects directly, things got much faster.
+
+
+Performance
+-----------
+
+All of the below timings are on my 2GHz macbook pro.
+
+Since starling uses eventmachine in a single-thread single-process form, it
+has similar results for all access types.
+
+=========  =================  ==========
+# Clients  Pushes per client  Total time
+=========  =================  ==========
+        1             10,000        3.8s
+       10              1,000        2.9s
+      100                100        3.1s
+=========  =================  ==========
+
+Scarling uses N+1 I/O processor threads (where N = the number of available CPU
+cores), and a pool of worker threads for handling actor events. Therefore it
+handles more poorly for small numbers of heavy-use clients, and better for
+large numbers of clients.
+
+=========  =================  ==========
+# Clients  Pushes per client  Total time
+=========  =================  ==========
+        1             10,000        3.8s
+       10              1,000        2.4s
+      100                100        1.6s
+=========  =================  ==========
+
+Because of the JVM's JIT, subsequent runs may be faster, after the JIT has
+"warmed up". That's not fair, so I'm only showing cold-start times.
+
+Let this at least put to rest the idea that a JVM can "smackdown" ruby in
+performance. Ruby is able to stay within a respectable range and in some cases
+is equivalent. But at larger numbers of clients, the JVM's thread support
+combines with scala's actor library to give a winning edge.
+
+
+Robey Pointer
+<robey@lag.net>
