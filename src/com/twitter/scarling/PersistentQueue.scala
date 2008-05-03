@@ -96,7 +96,14 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
             intWriter.writeInt(buffer, value.length)
             byteBuffer.writeTo(journal)
             journal.write(value)
-            journal.getFD.sync
+            /* in theory, you might want to sync the file after each
+             * transaction. however, the original starling doesn't.
+             * i think if you can cope with a truncated journal file,
+             * this is fine, because a non-synced file only matters on
+             * catastrophic disk/machine failure.
+             */
+            // FIXME: deal with truncated journal files. :)
+            //journal.getFD.sync
             _journalSize += (5 + value.length)
         
             _totalItems += 1
