@@ -60,10 +60,10 @@ large numbers of clients.
 Because of the JVM's JIT, subsequent runs may be faster, after the JIT has
 "warmed up". That's not fair, so I'm only showing cold-start times.
 
-Let this at least put to rest the idea that a JVM can "smackdown" ruby in
-performance. Ruby is able to stay within a respectable range and in some cases
-is equivalent. But at larger numbers of clients, the JVM's thread support
-combines with scala's actor library to give a winning edge.
+I'm not trying to draw a generalized ruby/java or ruby/scala performance
+comparison here, but you can see that in this case, ruby generally held its
+own, despite having no thread support. At larger numbers of clients, the JVM's
+thread support combines with scala's actor library to give a winning edge.
 
 
 Robey Pointer
