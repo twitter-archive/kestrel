@@ -7,7 +7,7 @@ import sorg.testing._
 
 object QueueCollectionTests extends Tests {
     
-    override def testName = "PersistentQueueTests"
+    override def testName = "QueueCollectionTests"
     
     private def sorted[T <% Ordered[T]](list: List[T]): List[T] = {
         val dest = list.toArray
