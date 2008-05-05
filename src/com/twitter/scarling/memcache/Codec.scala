@@ -3,9 +3,18 @@ package com.twitter.scarling.memcache
 import scala.collection.mutable
 import org.apache.mina.common.{ByteBuffer, IoSession}
 import org.apache.mina.filter.codec._
+import net.lag.configgy.StringUtils
 
 
-case class Request(line: List[String], data: Option[Array[Byte]])
+case class Request(line: List[String], data: Option[Array[Byte]]) {
+    override def toString = {
+        "<Request: " + line.mkString("[", " ", "]") + (data match {
+            case None => ""
+            case Some(x) => ": " + StringUtils.hexlify(x)
+        }) + ">"
+    }
+}
+
 case class Response(data: ByteBuffer)
 
 
