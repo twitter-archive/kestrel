@@ -5,7 +5,7 @@ import java.nio.ByteOrder
 import scala.actors.Actor
 import scala.actors.Actor._
 import scala.collection.mutable
-import net.lag.configgy.StringUtils
+import net.lag.ConfiggyExtensions._
 import net.lag.logging.Logger
 import org.apache.mina.common._
 import org.apache.mina.transport.socket.nio.SocketSessionConfig
@@ -134,7 +134,7 @@ class ScarlingHandler(val session: IoSession) extends Actor {
             report += (("queue_" + qName + "_expired_items", Scarling.expiryStats(qName).toString))
         }
         
-        val summary = (for (item <- report) yield StringUtils.format("STAT %s %s", item._1, item._2)).mkString("", "\r\n", "\r\nEND\r\n")
+        val summary = (for (item <- report) yield "STAT %s %s".format(item._1, item._2)).mkString("", "\r\n", "\r\nEND\r\n")
         writeResponse(summary)
     }
     

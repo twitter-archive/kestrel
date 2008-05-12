@@ -3,14 +3,14 @@ package com.twitter.scarling.memcache
 import scala.collection.mutable
 import org.apache.mina.common.{ByteBuffer, IoSession}
 import org.apache.mina.filter.codec._
-import net.lag.configgy.StringUtils
+import net.lag.ConfiggyExtensions._
 
 
 case class Request(line: List[String], data: Option[Array[Byte]]) {
     override def toString = {
         "<Request: " + line.mkString("[", " ", "]") + (data match {
             case None => ""
-            case Some(x) => ": " + StringUtils.hexlify(x)
+            case Some(x) => ": " + x.hexlify
         }) + ">"
     }
 }

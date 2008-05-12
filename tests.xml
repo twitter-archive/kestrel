@@ -37,6 +37,18 @@
         </java>
     </target>
 
+    <target name="put-many-10">
+        <java classname="com.twitter.scarling.load.PutMany" fork="true" failonerror="true">
+            <classpath>
+                <path refid="scala.classpath" />
+                <path refid="deps" />
+                <pathelement location="${build.dir}" />
+                <pathelement location="${test.dir}" />
+            </classpath>
+            <arg value="10" />
+        </java>
+    </target>
+
     <target name="put-many-100">
         <java classname="com.twitter.scarling.load.PutMany" fork="true" failonerror="true">
             <classpath>
@@ -48,4 +60,17 @@
             <arg value="100" />
         </java>
     </target>
+    
+    <target name="put-many-1000">
+        <java classname="com.twitter.scarling.load.PutMany" fork="true" failonerror="true">
+            <classpath>
+                <path refid="scala.classpath" />
+                <path refid="deps" />
+                <pathelement location="${build.dir}" />
+                <pathelement location="${test.dir}" />
+            </classpath>
+            <arg value="1000" />
+        </java>
+    </target>
+    
 </project>
