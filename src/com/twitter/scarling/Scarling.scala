@@ -8,6 +8,8 @@ import scala.collection.mutable
 import org.apache.mina.common._
 import org.apache.mina.filter.codec.ProtocolCodecFilter
 import org.apache.mina.transport.socket.nio.{SocketAcceptor, SocketAcceptorConfig, SocketSessionConfig}
+import net.lag.ConfiggyExtensions._
+import net.lag.configgy.Configgy
 import net.lag.logging.Logger
 
 
@@ -37,13 +39,12 @@ object ScarlingStats {
 object Scarling {
     private val log = Logger.get
     
-    private var listenAddress = "0.0.0.0"
-    private var listenPort = 22122
-    
-    private[scarling] val queues = new QueueCollection("/tmp")
+    private[scarling] var queues: QueueCollection = null
     
     private val _expiryStats = new mutable.HashMap[String, Int]
     private val _startTime = System.currentTimeMillis
+    
+    private var configFilename = "/etc/scarling.conf"
     
     val VERSION = "0.5"
     
@@ -55,7 +56,15 @@ object Scarling {
     val acceptor: IoAcceptor = new SocketAcceptor(Runtime.getRuntime().availableProcessors() + 1, acceptorExecutor)
 
     def main(args: Array[String]) = {
-        //Logger.get("").setLevel(Logger.TRACE)
+        parseArgs(args.toList)
+        
+        // load our config file and configure logfiles:
+        Configgy.configure(configFilename)
+        
+        val config = Configgy.config
+        val listenAddress = config.get("host", "0.0.0.0")
+        val listenPort = config.getInt("port", 22122)
+        queues = new QueueCollection(config.get("queue_path", "/tmp"))
         
         // mina garbage:
         acceptor.getDefaultConfig.setThreadModel(ThreadModel.MANUAL)
@@ -66,6 +75,33 @@ object Scarling {
         acceptor.bind(new InetSocketAddress(listenAddress, listenPort), new IoHandlerActorAdapter((session: IoSession) => new ScarlingHandler(session)), saConfig)
 
         log.info("Scarling started.")
+    }
+    
+    private def parseArgs(args: List[String]): Unit = {
+        args match {
+            case "-f" :: filename :: xs => {
+                configFilename = filename
+                parseArgs(xs)
+            }
+            case "--help" :: xs => {
+                help
+            }
+            case unknown :: Nil => {
+                Console.println("Unknown command-line option: " + unknown)
+                help
+            }
+            case Nil => 
+        }
+    }
+    
+    private def help = {
+        Console.println
+        Console.println("scarling %s".format(VERSION))
+        Console.println("options:")
+        Console.println("    -f <filename>")
+        Console.println("        load config file (default: %s)".format(configFilename))
+        Console.println
+        System.exit(0)
     }
     
     def shutdown = {
