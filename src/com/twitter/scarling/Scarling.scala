@@ -16,7 +16,7 @@ import net.lag.logging.Logger
 
 class Counter {
     private var value = 0
-    
+
     def get = synchronized { value }
     def set(n: Int) = synchronized { value = n }
     def incr = synchronized { value += 1; value }
@@ -39,17 +39,17 @@ object ScarlingStats {
 
 object Scarling {
     private val log = Logger.get
-    
+
     var queues: QueueCollection = null
-    
+
     private val _expiryStats = new mutable.HashMap[String, Int]
     private val _startTime = System.currentTimeMillis
-    
+
     private var configFilename = "/etc/scarling.conf"
-    
+
     val VERSION = "0.5"
-    
-    
+
+
     ByteBuffer.setUseDirectBuffers(false)
     ByteBuffer.setAllocator(new SimpleByteBufferAllocator())
 
@@ -61,15 +61,15 @@ object Scarling {
         Configgy.configure(configFilename)
         startup(Configgy.config)
     }
-    
+
     def startup(config: Config) = {
         val listenAddress = config.get("host", "0.0.0.0")
         val listenPort = config.getInt("port", 22122)
         queues = new QueueCollection(config.get("queue_path", "/tmp"))
-        
+
         acceptorExecutor = Executors.newCachedThreadPool()
         acceptor = new SocketAcceptor(Runtime.getRuntime().availableProcessors() + 1, acceptorExecutor)
-        
+
         // mina garbage:
         acceptor.getDefaultConfig.setThreadModel(ThreadModel.MANUAL)
         val saConfig = new SocketAcceptorConfig
@@ -80,7 +80,7 @@ object Scarling {
 
         log.info("Scarling started.")
     }
-    
+
     private def parseArgs(args: List[String]): Unit = {
         args match {
             case "-f" :: filename :: xs => {
@@ -94,10 +94,10 @@ object Scarling {
                 Console.println("Unknown command-line option: " + unknown)
                 help
             }
-            case Nil => 
+            case Nil =>
         }
     }
-    
+
     private def help = {
         Console.println
         Console.println("scarling %s".format(VERSION))
@@ -107,28 +107,13 @@ object Scarling {
         Console.println
         System.exit(0)
     }
-    
+
     def shutdown = {
         log.info("Shutting down!")
         queues.shutdown
         acceptor.unbindAll
         Scheduler.shutdown
         acceptorExecutor.shutdown
-    }
-
-    def addExpiry(name: String): Unit = synchronized {
-        if (! _expiryStats.contains(name)) {
-            _expiryStats(name) = 1
-        } else {
-            _expiryStats(name) = _expiryStats(name) + 1
-        }
-    }
-    
-    def expiryStats(name: String) = synchronized {
-        _expiryStats.get(name) match {
-            case None => 0
-            case Some(n) => n
-        }
     }
 
     def uptime = (System.currentTimeMillis - _startTime) / 1000

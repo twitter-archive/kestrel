@@ -57,6 +57,9 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
     // # of items EVER added to the queue:
     private var _totalItems: Int = 0
 
+    // # of items that were expired by the time they were read:
+    private var _totalExpired: Int = 0
+
     private var queue = new Queue[Array[Byte]]
     private var journal: FileOutputStream = null
     private var _journalSize: Int = 0
@@ -81,21 +84,43 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
 
     def journalSize = synchronized { _journalSize }
 
+    def totalExpired = synchronized { _totalExpired }
+
+    private def pack(expiry: Int, data: Array[Byte]): Array[Byte] = {
+        val bytes = new Array[Byte](data.length + 4)
+        val buffer = ByteBuffer.wrap(bytes)
+        buffer.order(ByteOrder.LITTLE_ENDIAN)
+        buffer.putInt(expiry)
+        buffer.put(data)
+        bytes
+    }
+
+    private def unpack(data: Array[Byte]): (Int, Array[Byte]) = {
+        val buffer = ByteBuffer.wrap(data)
+        val bytes = new Array[Byte](data.length - 4)
+        buffer.order(ByteOrder.LITTLE_ENDIAN)
+        val expiry = buffer.getInt
+        buffer.get(bytes)
+        return (expiry, bytes)
+    }
+
     /**
      * Add a value to the end of the queue, transactionally.
      */
-    def add(value: Array[Byte]): Boolean = {
+    def add(value: Array[Byte], expiry: Int): Boolean = {
         initialized.waitFor
         synchronized {
             if (closed) {
                 return false
             }
 
+            val blob = pack(expiry, value)
+
             byteBuffer.reset()
             buffer.write(CMD_ADD)
-            intWriter.writeInt(buffer, value.length)
+            intWriter.writeInt(buffer, blob.length)
             byteBuffer.writeTo(journal)
-            journal.write(value)
+            journal.write(blob)
             /* in theory, you might want to sync the file after each
              * transaction. however, the original starling doesn't.
              * i think if you can cope with a truncated journal file,
@@ -104,14 +129,16 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
              */
             // FIXME: deal with truncated journal files. :)
             //journal.getFD.sync
-            _journalSize += (5 + value.length)
+            _journalSize += (5 + blob.length)
 
             _totalItems += 1
-            queue += value
-            queueSize += value.length
+            queue += blob
+            queueSize += blob.length
             true
         }
     }
+
+    def add(value: Array[Byte]): Boolean = add(value, 0)
 
     /**
      * Remove an item from the queue, transactionally. If no item is
@@ -128,10 +155,18 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
             journal.getFD.sync
             _journalSize += 1
 
+            val now = (System.currentTimeMillis / 1000).toInt
             val item = queue.dequeue
             queueSize -= item.length
             checkRoll
-            Some(item)
+            val (expiry, data) = unpack(item)
+
+            if ((expiry == 0) || (expiry >= now)) {
+                Some(data)
+            } else {
+                _totalExpired += 1
+                remove
+            }
         }
     }
 

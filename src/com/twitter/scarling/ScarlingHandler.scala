@@ -90,24 +90,15 @@ class ScarlingHandler(val session: IoSession) extends Actor {
 
     private def get(name: String): Unit = {
         ScarlingStats.getRequests.incr
-        val now = (System.currentTimeMillis / 1000).toInt
         Scarling.queues.remove(name) match {
             case None => writeResponse("END\r\n")
-            case Some(item) => {
-                val (expiry, data) = unpack(item)
-                if ((expiry == 0) || (expiry >= now)) {
-                    writeResponse("VALUE " + name + " 0 " + data.length + "\r\n", data)
-                } else {
-                    Scarling.addExpiry(name)
-                    get(name)
-                }
-            }
+            case Some(data) => writeResponse("VALUE " + name + " 0 " + data.length + "\r\n", data)
         }
     }
 
     private def set(name: String, flags: Int, expiry: Int, data: Array[Byte]) = {
         ScarlingStats.setRequests.incr
-        if (Scarling.queues.add(name, pack(expiry, data))) {
+        if (Scarling.queues.add(name, data, expiry)) {
             writeResponse("STORED\r\n")
         } else {
             writeResponse("NOT_STORED\r\n")
@@ -133,11 +124,11 @@ class ScarlingHandler(val session: IoSession) extends Actor {
         report += (("limit_maxbytes", "0"))                         // ???
 
         for (qName <- Scarling.queues.queueNames) {
-            val (size, bytes, totalItems, journalSize) = Scarling.queues.stats(qName)
+            val (size, bytes, totalItems, journalSize, totalExpired) = Scarling.queues.stats(qName)
             report += (("queue_" + qName + "_items", size.toString))
             report += (("queue_" + qName + "_total_items", totalItems.toString))
             report += (("queue_" + qName + "_logsize", journalSize.toString))
-            report += (("queue_" + qName + "_expired_items", Scarling.expiryStats(qName).toString))
+            report += (("queue_" + qName + "_expired_items", totalExpired.toString))
         }
 
         val summary = (for (item <- report) yield "STAT %s %s".format(item._1, item._2)).mkString("", "\r\n", "\r\nEND\r\n")
@@ -148,21 +139,4 @@ class ScarlingHandler(val session: IoSession) extends Actor {
         Scarling.shutdown
     }
 
-    private def pack(expiry: Int, data: Array[Byte]): Array[Byte] = {
-        val bytes = new Array[Byte](data.length + 4)
-        val buffer = ByteBuffer.wrap(bytes)
-        buffer.order(ByteOrder.LITTLE_ENDIAN)
-        buffer.putInt(expiry)
-        buffer.put(data)
-        bytes
-    }
-
-    private def unpack(data: Array[Byte]): (Int, Array[Byte]) = {
-        val buffer = ByteBuffer.wrap(data)
-        val bytes = new Array[Byte](data.length - 4)
-        buffer.order(ByteOrder.LITTLE_ENDIAN)
-        val expiry = buffer.getInt
-        buffer.get(bytes)
-        return (expiry, bytes)
-    }
 }

@@ -89,11 +89,11 @@ class QueueCollection(private val queueFolder: String) {
      * @return true if the item was added; false if the server is shutting
      *     down
      */
-    def add(key: String, item: Array[Byte]) = {
+    def add(key: String, item: Array[Byte], expiry: Int): Boolean = {
         queue(key) match {
             case None => false
             case Some(q) => {
-                val result = q.add(item)
+                val result = q.add(item, expiry)
                 if (result) {
                     synchronized {
                         _currentBytes += item.length
@@ -105,6 +105,8 @@ class QueueCollection(private val queueFolder: String) {
             }
         }
     }
+
+    def add(key: String, item: Array[Byte]): Boolean = add(key, item, 0)
 
     /**
      * Retrieve an item from a queue. If no item is available, or the server
@@ -135,10 +137,10 @@ class QueueCollection(private val queueFolder: String) {
         }
     }
 
-    def stats(key: String): (Int, Int, Int, Int) = {
+    def stats(key: String): (Int, Int, Int, Int, Int) = {
         queue(key) match {
-            case None => (0, 0, 0, 0)
-            case Some(q) => (q.size, q.bytes, q.totalItems, q.journalSize)
+            case None => (0, 0, 0, 0, 0)
+            case Some(q) => (q.size, q.bytes, q.totalItems, q.journalSize, q.totalExpired)
         }
     }
 
