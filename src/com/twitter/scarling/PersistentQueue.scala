@@ -60,7 +60,10 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
     // # of items that were expired by the time they were read:
     private var _totalExpired: Int = 0
 
-    private var queue = new Queue[Array[Byte]]
+    // age (in milliseconds) of the last item read from the queue:
+    private var _currentAge: Long = 0
+
+    private var queue = new Queue[(Long, Array[Byte])]
     private var journal: FileOutputStream = null
     private var _journalSize: Int = 0
 
@@ -85,6 +88,8 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
     def journalSize = synchronized { _journalSize }
 
     def totalExpired = synchronized { _totalExpired }
+
+    def currentAge = synchronized { _currentAge }
 
     private def pack(expiry: Int, data: Array[Byte]): Array[Byte] = {
         val bytes = new Array[Byte](data.length + 4)
@@ -132,7 +137,7 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
             _journalSize += (5 + blob.length)
 
             _totalItems += 1
-            queue += blob
+            queue += (System.currentTimeMillis, blob)
             queueSize += blob.length
             true
         }
@@ -155,13 +160,15 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
             journal.getFD.sync
             _journalSize += 1
 
-            val now = (System.currentTimeMillis / 1000).toInt
-            val item = queue.dequeue
+            val now = System.currentTimeMillis
+            val nowSecs = (now / 1000).toInt
+            val (addTime, item) = queue.dequeue
             queueSize -= item.length
             checkRoll
             val (expiry, data) = unpack(item)
 
-            if ((expiry == 0) || (expiry >= now)) {
+            if ((expiry == 0) || (expiry >= nowSecs)) {
+                _currentAge = now - addTime
                 Some(data)
             } else {
                 _totalExpired += 1
@@ -223,12 +230,12 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
                         val size = intReader.readInt(in)
                         val data = new Array[Byte](size)
                         in.readFully(data)
-                        queue += data
+                        queue += (System.currentTimeMillis, data)
                         queueSize += data.length
                         offset += (5 + data.length)
                     }
                     case CMD_REMOVE => {
-                        queueSize -= queue.dequeue.length
+                        queueSize -= queue.dequeue._2.length
                         offset += 1
                     }
                     case n => {

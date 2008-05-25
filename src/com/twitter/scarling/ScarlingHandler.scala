@@ -124,11 +124,12 @@ class ScarlingHandler(val session: IoSession) extends Actor {
         report += (("limit_maxbytes", "0"))                         // ???
 
         for (qName <- Scarling.queues.queueNames) {
-            val (size, bytes, totalItems, journalSize, totalExpired) = Scarling.queues.stats(qName)
+            val (size, bytes, totalItems, journalSize, totalExpired, currentAge) = Scarling.queues.stats(qName)
             report += (("queue_" + qName + "_items", size.toString))
             report += (("queue_" + qName + "_total_items", totalItems.toString))
             report += (("queue_" + qName + "_logsize", journalSize.toString))
             report += (("queue_" + qName + "_expired_items", totalExpired.toString))
+            report += (("queue_" + qName + "_age", currentAge.toString))
         }
 
         val summary = (for (item <- report) yield "STAT %s %s".format(item._1, item._2)).mkString("", "\r\n", "\r\nEND\r\n")
