@@ -9,15 +9,16 @@ import net.lag.ConfiggyExtensions._
 import net.lag.logging.Logger
 import org.apache.mina.common._
 import org.apache.mina.transport.socket.nio.SocketSessionConfig
+import com.twitter.scarling.memcache.ProtocolException
 
 
 class ScarlingHandler(val session: IoSession) extends Actor {
     private val log = Logger.get
-    
+
     private val IDLE_TIMEOUT = 60
     private val sessionID = ScarlingStats.sessionID.incr
     private val remoteAddress = session.getRemoteAddress.asInstanceOf[InetSocketAddress]
-    
+
 
 	if (session.getTransportType == TransportType.SOCKET) {
 		session.getConfig.asInstanceOf[SocketSessionConfig].setReceiveBufferSize(2048)
@@ -27,28 +28,33 @@ class ScarlingHandler(val session: IoSession) extends Actor {
     ScarlingStats.totalConnections.incr
     log.debug("New session %d from %s:%d", sessionID, remoteAddress.getHostName, remoteAddress.getPort)
     start
-    
+
     def act = {
         loop {
             react {
                 case MinaMessage.SessionOpened =>
-                
+
                 case MinaMessage.MessageReceived(msg) => handle(msg.asInstanceOf[memcache.Request])
-                
+
                 case MinaMessage.MessageSent(msg) =>
-                
+
                 case MinaMessage.ExceptionCaught(cause) => {
-                    log.error("Exception caught on session %d: %s", sessionID, cause.getMessage)
-                    writeResponse("ERROR\r\n")
+                    cause.getCause match {
+                        case _: ProtocolException => writeResponse("CLIENT_ERROR\r\n")
+                        case _ => {
+                            log.error("Exception caught on session %d: %s", sessionID, cause.getMessage)
+                            writeResponse("ERROR\r\n")
+                        }
+                    }
                     session.close
                 }
-                
+
                 case MinaMessage.SessionClosed => {
                     log.debug("End of session %d", sessionID)
                     ScarlingStats.sessions.decr
                     exit()
                 }
-                
+
                 case MinaMessage.SessionIdle(status) => {
                     log.debug("Idle timeout on session %s", session)
                     session.close
@@ -56,12 +62,12 @@ class ScarlingHandler(val session: IoSession) extends Actor {
             }
         }
     }
-    
+
     private def writeResponse(out: String) = {
         val bytes = out.getBytes
         session.write(new memcache.Response(ByteBuffer.wrap(bytes)))
     }
-    
+
     private def writeResponse(out: String, data: Array[Byte]) = {
         val bytes = out.getBytes
         val buffer = ByteBuffer.allocate(bytes.length + data.length + 7)
@@ -72,7 +78,7 @@ class ScarlingHandler(val session: IoSession) extends Actor {
         ScarlingStats.bytesWritten.incr(buffer.capacity)
         session.write(new memcache.Response(buffer))
     }
-    
+
     private def handle(request: memcache.Request) = {
         request.line(0) match {
             case "GET" => get(request.line(1))
@@ -81,7 +87,7 @@ class ScarlingHandler(val session: IoSession) extends Actor {
             case "SHUTDOWN" => shutdown
         }
     }
-    
+
     private def get(name: String): Unit = {
         ScarlingStats.getRequests.incr
         val now = (System.currentTimeMillis / 1000).toInt
@@ -98,7 +104,7 @@ class ScarlingHandler(val session: IoSession) extends Actor {
             }
         }
     }
-    
+
     private def set(name: String, flags: Int, expiry: Int, data: Array[Byte]) = {
         ScarlingStats.setRequests.incr
         if (Scarling.queues.add(name, pack(expiry, data))) {
@@ -107,7 +113,7 @@ class ScarlingHandler(val session: IoSession) extends Actor {
             writeResponse("NOT_STORED\r\n")
         }
     }
-    
+
     private def stats = {
         var report = new mutable.ArrayBuffer[(String, String)]
         report += (("uptime", Scarling.uptime.toString))
@@ -125,7 +131,7 @@ class ScarlingHandler(val session: IoSession) extends Actor {
         report += (("bytes_read", ScarlingStats.bytesRead.toString))
         report += (("bytes_written", ScarlingStats.bytesWritten.toString))
         report += (("limit_maxbytes", "0"))                         // ???
-        
+
         for (qName <- Scarling.queues.queueNames) {
             val (size, bytes, totalItems, journalSize) = Scarling.queues.stats(qName)
             report += (("queue_" + qName + "_items", size.toString))
@@ -133,15 +139,15 @@ class ScarlingHandler(val session: IoSession) extends Actor {
             report += (("queue_" + qName + "_logsize", journalSize.toString))
             report += (("queue_" + qName + "_expired_items", Scarling.expiryStats(qName).toString))
         }
-        
+
         val summary = (for (item <- report) yield "STAT %s %s".format(item._1, item._2)).mkString("", "\r\n", "\r\nEND\r\n")
         writeResponse(summary)
     }
-    
+
     private def shutdown = {
         Scarling.shutdown
     }
-    
+
     private def pack(expiry: Int, data: Array[Byte]): Array[Byte] = {
         val bytes = new Array[Byte](data.length + 4)
         val buffer = ByteBuffer.wrap(bytes)
@@ -150,7 +156,7 @@ class ScarlingHandler(val session: IoSession) extends Actor {
         buffer.put(data)
         bytes
     }
-    
+
     private def unpack(data: Array[Byte]): (Int, Array[Byte]) = {
         val buffer = ByteBuffer.wrap(data)
         val bytes = new Array[Byte](data.length - 4)
