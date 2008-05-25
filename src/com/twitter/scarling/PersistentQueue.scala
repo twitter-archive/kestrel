@@ -15,7 +15,7 @@ class IntReader(private val order: ByteOrder) {
     val buffer = new Array[Byte](4)
     val byteBuffer = ByteBuffer.wrap(buffer)
     byteBuffer.order(order)
-    
+
     def readInt(in: DataInputStream) = {
         in.readFully(buffer)
         byteBuffer.rewind
@@ -29,7 +29,7 @@ class IntWriter(private val order: ByteOrder) {
     val buffer = new Array[Byte](4)
     val byteBuffer = ByteBuffer.wrap(buffer)
     byteBuffer.order(order)
-    
+
     def writeInt(out: DataOutputStream, n: Int) = {
         byteBuffer.rewind
         byteBuffer.putInt(n)
@@ -40,47 +40,47 @@ class IntWriter(private val order: ByteOrder) {
 
 class PersistentQueue(private val persistencePath: String, val name: String) {
     private val log = Logger.get
-    
+
     /* when a journal reaches maxJournalSize, the queue will wait until
      * it is empty, and will then rotate the journal.
      */
     var maxJournalSize = 16 * 1024 * 1024
-    
+
     private val CMD_ADD = 0
     private val CMD_REMOVE = 1
-    
+
     private val queuePath: String = new File(persistencePath, name).getCanonicalPath()
-    
+
     // current size of all data in the queue:
     private var queueSize: Int = 0
 
     // # of items EVER added to the queue:
     private var _totalItems: Int = 0
-    
+
     private var queue = new Queue[Array[Byte]]
     private var journal: FileOutputStream = null
     private var _journalSize: Int = 0
-    
+
     // small temporary buffer for formatting ADD transactions into the journal:
     private var byteBuffer = new ByteArrayOutputStream(16)
     private var buffer = new DataOutputStream(byteBuffer)
-    
+
     // sad way to write little-endian ints when journaling queue adds
     private val intWriter = new IntWriter(ByteOrder.LITTLE_ENDIAN)
-    
+
     // force get/set operations to block while we're replaying any existing journal
     private val initialized = new Event
     private var closed = false
-    
-    
+
+
     def size = synchronized { queue.length }
 
     def totalItems = synchronized { _totalItems }
-    
+
     def bytes = synchronized { queueSize }
-    
+
     def journalSize = synchronized { _journalSize }
-    
+
     /**
      * Add a value to the end of the queue, transactionally.
      */
@@ -90,7 +90,7 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
             if (closed) {
                 return false
             }
-        
+
             byteBuffer.reset()
             buffer.write(CMD_ADD)
             intWriter.writeInt(buffer, value.length)
@@ -105,14 +105,14 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
             // FIXME: deal with truncated journal files. :)
             //journal.getFD.sync
             _journalSize += (5 + value.length)
-        
+
             _totalItems += 1
             queue += value
             queueSize += value.length
             true
         }
     }
-    
+
     /**
      * Remove an item from the queue, transactionally. If no item is
      * available, an empty byte array is returned.
@@ -123,11 +123,11 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
             if (queue.isEmpty || closed) {
                 return None
             }
-        
+
             journal.write(CMD_REMOVE)
             journal.getFD.sync
             _journalSize += 1
-        
+
             val item = queue.dequeue
             queueSize -= item.length
             checkRoll
@@ -142,17 +142,17 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
         closed = true
         journal.close()
     }
-    
+
     def setup: Unit = synchronized {
         replayJournal
         initialized.set
     }
-    
-    
+
+
     private def openJournal: Unit = {
         journal = new FileOutputStream(queuePath, true)
     }
-    
+
     private def checkRoll: Unit = {
         if ((queue.length > 0) || (_journalSize < maxJournalSize)) {
             return
@@ -160,23 +160,23 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
 
         log.info("Rolling journal file for '%s'", name)
         journal.close
-        
+
         val backupFile = new File(queuePath + "." + System.currentTimeMillis)
         new File(queuePath).renameTo(backupFile)
         openJournal
         _journalSize = 0
         backupFile.delete
     }
-    
+
     private def replayJournal: Unit = {
         queueSize = 0
-        
+
         try {
             val fileIn = new FileInputStream(queuePath)
             val in = new DataInputStream(fileIn)
             var offset = 0
             val intReader = new IntReader(ByteOrder.LITTLE_ENDIAN)
-            
+
             log.info("Replaying transaction journal for '%s'", name)
             var eof = false
             while (!eof) {
@@ -202,7 +202,7 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
                     }
                 }
             }
-            
+
             _journalSize = offset
             log.info("Finished transaction journal for '%s' (%d items, %d bytes)", name, size, offset)
         } catch {
@@ -215,7 +215,7 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
                 // FIXME: would it be better to just stop the server here?
             }
         }
-        
+
         openJournal
     }
 }

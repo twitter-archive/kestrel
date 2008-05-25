@@ -11,28 +11,28 @@ class InaccessibleQueuePath extends Exception("Inaccessible queue path")
 
 class QueueCollection(private val queueFolder: String) {
     private val log = Logger.get
-    
+
     private val path = new File(queueFolder)
     if (! path.isDirectory || ! path.canWrite) {
         throw new InaccessibleQueuePath
     }
-    
+
     private val queues = new mutable.HashMap[String, PersistentQueue]
     private var shuttingDown = false
-    
+
     // total of all data in all queues
     private var _currentBytes = 0
-    
+
     // total of all items in all queues
     private var _currentItems = 0
-    
+
     // total items added since the server started up.
     private var _totalAdded = 0
-    
+
     // hits/misses on removing items from the queue
     private var _queueHits = 0
     private var _queueMisses = 0
-    
+
     // reader accessors:
     def currentBytes = _currentBytes
     def currentItems = _currentItems
@@ -44,19 +44,19 @@ class QueueCollection(private val queueFolder: String) {
     def queueNames: List[String] = synchronized {
         queues.keys.toList
     }
-    
+
     /**
-     * Get a named queue's actor, creating it if necessary.
+     * Get a named queue, creating it if necessary.
      */
-    private def queue(name: String): Option[PersistentQueue] = {
+    def queue(name: String): Option[PersistentQueue] = {
         var setup = false
         var queue: Option[PersistentQueue] = None
-        
+
         synchronized {
             if (shuttingDown) {
                 return None
             }
-            
+
             queue = queues.get(name) match {
                 case q @ Some(_) => q
                 case None => {
@@ -67,7 +67,7 @@ class QueueCollection(private val queueFolder: String) {
                 }
             }
         }
-        
+
         if (setup) {
             /* race is handled by having PersistentQueue start up with an
              * un-initialized flag that blocks all operations until this
@@ -81,7 +81,7 @@ class QueueCollection(private val queueFolder: String) {
         }
         queue
     }
-        
+
     /**
      * Add an item to a named queue. Will not return until the item has been
      * synchronously added and written to the queue journal file.
@@ -105,7 +105,7 @@ class QueueCollection(private val queueFolder: String) {
             }
         }
     }
-    
+
     /**
      * Retrieve an item from a queue. If no item is available, or the server
      * is shutting down, None is returned.
@@ -134,14 +134,14 @@ class QueueCollection(private val queueFolder: String) {
             }
         }
     }
-    
+
     def stats(key: String): (Int, Int, Int, Int) = {
         queue(key) match {
             case None => (0, 0, 0, 0)
             case Some(q) => (q.size, q.bytes, q.totalItems, q.journalSize)
         }
     }
-    
+
     /**
      * Shutdown this queue collection. All actors are asked to exit, and
      * any future queue requests will fail.
