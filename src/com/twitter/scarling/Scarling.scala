@@ -1,7 +1,7 @@
 package com.twitter.scarling
 
 import java.net.InetSocketAddress
-import java.util.concurrent.Executors
+import java.util.concurrent.{Executors, ExecutorService}
 import scala.actors.{Actor, Scheduler}
 import scala.actors.Actor._
 import scala.collection.mutable
@@ -9,6 +9,7 @@ import org.apache.mina.common._
 import org.apache.mina.filter.codec.ProtocolCodecFilter
 import org.apache.mina.transport.socket.nio.{SocketAcceptor, SocketAcceptorConfig, SocketSessionConfig}
 import net.lag.ConfiggyExtensions._
+import net.lag.configgy.Config
 import net.lag.configgy.Configgy
 import net.lag.logging.Logger
 
@@ -39,7 +40,7 @@ object ScarlingStats {
 object Scarling {
     private val log = Logger.get
     
-    private[scarling] var queues: QueueCollection = null
+    var queues: QueueCollection = null
     
     private val _expiryStats = new mutable.HashMap[String, Int]
     private val _startTime = System.currentTimeMillis
@@ -52,19 +53,22 @@ object Scarling {
     ByteBuffer.setUseDirectBuffers(false)
     ByteBuffer.setAllocator(new SimpleByteBufferAllocator())
 
-    val acceptorExecutor = Executors.newCachedThreadPool()
-    val acceptor: IoAcceptor = new SocketAcceptor(Runtime.getRuntime().availableProcessors() + 1, acceptorExecutor)
+    var acceptorExecutor: ExecutorService = null
+    var acceptor: IoAcceptor = null
 
     def main(args: Array[String]) = {
         parseArgs(args.toList)
-        
-        // load our config file and configure logfiles:
         Configgy.configure(configFilename)
-        
-        val config = Configgy.config
+        startup(Configgy.config)
+    }
+    
+    def startup(config: Config) = {
         val listenAddress = config.get("host", "0.0.0.0")
         val listenPort = config.getInt("port", 22122)
         queues = new QueueCollection(config.get("queue_path", "/tmp"))
+        
+        acceptorExecutor = Executors.newCachedThreadPool()
+        acceptor = new SocketAcceptor(Runtime.getRuntime().availableProcessors() + 1, acceptorExecutor)
         
         // mina garbage:
         acceptor.getDefaultConfig.setThreadModel(ThreadModel.MANUAL)

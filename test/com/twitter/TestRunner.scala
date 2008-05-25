@@ -16,7 +16,8 @@ object TestRunner {
 
         val suite = new TestSuite(PersistentQueueTests,
                                   QueueCollectionTests,
-                                  memcache.MemCacheCodecTests)
+                                  memcache.MemCacheCodecTests,
+                                  ServerTests)
                                       
         val testCount = sum(for (t <- suite.buf) yield t.asInstanceOf[sorg.testing.Tests].tests.length)
         Console.println("Running " + testCount + " unit tests:")
