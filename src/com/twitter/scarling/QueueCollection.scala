@@ -48,7 +48,7 @@ class QueueCollection(private val queueFolder: String) {
     /**
      * Get a named queue, creating it if necessary.
      */
-    def queue(name: String): Option[PersistentQueue] = {
+    private def queue(name: String): Option[PersistentQueue] = {
         var setup = false
         var queue: Option[PersistentQueue] = None
 

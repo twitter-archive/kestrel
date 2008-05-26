@@ -25,13 +25,13 @@ object ServerTests extends Tests {
         config("host") = "localhost"
         config("port") = 22122
         config("queue_path") = folder.getCanonicalPath
+        config("max_journal_size") = 16 * 1024
         config("log.console") = true
         config("log.level") = "debug"
         config("log.filename") = "/tmp/foo"
         //Logger.configure(config.getAttributes("log").get, false, false)
 
         Scarling.startup(config)
-        Scarling.queues.queue("test_log_rotation").get.maxJournalSize = 16 * 1024
     }
 
     override def tearDown = {
@@ -41,7 +41,6 @@ object ServerTests extends Tests {
             f.delete
         }
         folder.delete
-        Thread.sleep(1000)
     }
 
 

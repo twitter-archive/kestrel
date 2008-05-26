@@ -41,11 +41,6 @@ class IntWriter(private val order: ByteOrder) {
 class PersistentQueue(private val persistencePath: String, val name: String) {
     private val log = Logger.get
 
-    /* when a journal reaches maxJournalSize, the queue will wait until
-     * it is empty, and will then rotate the journal.
-     */
-    var maxJournalSize = 16 * 1024 * 1024
-
     private val CMD_ADD = 0
     private val CMD_REMOVE = 1
 
@@ -196,7 +191,7 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
     }
 
     private def checkRoll: Unit = {
-        if ((queue.length > 0) || (_journalSize < maxJournalSize)) {
+        if ((queue.length > 0) || (_journalSize < PersistentQueue.maxJournalSize)) {
             return
         }
 
@@ -260,4 +255,12 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
 
         openJournal
     }
+}
+
+
+object PersistentQueue {
+    /* when a journal reaches maxJournalSize, the queue will wait until
+     * it is empty, and will then rotate the journal.
+     */
+    var maxJournalSize = 16 * 1024 * 1024
 }

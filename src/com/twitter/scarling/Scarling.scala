@@ -1,7 +1,7 @@
 package com.twitter.scarling
 
 import java.net.InetSocketAddress
-import java.util.concurrent.{Executors, ExecutorService}
+import java.util.concurrent.{Executors, ExecutorService, TimeUnit}
 import scala.actors.{Actor, Scheduler}
 import scala.actors.Actor._
 import scala.collection.mutable
@@ -66,6 +66,7 @@ object Scarling {
         val listenAddress = config.get("host", "0.0.0.0")
         val listenPort = config.getInt("port", 22122)
         queues = new QueueCollection(config.get("queue_path", "/tmp"))
+        PersistentQueue.maxJournalSize = config.getInt("max_journal_size", 16 * 1024 * 1024)
 
         acceptorExecutor = Executors.newCachedThreadPool()
         acceptor = new SocketAcceptor(Runtime.getRuntime().availableProcessors() + 1, acceptorExecutor)
@@ -114,6 +115,8 @@ object Scarling {
         acceptor.unbindAll
         Scheduler.shutdown
         acceptorExecutor.shutdown
+        acceptorExecutor.awaitTermination(5, TimeUnit.SECONDS)
+        log.info("Goodbye.")
     }
 
     def uptime = (System.currentTimeMillis - _startTime) / 1000

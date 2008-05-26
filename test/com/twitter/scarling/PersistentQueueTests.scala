@@ -42,7 +42,7 @@ object PersistentQueueTests extends Tests {
     test("journal rotation") {
         val q = new PersistentQueue(currentFolder.getPath, "rolling")
         q.setup
-        q.maxJournalSize = 64
+        PersistentQueue.maxJournalSize = 64
 
         q.add(new Array[Byte](32))
         q.add(new Array[Byte](64))
@@ -66,6 +66,8 @@ object PersistentQueueTests extends Tests {
         expect(0) { q.bytes }
         expect(0) { q.journalSize }
         expect(0) { new File(currentFolder.getPath, "rolling").length }
+
+        PersistentQueue.maxJournalSize = 16 * 1024 * 1024
     }
 
     test("journal is okay after restart") {
