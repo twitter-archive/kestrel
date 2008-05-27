@@ -127,7 +127,6 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
              * this is fine, because a non-synced file only matters on
              * catastrophic disk/machine failure.
              */
-            // FIXME: deal with truncated journal files. :)
             //journal.getFD.sync
             _journalSize += (5 + blob.length)
 
@@ -249,7 +248,8 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
             case e: IOException => {
                 log.error(e, "Exception replaying journal for '%s'", name)
                 log.error("DATA MAY HAVE BEEN LOST!")
-                // FIXME: would it be better to just stop the server here?
+                // this can happen if the server died abruptly in the middle
+                // of writing a journal. not awesome but we should recover.
             }
         }
 
