@@ -22,7 +22,7 @@ object PutMany {
 "there are no more fights to fight\n" +
 "my trophies are the scars that will never heal\n" +
 "but i get carried away sometimes\n" +
-"i wake up in the night swinging at the ceiling\n" + 
+"i wake up in the night swinging at the ceiling\n" +
 "it's hard to leave old ways behind\n" +
 "but harder when you think that's all there is\n" +
 "don't look at me that way\n" +
@@ -36,7 +36,7 @@ object PutMany {
 "we're survivors, here til the end"
 
     private val EXPECT = ByteBuffer.wrap("STORED\r\n".getBytes)
-    
+
     def put(socket: SocketChannel, queueName: String, n: Int) = {
         val spam = ByteBuffer.wrap(("set " + queueName + " 0 0 " + LYRIC.length + "\r\n" + LYRIC + "\r\n").getBytes)
         val buffer = ByteBuffer.allocate(8)
@@ -57,19 +57,19 @@ object PutMany {
             }
         }
     }
-    
+
     def main(args: Array[String]) = {
         if (args.length < 1) {
             Console.println("usage: put-many <N>")
             Console.println("    spin up N clients and put 10k items spread across N queues")
             System.exit(1)
         }
-        
+
         val clientCount = args(0).toInt
-        
+
         var threadList: List[Thread] = Nil
         val startTime = System.currentTimeMillis
-        
+
         for (i <- 0 until clientCount) {
             val t = new Thread {
                 override def run = {
@@ -83,7 +83,7 @@ object PutMany {
         for (t <- threadList) {
             t.join
         }
-        
+
         val endTime = System.currentTimeMillis
         Console.println("Finished in " + (endTime - startTime) + " msec.")
     }
