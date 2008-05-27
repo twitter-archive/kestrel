@@ -75,6 +75,7 @@ object Scarling {
         acceptor.getDefaultConfig.setThreadModel(ThreadModel.MANUAL)
         val saConfig = new SocketAcceptorConfig
         saConfig.setReuseAddress(true)
+        saConfig.setBacklog(1000)
         saConfig.getSessionConfig.setTcpNoDelay(true)
         saConfig.getFilterChain.addLast("codec", new ProtocolCodecFilter(new memcache.Encoder, new memcache.Decoder))
         acceptor.bind(new InetSocketAddress(listenAddress, listenPort), new IoHandlerActorAdapter((session: IoSession) => new ScarlingHandler(session)), saConfig)
