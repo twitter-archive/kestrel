@@ -8,7 +8,7 @@ import net.lag.logging.Logger
 
 object TestRunner {
     def sum(x: Seq[Int]) = (0 /: x) { _ + _ }
-        
+
     def main(args:Array[String]): Unit = {
         // turn down logging
         Logger.get("").setLevel(Logger.FATAL)
@@ -18,7 +18,7 @@ object TestRunner {
                                   QueueCollectionTests,
                                   memcache.MemCacheCodecTests,
                                   ServerTests)
-                                      
+
         val testCount = sum(for (t <- suite.buf) yield t.asInstanceOf[sorg.testing.Tests].tests.length)
         Console.println("Running " + testCount + " unit tests:")
         suite.run(results)
