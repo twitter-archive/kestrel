@@ -117,7 +117,6 @@ object Scarling {
         Scheduler.shutdown
         acceptorExecutor.shutdown
         acceptorExecutor.awaitTermination(5, TimeUnit.SECONDS)
-        log.info("Goodbye.")
     }
 
     def uptime = (System.currentTimeMillis - _startTime) / 1000
