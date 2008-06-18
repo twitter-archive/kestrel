@@ -6,13 +6,15 @@ import scala.actors.Actor
 import scala.actors.Actor._
 import scala.collection.mutable
 import net.lag.ConfiggyExtensions._
+import net.lag.configgy.Config
+import net.lag.configgy.Configgy
 import net.lag.logging.Logger
 import org.apache.mina.common._
 import org.apache.mina.transport.socket.nio.SocketSessionConfig
 import com.twitter.scarling.memcache.ProtocolException
 
 
-class ScarlingHandler(val session: IoSession) extends Actor {
+class ScarlingHandler(val session: IoSession, val config: Config) extends Actor {
     private val log = Logger.get
 
     private val IDLE_TIMEOUT = 60
@@ -23,7 +25,13 @@ class ScarlingHandler(val session: IoSession) extends Actor {
 	if (session.getTransportType == TransportType.SOCKET) {
 		session.getConfig.asInstanceOf[SocketSessionConfig].setReceiveBufferSize(2048)
 	}
-    session.setIdleTime(IdleStatus.BOTH_IDLE, IDLE_TIMEOUT)
+
+    // config can be null in unit tests
+    val idleTimeout = if (config == null) IDLE_TIMEOUT else config.getInt("timeout", IDLE_TIMEOUT)
+    if (idleTimeout > 0) {
+        session.setIdleTime(IdleStatus.BOTH_IDLE, idleTimeout)
+    }
+
     ScarlingStats.sessions.incr
     ScarlingStats.totalConnections.incr
     log.debug("New session %d from %s:%d", sessionID, remoteAddress.getHostName, remoteAddress.getPort)
@@ -42,7 +50,7 @@ class ScarlingHandler(val session: IoSession) extends Actor {
                     cause.getCause match {
                         case _: ProtocolException => writeResponse("CLIENT_ERROR\r\n")
                         case _ => {
-                            log.error("Exception caught on session %d: %s", sessionID, cause.getMessage)
+                            log.error(cause, "Exception caught on session %d: %s", sessionID, cause.getMessage)
                             writeResponse("ERROR\r\n")
                         }
                     }
