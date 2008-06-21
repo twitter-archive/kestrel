@@ -2,14 +2,15 @@
 <project name="scarling" default="default" basedir=".">
     <description> Scarling simple transactional queue server. </description>
     
+    <!-- things you may want to override: -->
+    <property environment="env" />
+    <property name="scala.home" value="${env.SCALA_HOME}" />
+    <property name="install.dir" value="/usr/local/scarling" />
+
     <property name="build.dir" value="build" />
     <property name="test.dir" value="build-test" />
     <property name="docs.dir" value="docs" />
     
-    <property name="install.dir" value="/usr/local/scarling" />
-    
-    <property environment="env" />
-    <property name="scala.home" value="${env.SCALA_HOME}" />
     <property name="scala-compiler.jar" value="${scala.home}/lib/scala-compiler.jar" />
     <property name="scala-library.jar" value="${scala.home}/lib/scala-library.jar" />
     <path id="scala.classpath">
@@ -110,6 +111,7 @@
     <target name="clean" depends="init">
         <delete dir="${build.dir}"/>
         <delete dir="${test.dir}"/>
+        <delete file="libs/scala-library.jar" />
     </target>
 
 </project>
