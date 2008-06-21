@@ -6,16 +6,21 @@
     <property name="test.dir" value="build-test" />
     <property name="docs.dir" value="docs" />
     
+    <property name="install.dir" value="/usr/local/scarling" />
+    
     <property environment="env" />
     <property name="scala.home" value="${env.SCALA_HOME}" />
     <property name="scala-compiler.jar" value="${scala.home}/lib/scala-compiler.jar" />
     <property name="scala-library.jar" value="${scala.home}/lib/scala-library.jar" />
     <path id="scala.classpath">
-        <pathelement location="${scala-compiler.jar}" />
         <pathelement location="${scala-library.jar}" />
     </path>
+    <path id="scala.build.classpath">
+        <path refid="scala.classpath" />
+        <pathelement location="${scala-compiler.jar}" />
+    </path>
     <taskdef resource="scala/tools/ant/antlib.xml">
-        <classpath refid="scala.classpath" />
+        <classpath refid="scala.build.classpath" />
     </taskdef>
     
     <path id="deps">
@@ -54,7 +59,7 @@
     <target name="test" depends="compile-tests">
        <java classname="scala.tools.nsc.MainGenericRunner" fork="true" failonerror="true">
            <classpath>
-               <path refid="scala.classpath" />
+               <path refid="scala.build.classpath" />
                <path refid="deps" />
                <pathelement location="${build.dir}" />
                <pathelement location="${test.dir}" />
@@ -64,9 +69,35 @@
     </target>
     
     <target name="jar" depends="test">
+        <!-- get the current directory into a property -->
+        <path id="current.dir">
+            <pathelement location="." />
+        </path>
+        <pathconvert refid="current.dir" property="current.dir" />
+
+        <!-- make a property with *relative* paths to libs, separated by spaces -->
+        <pathconvert refid="deps" pathsep=" " property="deps.jar-format">
+            <map from="${current.dir}/" to="" />
+        </pathconvert>
+        
+        <!-- copy scala-library.jar into libs/ so it will be picked up by the
+             jar classpath. java won't let you use both -cp and -jar options. -->
+        <copy file="${scala-library.jar}" todir="libs" />
         <jar destfile="scarling.jar">
             <fileset dir="${build.dir}" />
+            <manifest>
+                <attribute name="Main-Class" value="com.twitter.scarling.Scarling" />
+                <attribute name="Class-Path" value="libs/scala-library.jar ${deps.jar-format}" />
+            </manifest>
         </jar>
+    </target>
+    
+    <target name="install" depends="jar">
+        <mkdir dir="${install.dir}" />
+        <copy file="scarling.jar" todir="${install.dir}" />
+        <copy todir="${install.dir}/libs">
+            <fileset dir="libs" />
+        </copy>
     </target>
     
     <target name="docs">
@@ -76,17 +107,6 @@
         </scaladoc>
     </target>
     
-    <target name="run" depends="test">
-        <!-- temporary -->
-        <java classname="com.twitter.scarling.Scarling" fork="true" failonerror="true">
-            <classpath>
-                <path refid="scala.classpath" />
-                <path refid="deps" />
-                <pathelement location="${build.dir}" />
-            </classpath>
-        </java>
-    </target>
-
     <target name="clean" depends="init">
         <delete dir="${build.dir}"/>
         <delete dir="${test.dir}"/>
