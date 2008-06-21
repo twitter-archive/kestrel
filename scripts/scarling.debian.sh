@@ -12,7 +12,7 @@ if [ "$2" = "--no-lsb" ]; then
     function log_daemon_msg() {
         /bin/echo -n "$1   "
     }
-    function log_action_msg() {
+    function log_warning_msg() {
         echo "*** $1"
     }
     function log_end_msg() {
@@ -43,7 +43,7 @@ case "$1" in
         done
 
         if [ ! -r $SCARLING_HOME/scarling.jar ]; then
-            log_action_msg "scarling jar missing - not starting"
+            log_warning_msg "scarling jar missing - not starting"
             log_end_msg 1
             exit 1
         fi
