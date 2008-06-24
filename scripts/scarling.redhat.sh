@@ -10,7 +10,6 @@ AS_USER="daemon"
 
 daemon_args="--pidfile /var/run/scarling/scarling.pid"
 JAVA_OPTS="-server -XX:+UseConcMarkSweepGC -XX:+UseParNewGC"
-#JAVA_OPTS="-server -verbosegc -XX:+PrintGCDetails -Xms12288m -Xmx12288m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:MaxPermSize=1024m -XX:MaxDirectMemorySize=512m -XX:NewSize=1024m"
 
 . /etc/init.d/functions
 
