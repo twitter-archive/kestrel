@@ -1,89 +1,106 @@
 #!/bin/sh
 #
-# scarling init.d script for debian/ubuntu systems.
+# scarling init.d script.
 #
 
-QUEUE_PATH=/var/spool/starling
-SCALA_HOME=/usr/local/scala
-SCARLING_HOME=/usr/local/scarling
+QUEUE_PATH="/var/spool/starling"
+SCALA_HOME="/usr/local/scala"
+SCARLING_HOME="/usr/local/scarling"
 
-# this hackery is just to let it work on my mac.
-if [ "$2" = "--no-lsb" ]; then
-    function log_daemon_msg() {
-        /bin/echo -n "$1   "
-    }
-    function log_warning_msg() {
-        echo "*** $1"
-    }
-    function log_end_msg() {
-        if [ "$1" = "0" ]; then
-            echo "success"
-        else
-            echo "FAILED"
+daemon_args="--name scarling --pidfile /var/run/scarling/scarling.pid"
+JAVA_OPTS="-server -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:MaxPermSize=1024m -XX:MaxDirectMemorySize=512m -XX:NewSize=1024m"
+#JAVA_OPTS="-server -verbosegc -XX:+PrintGCDetails -Xms12288m -Xmx12288m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:MaxPermSize=1024m -XX:MaxDirectMemorySize=512m -XX:NewSize=1024m"
+
+
+function running() {
+    daemon $daemon_args --running
+}
+
+function find_java() {
+    if [ ! -z "$JAVA_HOME" ]; then
+        return
+    fi
+    potential=$(ls -r1d /opt/jdk /System/Library/Frameworks/JavaVM.framework/Versions/CurrentJDK/Home /usr/java/j* /usr/java/default 2>/dev/null)
+    for p in $potential; do
+        if [ -x $p/bin/java ]; then
+            JAVA_HOME=$p
+            break
         fi
-    }
-else
-    trap "$0 $1 --no-lsb" EXIT
-    . /lib/lsb/init-functions
-    trap - EXIT
-fi
+    done
+}
 
-DISTRO=$(lsb_release -is 2>/dev/null || echo Debian)
-common_args="--name scarling --pidfile /var/run/scarling/scarling.pid"
+
+# dirs under /var/run can go away between reboots.
+for p in /var/run/scarling /var/log/scarling $QUEUE_PATH; do
+    if [ ! -d $p ]; then
+        mkdir -p $p
+        chmod 775 $p
+        chown root:daemon $p >/dev/null 2>&1 || true
+    fi
+done
+
+find_java
+
 
 case "$1" in
     start)
-        log_daemon_msg "Starting scarling..." "scarling"
-
-        # dirs under /var/run can go away between reboots.
-        for p in /var/run/scarling /var/log/scarling $QUEUE_PATH; do
-            mkdir -p $p
-            chmod 775 $p
-            chown root:daemon $p >/dev/null 2>&1 || true
-        done
+        echo -n "Starting scarling... "
 
         if [ ! -r $SCARLING_HOME/scarling.jar ]; then
-            log_warning_msg "scarling jar missing - not starting"
-            log_end_msg 1
+            echo "FAIL"
+            echo "*** scarling jar missing - not starting"
             exit 1
         fi
+        if [ ! -x $JAVA_HOME/bin/java ]; then
+            echo "FAIL"
+            echo "*** $JAVA_HOME/bin/java doesn't exist -- check JAVA_HOME?"
+            exit 1
+        fi
+        if running; then
+            echo "already running."
+            exit 0
+        fi
         
-        daemon $common_args --user daemon.daemon --stderr=/var/log/scarling/error -- java -jar ${SCARLING_HOME}/scarling.jar
+        daemon $daemon_args --user daemon.daemon --stderr=/var/log/scarling/error -- ${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar ${SCARLING_HOME}/scarling.jar
         sleep 1
-        if daemon $common_args --running; then
-            log_end_msg 0
+        if running; then
+            echo "done."
         else
             sleep 2
-            if daemon $common_args --running; then
-                echo yay2
-                log_end_msg 0
+            if running; then
+                echo "done."
             else
                 # give up.
-                log_end_msg 1
+                echo "FAIL"
             fi
         fi
     ;;
 
     stop)
-        log_daemon_msg "Stopping scarling..." "scarling"
+        echo -n "Stopping scarling... "
+        if ! running; then
+            echo "wasn't running."
+            exit 0
+        fi
+        
         (echo "shutdown"; sleep 2) | telnet localhost 22122 >/dev/null 2>&1
-        if daemon $common_args --running; then
+        if running; then
             sleep 2
-            if daemon $common_args --running; then
-                log_end_msg 1
+            if running; then
+                echo "FAIL"
             else
-                log_end_msg 0
+                echo "done."
             fi
         else
-            log_end_msg 0
+            echo "done."
         fi
     ;;
     
     status)
-        if daemon $common_args --running; then
-            log_action_msg "scarling is running."
+        if running; then
+            echo "scarling is running."
         else
-            log_action_msg "scarling is NOT running."
+            echo "scarling is NOT running."
         fi
     ;;
 
@@ -100,7 +117,7 @@ case "$1" in
     ;;
 
     *)
-        log_action_msg "Usage: /etc/init.d/scarling {start|stop|reload|restart|force-reload}"
+        echo "Usage: /etc/init.d/scarling {start|stop|reload|restart|force-reload}"
         exit 1
     ;;
 esac
