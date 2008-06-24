@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# scarling init.d script.
+# scarling init.d script for redhat.
 #
 
 QUEUE_PATH="/var/spool/starling"
@@ -8,20 +8,18 @@ SCALA_HOME="/usr/local/scala"
 SCARLING_HOME="/usr/local/scarling"
 AS_USER="daemon"
 
-daemon_args="--name scarling --pidfile /var/run/scarling/scarling.pid"
+daemon_args="--pidfile /var/run/scarling/scarling.pid"
 JAVA_OPTS="-server -XX:+UseConcMarkSweepGC -XX:+UseParNewGC"
 #JAVA_OPTS="-server -verbosegc -XX:+PrintGCDetails -Xms12288m -Xmx12288m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:MaxPermSize=1024m -XX:MaxDirectMemorySize=512m -XX:NewSize=1024m"
 
+. /etc/init.d/functions
 
-function running() {
-    daemon $daemon_args --running
-}
 
 function find_java() {
     if [ ! -z "$JAVA_HOME" ]; then
         return
     fi
-    potential=$(ls -r1d /opt/jdk /System/Library/Frameworks/JavaVM.framework/Versions/CurrentJDK/Home /usr/java/j* /usr/java/default 2>/dev/null)
+    potential=$(ls -r1d /opt/jdk /System/Library/Frameworks/JavaVM.framework/Versions/CurrentJDK/Home /usr/java/default /usr/java/j* 2>/dev/null)
     for p in $potential; do
         if [ -x $p/bin/java ]; then
             JAVA_HOME=$p
@@ -57,55 +55,18 @@ case "$1" in
             echo "*** $JAVA_HOME/bin/java doesn't exist -- check JAVA_HOME?"
             exit 1
         fi
-        if running; then
-            echo "already running."
-            exit 0
-        fi
         
         ulimit -n 8192 || echo -n " (no ulimit)"
-        daemon $daemon_args --user $AS_USER --stderr=/var/log/scarling/error -- ${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar ${SCARLING_HOME}/scarling.jar
-        sleep 1
-        if running; then
-            echo "done."
-        else
-            sleep 2
-            if running; then
-                echo "done."
-            else
-                # give up.
-                echo "FAIL"
-            fi
-        fi
+        daemon $daemon_args --user $AS_USER ${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar ${SCARLING_HOME}/scarling.jar &
+        echo "done."
     ;;
 
     stop)
         echo -n "Stopping scarling... "
-        if ! running; then
-            echo "wasn't running."
-            exit 0
-        fi
-        
         (echo "shutdown"; sleep 2) | telnet localhost 22122 >/dev/null 2>&1
-        if running; then
-            sleep 2
-            if running; then
-                echo "FAIL"
-            else
-                echo "done."
-            fi
-        else
-            echo "done."
-        fi
+        echo "done."
     ;;
     
-    status)
-        if running; then
-            echo "scarling is running."
-        else
-            echo "scarling is NOT running."
-        fi
-    ;;
-
 #    reload|force-reload)
 #        log_daemon_msg "Reloading scarling..." "scarling"
 #        ...
