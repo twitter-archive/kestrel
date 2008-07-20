@@ -72,5 +72,17 @@
             <arg value="1000" />
         </java>
     </target>
+
+    <target name="put-many-2000">
+        <java classname="com.twitter.scarling.load.PutMany" fork="true" failonerror="true">
+            <classpath>
+                <path refid="scala.classpath" />
+                <path refid="deps" />
+                <pathelement location="${build.dir}" />
+                <pathelement location="${test.dir}" />
+            </classpath>
+            <arg value="2000" />
+        </java>
+    </target>
     
 </project>
