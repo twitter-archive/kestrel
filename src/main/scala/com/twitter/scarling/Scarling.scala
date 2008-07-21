@@ -1,6 +1,7 @@
 package com.twitter.scarling
 
 import java.net.InetSocketAddress
+import java.util.Properties
 import java.util.concurrent.{Executors, ExecutorService, TimeUnit}
 import scala.actors.{Actor, Scheduler}
 import scala.actors.Actor._
@@ -47,7 +48,12 @@ object Scarling {
 
     private var configFilename = "/etc/scarling.conf"
 
-    val VERSION = "0.5"
+    // load build info
+    private var buildProperties = new Properties
+    buildProperties.load(getClass.getResource("build.properties").openStream)
+    val SERVER_NAME = buildProperties.getProperty("name")
+    val VERSION = buildProperties.getProperty("version")
+    val BUILD_NAME = buildProperties.getProperty("build_name")
 
 
     ByteBuffer.setUseDirectBuffers(false)
@@ -102,7 +108,7 @@ object Scarling {
 
     private def help = {
         Console.println
-        Console.println("scarling %s".format(VERSION))
+        Console.println("scarling %s (%s)".format(VERSION, BUILD_NAME))
         Console.println("options:")
         Console.println("    -f <filename>")
         Console.println("        load config file (default: %s)".format(configFilename))

@@ -1,0 +1,182 @@
+<project xmlns:ivy="antlib:org.apache.ivy.ant">
+    <property name="ivy.dep.file" value="${basedir}/ivy/ivy.xml" />
+    <property name="ivy.settings.file" value="${basedir}/ivy/ivysettings.xml" />
+    
+    <target name="init">
+        <mkdir dir="${target.dir}" />
+        <mkdir dir="${test.target.dir}" />
+        <mkdir dir="${dist.dir}" />
+    </target>
+
+    <target name="resolve" depends="install-ivy">
+        <ivy:retrieve conf="bootstrap,default,test" pattern="${basedir}/target/libs/[conf]/[artifact]-[revision].[ext]" />
+        <ivy:cachepath pathid="bootstrap.path" conf="bootstrap" />
+        <ivy:cachepath pathid="deps.path" conf="default" />
+        <ivy:cachepath pathid="test.path" conf="test" />
+        <property name="dist.dir" value="${basedir}/dist/${ivy.module}-${ivy.revision}" />
+        <property name="docs.target.dir" value="${dist.dir}/docs" />
+    </target>
+    
+    <target name="prepare" depends="resolve,init" description="bootstrap ivy and scala and prepare to compile">
+        <ivy:info file="${ivy.dep.file}" />
+        <taskdef resource="scala/tools/ant/antlib.xml" classpathref="bootstrap.path" />
+    </target>
+
+    <macrodef name="compile-scala-source">
+        <element name="extra-classpath" optional="true" description="items for the classpath that aren't in ivy.xml" />
+        <element name="params" optional="true" description="any other items to pass into 'scalac'" />
+        
+        <sequential>
+            <scalac srcdir="${source.dir}" destdir="${target.dir}" force="changed" deprecation="on">
+                <classpath>
+                    <path refid="deps.path" />
+                    <extra-classpath />
+                </classpath>
+                <include name="**/*.scala" />
+            </scalac>
+        </sequential>
+    </macrodef>
+    
+    <target name="compile-scala-source">
+        <compile-scala-source />
+    </target>
+
+    <tstamp>
+        <format property="build.timestamp" pattern="yyyyMMdd-HHmmss" />
+    </tstamp>
+    
+    <!-- create properties file with build info -->
+    <target name="write-build-info" if="ivy.extra.buildpackage">
+        <propertyfile file="${target.dir}/${ivy.extra.buildpackage}/build.properties">
+            <entry key="name" value="${ivy.module}" />
+            <entry key="version" value="${ivy.revision}" />
+            <entry key="build_name" value="${build.timestamp}" />
+        </propertyfile>
+    </target>
+
+    <target name="compile" depends="prepare,compile-scala-source,write-build-info" description="compile scala code" />
+
+    <macrodef name="compile-scala-tests">
+        <element name="extra-classpath" optional="true" description="items for the classpath that aren't in ivy.xml" />
+        <element name="params" optional="true" description="any other items to pass into 'scalac'" />
+        
+        <sequential>
+            <scalac srcdir="${test.source.dir}" destdir="${test.target.dir}" force="changed" deprecation="on">
+                <classpath>
+                    <path refid="test.path" />
+                    <pathelement location="${target.dir}" />
+                    <extra-classpath />
+                </classpath>
+                <include name="**/*.scala" />
+            </scalac>
+        </sequential>
+    </macrodef>
+    
+    <target name="compile-tests" depends="prepare,compile">
+        <compile-scala-tests />
+    </target>
+    
+    <macrodef name="run-tests">
+        <attribute name="classname" description="name of the test class to run" />
+        <element name="extra-classpath" optional="true" description="items for the classpath that aren't in ivy.xml" />
+        <element name="params" optional="true" description="any other items to pass into 'java'" />
+
+        <sequential>
+            <java classname="scala.tools.nsc.MainGenericRunner" fork="true" failonerror="true">
+                <classpath>
+                    <path refid="test.path" />
+                    <pathelement location="${target.dir}" />
+                    <pathelement location="${test.target.dir}" />
+                    <extra-classpath />
+                </classpath>
+                <arg line="@{classname}" />
+                <params />
+            </java>
+        </sequential>
+    </macrodef>
+    
+    <target name="test" unless="skip.tests" depends="compile-tests" description="run tests">
+        <run-tests classname="${ivy.extra.testclass}" />
+    </target>
+    
+    <macrodef name="copy-deps-into-dist">
+        <sequential>
+            <copy todir="${dist.dir}/libs" flatten="true">
+                <path refid="deps.path" />
+            </copy>
+            <pathconvert refid="deps.path" pathsep=" " property="deps.path.jar-format">
+                <chainedmapper>
+                    <flattenmapper />
+                    <globmapper from="*" to="libs/*" />
+                </chainedmapper>
+            </pathconvert>
+        </sequential>
+    </macrodef>
+    
+    <target name="make-non-executable-jar" unless="ivy.extra.jarclassname">
+        <jar destfile="${dist.dir}/${ivy.module}-${ivy.revision}.jar">
+            <fileset dir="${target.dir}" />
+        </jar>
+    </target>
+    
+    <!-- generate a jar that contains all deps inside it, so it can be run with "java -jar" -->
+    <target name="make-executable-jar" if="ivy.extra.jarclassname">
+        <copy-deps-into-dist />
+        <jar destfile="${dist.dir}/${ivy.module}-${ivy.revision}.jar">
+            <fileset dir="${target.dir}" />
+            <manifest>
+                <attribute name="Main-Class" value="${ivy.extra.jarclassname}" />
+                <attribute name="Class-Path" value="${deps.path.jar-format}" />
+            </manifest>
+        </jar>
+    </target>
+    
+    <target name="docs" depends="prepare">
+        <delete dir="${docs.target.dir}" />
+        <mkdir dir="${docs.target.dir}" />
+        <scaladoc srcdir="${source.dir}" destdir="${docs.target.dir}" doctitle="${ivy.module}" windowtitle="${ivy.module}">
+            <classpath refid="deps.path" />
+        </scaladoc>
+    </target>
+    
+    <target name="install" depends="test,make-non-executable-jar,make-executable-jar,docs" description="build complete jar(s) and docs">
+        <ivy:makepom ivyfile="${basedir}/ivy/ivy.xml" pomfile="${dist.dir}/${ivy.module}-${ivy.revision}.pom" />
+        <ivy:deliver conf="*(public)" />
+    </target>
+
+    <target name="package" depends="install">
+        <ivy:publish resolver="push" overwrite="true">
+            <artifacts pattern="${dist.dir}/[artifact]-[revision].[ext]" />
+        </ivy:publish>
+        <copy file="INSTALL" todir="${dist.dir}" failonerror="false" />
+        <copy file="LICENSE" todir="${dist.dir}" failonerror="false" />
+        <copy file="README" todir="${dist.dir}" failonerror="false" />
+        <copy file="build.xml" todir="${dist.dir}" />
+        <copy todir="${dist.dir}/src">
+            <fileset dir="src" />
+        </copy>
+        <copy todir="${dist.dir}/ivy">
+            <fileset dir="ivy" />
+        </copy>
+        <zip destfile="${basedir}/dist/${ivy.module}-${ivy.revision}.zip" basedir="${basedir}/dist" includes="${ivy.module}-${ivy.revision}/**" />
+    </target>
+    
+    <target name="clean" description="erase built files and targets">
+        <delete dir="${target.dir}" />
+        <delete dir="${test.target.dir}" />
+        <delete dir="dist" />
+    </target>
+
+    <target name="clean-ivy">
+        <delete dir="${ivy.jar.dir}"/>
+    </target>
+
+    <target name="clean-cache" depends="install-ivy">
+        <ivy:cleancache />
+    </target>
+    
+    <target name="dist-clean" depends="clean-cache,clean,clean-ivy" description="erase everything generated or built, even cached downloads">
+        <delete dir="target" />
+    </target>
+
+</project>
