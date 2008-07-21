@@ -1,0 +1,24 @@
+<ivy-module version="1.0" xmlns:e="http://ant.apache.org/ivy/extra">
+    <info
+        organisation="com.twitter"
+        module="scarling"
+        revision="0.5"
+        e:testclass="com.twitter.TestRunner"
+        e:jarclassname="com.twitter.scarling.Scarling"
+        e:buildpackage="com/twitter/scarling"
+    />
+    
+    <configurations>
+        <conf name="bootstrap" visibility="private" description="load scala compiler and libraries" />
+        <conf name="default" description="normal build" />
+        <conf name="test" visibility="private" description="build and run tests" />
+    </configurations>
+    <dependencies>
+        <!-- i guess scala-compiler.jar is needed for MainGenericRunner -->
+        <dependency org="org.scala-lang" name="scala-compiler" rev="2.7.1" conf="bootstrap->default; test->default" />
+        <dependency org="org.scala-lang" name="scala-library" rev="2.7.1" />
+        <dependency org="net.lag" name="configgy" rev="1.1" />
+        <dependency org="org.apache.mina" name="mina-core" rev="1.1.7" />
+        <dependency org="org.slf4j" name="slf4j-jdk14" rev="1.5.0" />
+    </dependencies>
+</ivy-module>

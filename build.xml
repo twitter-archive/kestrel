@@ -1,97 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project name="scarling" default="default" basedir=".">
+<project name="scarling" default="install">
     <description> Scarling simple transactional queue server. </description>
     
-    <!-- things you may want to override: -->
-    <property environment="env" />
-    <property name="scala.home" value="${env.SCALA_HOME}" />
+
+    <import file="ivy/bootstrap.xml" />
+    
+    
+    <!--
     <property name="install.dir" value="/usr/local/scarling" />
-
-    <property name="build.dir" value="build" />
-    <property name="test.dir" value="build-test" />
-    <property name="docs.dir" value="docs" />
-    
-    <property name="scala-compiler.jar" value="${scala.home}/lib/scala-compiler.jar" />
-    <property name="scala-library.jar" value="${scala.home}/lib/scala-library.jar" />
-    <path id="scala.classpath">
-        <pathelement location="${scala-library.jar}" />
-    </path>
-    <path id="scala.build.classpath">
-        <path refid="scala.classpath" />
-        <pathelement location="${scala-compiler.jar}" />
-    </path>
-    <taskdef resource="scala/tools/ant/antlib.xml">
-        <classpath refid="scala.build.classpath" />
-    </taskdef>
-    
-    <path id="deps">
-        <pathelement location="libs/configgy-1.0.jar" />
-        <pathelement location="libs/mina-core-1.1.7.jar" />
-        <pathelement location="libs/slf4j-api-1.5.0.jar" />
-        <pathelement location="libs/slf4j-jdk14-1.5.0.jar" />
-    </path>
-    
-    <target name="init">
-        <mkdir dir="${build.dir}" />
-        <mkdir dir="${test.dir}" />
-    </target>
-
-    <target name="compile" depends="init">
-        <scalac srcdir="src" destdir="${build.dir}" force="changed" deprecation="on">
-            <classpath>
-                <path refid="scala.classpath" />
-                <path refid="deps" />
-            </classpath>
-            <include name="**/*.scala" />
-        </scalac>
-    </target>
-
-    <target name="compile-tests" depends="compile">
-        <scalac srcdir="test" destdir="${test.dir}" force="changed">
-            <classpath>
-                <path refid="scala.classpath" />
-                <path refid="deps" />
-                <pathelement location="${build.dir}" />
-            </classpath>
-            <include name="**/*.scala" />
-        </scalac>
-    </target>
-    
-    <target name="test" depends="compile-tests">
-       <java classname="scala.tools.nsc.MainGenericRunner" fork="true" failonerror="true">
-           <classpath>
-               <path refid="scala.build.classpath" />
-               <path refid="deps" />
-               <pathelement location="${build.dir}" />
-               <pathelement location="${test.dir}" />
-           </classpath>
-           <arg line="com.twitter.TestRunner" />
-       </java>
-    </target>
-    
-    <target name="jar" depends="test">
-        <!-- get the current directory into a property -->
-        <path id="current.dir">
-            <pathelement location="." />
-        </path>
-        <pathconvert refid="current.dir" property="current.dir" />
-
-        <!-- make a property with *relative* paths to libs, separated by spaces -->
-        <pathconvert refid="deps" pathsep=" " property="deps.jar-format">
-            <map from="${current.dir}/" to="" />
-        </pathconvert>
-        
-        <!-- copy scala-library.jar into libs/ so it will be picked up by the
-             jar classpath. java won't let you use both -cp and -jar options. -->
-        <copy file="${scala-library.jar}" todir="libs" />
-        <jar destfile="scarling.jar">
-            <fileset dir="${build.dir}" />
-            <manifest>
-                <attribute name="Main-Class" value="com.twitter.scarling.Scarling" />
-                <attribute name="Class-Path" value="libs/scala-library.jar ${deps.jar-format}" />
-            </manifest>
-        </jar>
-    </target>
     
     <target name="install" depends="jar">
         <mkdir dir="${install.dir}" />
@@ -100,18 +16,6 @@
             <fileset dir="libs" />
         </copy>
     </target>
-    
-    <target name="docs">
-        <mkdir dir="${docs.dir}" />
-        <scaladoc srcdir="src" destdir="${docs.dir}">
-            <classpath refid="scala.classpath" />
-        </scaladoc>
-    </target>
-    
-    <target name="clean" depends="init">
-        <delete dir="${build.dir}"/>
-        <delete dir="${test.dir}"/>
-        <delete file="libs/scala-library.jar" />
-    </target>
+-->    
 
 </project>
