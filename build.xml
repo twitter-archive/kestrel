@@ -2,20 +2,5 @@
 <project name="scarling" default="install">
     <description> Scarling simple transactional queue server. </description>
     
-
     <import file="ivy/bootstrap.xml" />
-    
-    
-    <!--
-    <property name="install.dir" value="/usr/local/scarling" />
-    
-    <target name="install" depends="jar">
-        <mkdir dir="${install.dir}" />
-        <copy file="scarling.jar" todir="${install.dir}" />
-        <copy todir="${install.dir}/libs">
-            <fileset dir="libs" />
-        </copy>
-    </target>
--->    
-
 </project>
