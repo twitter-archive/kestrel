@@ -20,7 +20,7 @@ function find_java() {
     if [ ! -z "$JAVA_HOME" ]; then
         return
     fi
-    potential=$(ls -r1d /opt/jdk /System/Library/Frameworks/JavaVM.framework/Versions/CurrentJDK/Home /usr/java/j* /usr/java/default 2>/dev/null)
+    potential=$(ls -r1d /opt/jdk /System/Library/Frameworks/JavaVM.framework/Versions/CurrentJDK/Home /usr/java/default /usr/java/j* 2>/dev/null)
     for p in $potential; do
         if [ -x $p/bin/java ]; then
             JAVA_HOME=$p
@@ -63,18 +63,16 @@ case "$1" in
         
         ulimit -n 8192 || echo -n " (no ulimit)"
         daemon $daemon_args --user $AS_USER --stderr=/var/log/scarling/error -- ${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar ${SCARLING_HOME}/scarling.jar
-        sleep 1
-        if running; then
-            echo "done."
-        else
-            sleep 2
-            if running; then
-                echo "done."
-            else
-                # give up.
+        tries=0
+        while ! running; do
+            tries=$((tries + 1))
+            if [ $tries -ge 5 ]; then
                 echo "FAIL"
+                exit 1
             fi
-        fi
+            sleep 1
+        done
+        echo "done."
     ;;
 
     stop)
@@ -85,16 +83,16 @@ case "$1" in
         fi
         
         (echo "shutdown"; sleep 2) | telnet localhost 22122 >/dev/null 2>&1
-        if running; then
-            sleep 2
-            if running; then
+        tries=0
+        while running; do
+            tries=$((tries + 1))
+            if [ $tries -ge 5 ]; then
                 echo "FAIL"
-            else
-                echo "done."
+                exit 1
             fi
-        else
-            echo "done."
-        fi
+            sleep 1
+        done
+        echo "done."
     ;;
     
     status)
