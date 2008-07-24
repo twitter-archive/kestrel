@@ -90,7 +90,13 @@ class ScarlingHandler(val session: IoSession, val config: Config) extends Actor 
     private def handle(request: memcache.Request) = {
         request.line(0) match {
             case "GET" => get(request.line(1))
-            case "SET" => set(request.line(1), request.line(2).toInt, request.line(3).toInt, request.data.get)
+            case "SET" =>
+                try {
+                    set(request.line(1), request.line(2).toInt, request.line(3).toInt, request.data.get)
+                } catch {
+                    case e: NumberFormatException =>
+                        throw new memcache.ProtocolException("bad request: " + request)
+                }
             case "STATS" => stats
             case "SHUTDOWN" => shutdown
         }
