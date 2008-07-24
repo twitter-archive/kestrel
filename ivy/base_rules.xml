@@ -2,6 +2,9 @@
     <property name="ivy.dep.file" value="${basedir}/ivy/ivy.xml" />
     <property name="ivy.settings.file" value="${basedir}/ivy/ivysettings.xml" />
     
+
+    <!-- PREPARE -->
+    
     <target name="init">
         <mkdir dir="${target.dir}" />
         <mkdir dir="${test.target.dir}" />
@@ -21,6 +24,9 @@
         <ivy:info file="${ivy.dep.file}" />
         <taskdef resource="scala/tools/ant/antlib.xml" classpathref="bootstrap.path" />
     </target>
+    
+    
+    <!-- COMPILE -->
 
     <macrodef name="compile-scala-source">
         <element name="extra-classpath" optional="true" description="items for the classpath that aren't in ivy.xml" />
@@ -53,8 +59,17 @@
             <entry key="build_name" value="${build.timestamp}" />
         </propertyfile>
     </target>
+    
+    <target name="copy-extra-libs" if="libs.extra">
+        <copy todir="${dist.dir}/libs">
+            <path refid="libs.extra" />
+        </copy>
+    </target>
 
-    <target name="compile" depends="prepare,compile-scala-source,write-build-info" description="compile scala code" />
+    <target name="compile" depends="prepare,compile-scala-source,write-build-info,copy-extra-libs" description="compile scala code" />
+
+
+    <!-- COMPILE-TESTS -->
 
     <macrodef name="compile-scala-tests">
         <element name="extra-classpath" optional="true" description="items for the classpath that aren't in ivy.xml" />
@@ -72,10 +87,13 @@
         </sequential>
     </macrodef>
     
-    <target name="compile-tests" depends="prepare,compile">
+    <target name="compile-tests" depends="prepare,compile" if="ivy.extra.testclass">
         <compile-scala-tests />
     </target>
-    
+
+
+    <!-- TEST -->
+        
     <macrodef name="run-tests">
         <attribute name="classname" description="name of the test class to run" />
         <element name="extra-classpath" optional="true" description="items for the classpath that aren't in ivy.xml" />
@@ -95,24 +113,35 @@
         </sequential>
     </macrodef>
     
-    <target name="test" unless="skip.tests" depends="compile-tests" description="run tests">
+    <target name="run-tests" if="ivy.extra.testclass">
         <run-tests classname="${ivy.extra.testclass}" />
+    </target>        
+    
+    <target name="test" unless="skip.tests" depends="compile-tests,run-tests" description="run tests" />
+
+
+    <!-- INSTALL -->
+    
+    <target name="copy-deps-into-dist">
+        <copy todir="${dist.dir}/libs" flatten="true">
+            <path refid="deps.path" />
+        </copy>
+        <pathconvert refid="deps.path" pathsep=" " property="deps.path.jar-format">
+            <chainedmapper>
+                <flattenmapper />
+                <globmapper from="*" to="libs/*" />
+            </chainedmapper>
+        </pathconvert>
     </target>
-    
-    <macrodef name="copy-deps-into-dist">
-        <sequential>
-            <copy todir="${dist.dir}/libs" flatten="true">
-                <path refid="deps.path" />
-            </copy>
-            <pathconvert refid="deps.path" pathsep=" " property="deps.path.jar-format">
-                <chainedmapper>
-                    <flattenmapper />
-                    <globmapper from="*" to="libs/*" />
-                </chainedmapper>
-            </pathconvert>
-        </sequential>
-    </macrodef>
-    
+
+    <target name="copy-extra-dist" if="dist.extra">
+        <copy todir="${dist.dir}">
+            <path refid="dist.extra" />
+        </copy>
+    </target>
+        
+    <target name="copy-into-dist" depends="copy-deps-into-dist,copy-extra-dist" />
+
     <target name="make-non-executable-jar" unless="ivy.extra.jarclassname">
         <jar destfile="${dist.dir}/${ivy.module}-${ivy.revision}.jar">
             <fileset dir="${target.dir}" />
@@ -120,8 +149,7 @@
     </target>
     
     <!-- generate a jar that contains all deps inside it, so it can be run with "java -jar" -->
-    <target name="make-executable-jar" if="ivy.extra.jarclassname">
-        <copy-deps-into-dist />
+    <target name="make-executable-jar" if="ivy.extra.jarclassname" depends="copy-into-dist">
         <jar destfile="${dist.dir}/${ivy.module}-${ivy.revision}.jar">
             <fileset dir="${target.dir}" />
             <manifest>

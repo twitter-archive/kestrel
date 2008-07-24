@@ -12,8 +12,10 @@
     <property environment="env" />
     
     <property name="ivy.install.version" value="2.0.0-beta2" />
-    <property name="ivy.jar.dir" value="${basedir}/target/ivy" />
-    <property name="ivy.jar.file" value="${ivy.jar.dir}/ivy.jar" />
+    <property name="ivy.jar.dir" value="${user.home}/.ivy2" />
+    <property name="ivy.jar.file" value="${ivy.jar.dir}/ivy-${ivy.install.version}.jar" />
+
+    <!-- override some ivy config -->
     <property name="ivy.distrib.dir" value="${dist.dir}" />
     <property name="ivy.deliver.ivy.pattern" value="${dist.dir}/[artifact]-[revision].[ext]" />
     
@@ -41,5 +43,14 @@
         <taskdef resource="org/apache/ivy/ant/antlib.xml" uri="antlib:org.apache.ivy.ant" classpathref="ivy.lib.path" />
     </target>    
 
+    <!-- define filename-friendly names for the OS variants -->
+    <condition property="os.libsname" value="osx">
+        <os name="Mac OS X" />
+    </condition>
+    <condition property="os.libsname" value="linux">
+        <os name="Linux" />
+    </condition>
+
     <import file="base_rules.xml" />
+
 </project>
