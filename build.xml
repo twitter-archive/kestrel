@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project name="scarling" default="install">
-    <description> Scarling simple transactional queue server. </description>
-    <import file="ant/bootstrap.xml" />
+  <description> Scarling simple transactional queue server. </description>
+  <import file="ant/bootstrap.xml" />
 
 
     <!--
