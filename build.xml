@@ -1,14 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project name="scarling" default="install">
     <description> Scarling simple transactional queue server. </description>
-    
+    <import file="ant/bootstrap.xml" />
 
-    <import file="ivy/bootstrap.xml" />
-    
-    
+
     <!--
     <property name="install.dir" value="/usr/local/scarling" />
-    
+
     <target name="install" depends="jar">
         <mkdir dir="${install.dir}" />
         <copy file="scarling.jar" todir="${install.dir}" />
@@ -16,6 +14,6 @@
             <fileset dir="libs" />
         </copy>
     </target>
--->    
+-->
 
 </project>
