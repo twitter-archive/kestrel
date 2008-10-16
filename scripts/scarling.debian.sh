@@ -4,12 +4,13 @@
 #
 
 QUEUE_PATH="/var/spool/starling"
-SCALA_HOME="/usr/local/scala"
 SCARLING_HOME="/usr/local/scarling"
 AS_USER="daemon"
+VERSION="0.5"
 
-daemon_args="--name scarling --pidfile /var/run/scarling/scarling.pid"
-JAVA_OPTS="-server -XX:+UseConcMarkSweepGC -XX:+UseParNewGC"
+daemon_args="--name scarling --pidfile /var/run/scarling.pid"
+HEAP_OPTS="-Xmx2048m"
+JAVA_OPTS="-server -Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.port=9999 -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -verbosegc -XX:+PrintGCDetails -XX:+UseConcMarkSweepGC -XX:+UseParNewGC $HEAP_OPTS"
 
 
 function running() {
@@ -46,7 +47,7 @@ case "$1" in
     start)
         echo -n "Starting scarling... "
 
-        if [ ! -r $SCARLING_HOME/scarling.jar ]; then
+        if [ ! -r $SCARLING_HOME/scarling-$VERSION.jar ]; then
             echo "FAIL"
             echo "*** scarling jar missing - not starting"
             exit 1
@@ -62,7 +63,7 @@ case "$1" in
         fi
         
         ulimit -n 8192 || echo -n " (no ulimit)"
-        daemon $daemon_args --user $AS_USER --stderr=/var/log/scarling/error -- ${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar ${SCARLING_HOME}/scarling.jar
+        daemon $daemon_args --user $AS_USER --stdout=/var/log/scarling/stdout --stderr=/var/log/scarling/error -- ${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar ${SCARLING_HOME}/scarling.jar
         tries=0
         while ! running; do
             tries=$((tries + 1))
