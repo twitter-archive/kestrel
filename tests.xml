@@ -1,88 +1,61 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project name="scarling-tests" default="default" basedir=".">
-    <description> Scarling simple transactional queue server. </description>
-    
-    <property name="build.dir" value="build" />
-    <property name="test.dir" value="build-test" />
-    <property name="docs.dir" value="docs" />
-    
-    <property environment="env" />
-    <property name="scala.home" value="${env.SCALA_HOME}" />
-    <property name="scala-compiler.jar" value="${scala.home}/lib/scala-compiler.jar" />
-    <property name="scala-library.jar" value="${scala.home}/lib/scala-library.jar" />
-    <path id="scala.classpath">
-        <pathelement location="${scala-compiler.jar}" />
-        <pathelement location="${scala-library.jar}" />
-    </path>
-    <taskdef resource="scala/tools/ant/antlib.xml">
-        <classpath refid="scala.classpath" />
-    </taskdef>
-    
-    <path id="deps">
-        <pathelement location="libs/configgy-0.9.jar" />
-        <pathelement location="libs/mina-core-1.1.7.jar" />
-        <pathelement location="libs/slf4j-api-1.5.0.jar" />
-        <pathelement location="libs/slf4j-jdk14-1.5.0.jar" />
-    </path>
-    
-    <target name="put-many-1">
-        <java classname="com.twitter.scarling.load.PutMany" fork="true" failonerror="true">
-            <classpath>
-                <path refid="scala.classpath" />
-                <path refid="deps" />
-                <pathelement location="${build.dir}" />
-                <pathelement location="${test.dir}" />
-            </classpath>
-            <arg value="1" />
-        </java>
-    </target>
+  <description> Scarling load tests </description>
+  <import file="ant/bootstrap.xml" />
 
-    <target name="put-many-10">
-        <java classname="com.twitter.scarling.load.PutMany" fork="true" failonerror="true">
-            <classpath>
-                <path refid="scala.classpath" />
-                <path refid="deps" />
-                <pathelement location="${build.dir}" />
-                <pathelement location="${test.dir}" />
-            </classpath>
-            <arg value="10" />
-        </java>
-    </target>
+  <target name="put-many-1" depends="prepare">
+    <java classname="com.twitter.scarling.load.PutMany" fork="true" failonerror="true">
+      <classpath>
+        <path refid="test.path" />
+        <pathelement location="${target.dir}" />
+        <pathelement location="${test.target.dir}" />
+      </classpath>
+      <arg value="1" />
+    </java>
+  </target>
 
-    <target name="put-many-100">
-        <java classname="com.twitter.scarling.load.PutMany" fork="true" failonerror="true">
-            <classpath>
-                <path refid="scala.classpath" />
-                <path refid="deps" />
-                <pathelement location="${build.dir}" />
-                <pathelement location="${test.dir}" />
-            </classpath>
-            <arg value="100" />
-        </java>
-    </target>
-    
-    <target name="put-many-1000">
-        <java classname="com.twitter.scarling.load.PutMany" fork="true" failonerror="true">
-            <classpath>
-                <path refid="scala.classpath" />
-                <path refid="deps" />
-                <pathelement location="${build.dir}" />
-                <pathelement location="${test.dir}" />
-            </classpath>
-            <arg value="1000" />
-        </java>
-    </target>
+  <target name="put-many-10" depends="prepare">
+    <java classname="com.twitter.scarling.load.PutMany" fork="true" failonerror="true">
+      <classpath>
+        <path refid="test.path" />
+        <pathelement location="${target.dir}" />
+        <pathelement location="${test.target.dir}" />
+      </classpath>
+      <arg value="10" />
+    </java>
+  </target>
 
-    <target name="put-many-2000">
-        <java classname="com.twitter.scarling.load.PutMany" fork="true" failonerror="true">
-            <classpath>
-                <path refid="scala.classpath" />
-                <path refid="deps" />
-                <pathelement location="${build.dir}" />
-                <pathelement location="${test.dir}" />
-            </classpath>
-            <arg value="2000" />
-        </java>
-    </target>
-    
+  <target name="put-many-100" depends="prepare">
+    <java classname="com.twitter.scarling.load.PutMany" fork="true" failonerror="true">
+      <classpath>
+        <path refid="test.path" />
+        <pathelement location="${target.dir}" />
+        <pathelement location="${test.target.dir}" />
+      </classpath>
+      <arg value="100" />
+    </java>
+  </target>
+
+  <target name="put-many-1000" depends="prepare">
+    <java classname="com.twitter.scarling.load.PutMany" fork="true" failonerror="true">
+      <classpath>
+        <path refid="test.path" />
+        <pathelement location="${target.dir}" />
+        <pathelement location="${test.target.dir}" />
+      </classpath>
+      <arg value="1000" />
+    </java>
+  </target>
+
+  <target name="put-many-2000" depends="prepare">
+    <java classname="com.twitter.scarling.load.PutMany" fork="true" failonerror="true">
+      <classpath>
+        <path refid="test.path" />
+        <pathelement location="${target.dir}" />
+        <pathelement location="${test.target.dir}" />
+      </classpath>
+      <arg value="2000" />
+    </java>
+  </target>
+
 </project>

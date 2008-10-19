@@ -1,6 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project name="scarling" default="install">
-    <description> Scarling simple transactional queue server. </description>
-    
-    <import file="ivy/bootstrap.xml" />
+  <description> Scarling simple transactional queue server. </description>
+  <import file="ant/bootstrap.xml" />
+
+
+    <property name="install.dir" value="/usr/local/scarling" />
+
+    <target name="install" depends="package">
+        <mkdir dir="${install.dir}" />
+        <copy file="${dist.dir}/${ivy.module}-${ivy.revision}.jar" todir="${install.dir}" />
+        <copy todir="${install.dir}/libs">
+            <fileset dir="${dist.dir}/libs" />
+        </copy>
+    </target>
+
 </project>

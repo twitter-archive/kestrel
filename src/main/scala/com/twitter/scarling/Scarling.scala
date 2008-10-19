@@ -9,9 +9,8 @@ import scala.collection.mutable
 import org.apache.mina.common._
 import org.apache.mina.filter.codec.ProtocolCodecFilter
 import org.apache.mina.transport.socket.nio.{SocketAcceptor, SocketAcceptorConfig, SocketSessionConfig}
-import net.lag.ConfiggyExtensions._
-import net.lag.configgy.Config
-import net.lag.configgy.Configgy
+import net.lag.extensions._
+import net.lag.configgy.{Config, Configgy}
 import net.lag.logging.Logger
 
 

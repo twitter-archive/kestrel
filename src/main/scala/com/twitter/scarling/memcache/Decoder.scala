@@ -3,7 +3,7 @@ package com.twitter.scarling.memcache
 import scala.collection.mutable
 import org.apache.mina.common.{ByteBuffer, IoSession}
 import org.apache.mina.filter.codec._
-import net.lag.ConfiggyExtensions._
+import net.lag.extensions._
 
 
 case class Request(line: List[String], data: Option[Array[Byte]]) {

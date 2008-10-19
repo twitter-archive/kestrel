@@ -4,12 +4,12 @@
 #
 
 QUEUE_PATH="/var/spool/starling"
-SCALA_HOME="/usr/local/scala"
 SCARLING_HOME="/usr/local/scarling"
 AS_USER="daemon"
 
-daemon_args="--pidfile /var/run/scarling/scarling.pid"
-JAVA_OPTS="-server -XX:+UseConcMarkSweepGC -XX:+UseParNewGC"
+daemon_args="--pidfile /var/run/scarling.pid"
+HEAP_OPTS="-Xmx2048m"
+JAVA_OPTS="-server -Dcom.sun.management.jmxremote -verbosegc -XX:+PrintGCDetails -XX:+UseConcMarkSweepGC -XX:+UseParNewGC $HEAP_OPTS"
 
 . /etc/init.d/functions
 
