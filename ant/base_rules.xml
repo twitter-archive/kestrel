@@ -212,18 +212,31 @@
     </jar>
   </target>
 
-  <target name="package" depends="test,make-non-executable-jar,make-executable-jar,docs" description="build complete jar(s) and docs">
+  <target name="generate-scripts" depends="prepare">
+    <mkdir dir="${dist.dir}/scripts" />
+    <copy todir="${dist.dir}/scripts" overwrite="true">
+      <fileset dir="${basedir}/scripts" />
+    </copy>
+    <chmod dir="${dist.dir}/scripts" includes="*" perm="ugo+x" />
+  </target>
+
+  <target name="package" depends="test,make-non-executable-jar,make-executable-jar,generate-scripts,docs" description="build complete jar(s) and docs">
     <ivy:makepom ivyfile="${basedir}/ivy/ivy.xml" pomfile="${dist.dir}/${ivy.module}-${ivy.revision}.pom" />
     <ivy:deliver conf="*(public)" />
+    <mkdir dir="${dist.dir}/etc" />
+    <copy todir="${dist.dir}/etc" file="scarling.conf" />
+    <zip destfile="${basedir}/dist/${ivy.module}-${ivy.revision}-dist.zip"
+      basedir="${basedir}/dist"
+      includes="${ivy.module}-${ivy.revision}/${ivy.module}-${ivy.revision}.jar ${ivy.module}-${ivy.revision}/libs/** ${ivy.module}-${ivy.revision}/scripts/** ${ivy.module}-${ivy.revision}/etc/**" />
   </target>
 
 
   <!-- RELEASE -->
 
   <target name="release" depends="package">
-    <ivy:publish resolver="push-local" overwrite="true">
-      <artifacts pattern="${dist.dir}/[artifact]-[revision].[ext]" />
-    </ivy:publish>
+    <!--ivy:publish resolver="push-local" overwrite="true"
+      <artifacts pattern="${dist.dir}/[artifact]-[revision].[ext]"
+    </ivy:publish-->
     <copy file="INSTALL" todir="${dist.dir}" failonerror="false" />
     <copy file="LICENSE" todir="${dist.dir}" failonerror="false" />
     <copy file="README" todir="${dist.dir}" failonerror="false" />
