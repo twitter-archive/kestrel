@@ -15,7 +15,7 @@ import net.lag.logging.Logger
 
 
 class Counter {
-    private var value = 0
+    private var value: Long = 0
 
     def get = synchronized { value }
     def set(n: Int) = synchronized { value = n }
