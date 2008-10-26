@@ -3,18 +3,20 @@
 # scarling init.d script.
 #
 
-QUEUE_PATH="/var/spool/starling"
+QUEUE_PATH="/var/spool/scarling"
 SCARLING_HOME="/usr/local/scarling"
 AS_USER="daemon"
 VERSION="0.5"
+DAEMON="/usr/local/bin/daemon"
 
 daemon_args="--name scarling --pidfile /var/run/scarling.pid"
-HEAP_OPTS="-Xmx2048m"
-JAVA_OPTS="-server -Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.port=9999 -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -verbosegc -XX:+PrintGCDetails -XX:+UseConcMarkSweepGC -XX:+UseParNewGC $HEAP_OPTS"
+HEAP_OPTS="-Xmx2048m -Xms1024m -XX:NewSize=256m"
+# -Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.port=9999 -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false 
+JAVA_OPTS="-server -verbosegc -XX:+PrintGCDetails -XX:+UseConcMarkSweepGC -XX:+UseParNewGC $HEAP_OPTS"
 
 
 function running() {
-    daemon $daemon_args --running
+    $DAEMON $daemon_args --running
 }
 
 function find_java() {
@@ -63,7 +65,7 @@ case "$1" in
         fi
         
         ulimit -n 8192 || echo -n " (no ulimit)"
-        daemon $daemon_args --user $AS_USER --stdout=/var/log/scarling/stdout --stderr=/var/log/scarling/error -- ${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar ${SCARLING_HOME}/scarling.jar
+        $DAEMON $daemon_args --user $AS_USER --stdout=/var/log/scarling/stdout --stderr=/var/log/scarling/error -- ${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar ${SCARLING_HOME}/scarling-${VERSION}.jar
         tries=0
         while ! running; do
             tries=$((tries + 1))
@@ -83,7 +85,7 @@ case "$1" in
             exit 0
         fi
         
-        (echo "shutdown"; sleep 2) | telnet localhost 22122 >/dev/null 2>&1
+        (echo "shutdown"; sleep 2) | telnet localhost 22133 >/dev/null 2>&1
         tries=0
         while running; do
             tries=$((tries + 1))
