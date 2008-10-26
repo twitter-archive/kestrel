@@ -99,5 +99,29 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q3.size mustEqual 0
       }
     }
+
+    "honor maxItems" in {
+      withTempFolder {
+        val q = new PersistentQueue(folderName, "weather_updates")
+        q.setup
+        q.maxItems = 1
+        q.add("sunny".getBytes) mustEqual true
+        q.add("rainy".getBytes) mustEqual false
+        q.size mustEqual 1
+      }
+    }
+    
+    "honor maxAge" in {
+      withTempFolder {
+        val q = new PersistentQueue(folderName, "weather_updates")
+        q.setup
+        q.maxAge = 1
+        q.add("sunny".getBytes) mustEqual true
+        q.size mustEqual 1
+        Thread.sleep(1000)
+        q.remove mustEqual None
+      }
+      
+    }
   }
 }

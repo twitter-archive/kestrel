@@ -71,6 +71,12 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
   private val initialized = new Event
   private var closed = false
 
+  // attempting to add an item after the queue reaches this size will fail.
+  var maxItems: Int = 0
+  
+  // maximum expiration time for this queue (seconds).
+  var maxAge: Int = 0
+
 
   def size: Long = synchronized { queue.length }
 
@@ -108,11 +114,16 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
   def add(value: Array[Byte], expiry: Int): Boolean = {
     initialized.waitFor
     synchronized {
-      if (closed) {
+      if (closed || (maxItems > 0 && queue.length >= maxItems)) {
         return false
       }
 
-      val blob = pack(expiry, value)
+      val realExpiry = if (maxAge > 0) {
+        if (expiry > 0) (expiry min maxAge) else maxAge
+      } else {
+        expiry
+      }
+      val blob = pack(realExpiry, value)
 
       byteBuffer.reset()
       buffer.write(CMD_ADD)
