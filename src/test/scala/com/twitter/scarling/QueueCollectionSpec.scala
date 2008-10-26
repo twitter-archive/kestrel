@@ -24,7 +24,7 @@ object QueueCollectionSpec extends Specification with TestHelper {
 
     "create a queue" in {
       withTempFolder {
-        qc = new QueueCollection(folderName)
+        qc = new QueueCollection(folderName, None)
         qc.queueNames mustEqual Nil
 
         qc.add("work1", "stuff".getBytes)
@@ -48,7 +48,7 @@ object QueueCollectionSpec extends Specification with TestHelper {
 
     "load from journal" in {
       withTempFolder {
-        qc = new QueueCollection(folderName)
+        qc = new QueueCollection(folderName, None)
         qc.add("ducklings", "huey".getBytes)
         qc.add("ducklings", "dewey".getBytes)
         qc.add("ducklings", "louie".getBytes)
@@ -57,7 +57,7 @@ object QueueCollectionSpec extends Specification with TestHelper {
         qc.currentItems mustEqual 3
         qc.shutdown
 
-        qc = new QueueCollection(folderName)
+        qc = new QueueCollection(folderName, None)
         qc.queueNames mustEqual Nil
         new String(qc.remove("ducklings").get) mustEqual "huey"
         // now the queue should be suddenly instantiated:
@@ -68,7 +68,7 @@ object QueueCollectionSpec extends Specification with TestHelper {
 
     "queue hit/miss tracking" in {
       withTempFolder {
-        qc = new QueueCollection(folderName)
+        qc = new QueueCollection(folderName, None)
         qc.add("ducklings", "ugly1".getBytes)
         qc.add("ducklings", "ugly2".getBytes)
         qc.queueHits mustEqual 0

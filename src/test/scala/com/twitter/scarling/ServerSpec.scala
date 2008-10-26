@@ -21,6 +21,10 @@ object ServerSpec extends Specification with TestHelper {
     config("log.level") = "debug"
     config("log.filename") = "/tmp/foo"
 
+    // make a queue specify max_items and max_age
+    config("queues.weather_updates.max_items") = 1500000
+    config("queues.weather_updates.max_age") = 1800
+
     Scarling.startup(config)
   }
 
@@ -28,6 +32,16 @@ object ServerSpec extends Specification with TestHelper {
   "Server" should {
     doAfter {
       Scarling.shutdown
+    }
+
+    "configure per-queue" in {
+      withTempFolder {
+        makeServer
+        Scarling.queues.queue("starship").get.maxItems mustEqual 0
+        Scarling.queues.queue("starship").get.maxAge mustEqual 0
+        Scarling.queues.queue("weather_updates").get.maxItems mustEqual 1500000
+        Scarling.queues.queue("weather_updates").get.maxAge mustEqual 1800
+      }
     }
 
     "set and get one entry" in {

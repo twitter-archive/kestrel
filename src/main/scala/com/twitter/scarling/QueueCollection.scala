@@ -2,14 +2,14 @@ package com.twitter.scarling
 
 import java.io.File
 import scala.collection.mutable
-
+import net.lag.configgy.AttributeMap
 import net.lag.logging.Logger
 
 
 class InaccessibleQueuePath extends Exception("Inaccessible queue path")
 
 
-class QueueCollection(private val queueFolder: String) {
+class QueueCollection(private val queueFolder: String, private val queueConfigs: Option[AttributeMap]) {
   private val log = Logger.get
 
   private val path = new File(queueFolder)
@@ -47,8 +47,9 @@ class QueueCollection(private val queueFolder: String) {
 
   /**
    * Get a named queue, creating it if necessary.
+   * Exposed only to unit tests.
    */
-  private def queue(name: String): Option[PersistentQueue] = {
+  private[scarling] def queue(name: String): Option[PersistentQueue] = {
     var setup = false
     var queue: Option[PersistentQueue] = None
 
@@ -63,6 +64,14 @@ class QueueCollection(private val queueFolder: String) {
           setup = true
           val q = new PersistentQueue(path.getPath, name)
           queues(name) = q
+          for (c <- queueConfigs; conf <- c.getAttributes(name)) {
+            for (i <- conf.getInt("max_items")) {
+              q.maxItems = i
+            }
+            for (i <- conf.getInt("max_age")) {
+              q.maxAge = i
+            }
+          }
           Some(q)
       }
     }

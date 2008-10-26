@@ -70,7 +70,7 @@ object Scarling {
   def startup(config: Config) = {
     val listenAddress = config.get("host", "0.0.0.0")
     val listenPort = config.getInt("port", 22122)
-    queues = new QueueCollection(config.get("queue_path", "/tmp"))
+    queues = new QueueCollection(config.get("queue_path", "/tmp"), config.getAttributes("queues"))
     PersistentQueue.maxJournalSize = config.getInt("max_journal_size", 16 * 1024 * 1024)
 
     acceptorExecutor = Executors.newCachedThreadPool()
