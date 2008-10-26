@@ -45,20 +45,20 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
   private val queuePath: String = new File(persistencePath, name).getCanonicalPath()
 
   // current size of all data in the queue:
-  private var queueSize: Int = 0
+  private var queueSize: Long = 0
 
   // # of items EVER added to the queue:
-  private var _totalItems: Int = 0
+  private var _totalItems: Long = 0
 
   // # of items that were expired by the time they were read:
-  private var _totalExpired: Int = 0
+  private var _totalExpired: Long = 0
 
   // age (in milliseconds) of the last item read from the queue:
   private var _currentAge: Long = 0
 
   private var queue = new Queue[(Long, Array[Byte])]
   private var journal: FileOutputStream = null
-  private var _journalSize: Int = 0
+  private var _journalSize: Long = 0
 
   // small temporary buffer for formatting ADD transactions into the journal:
   private var byteBuffer = new ByteArrayOutputStream(16)
@@ -72,17 +72,17 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
   private var closed = false
 
 
-  def size = synchronized { queue.length }
+  def size: Long = synchronized { queue.length }
 
-  def totalItems = synchronized { _totalItems }
+  def totalItems: Long = synchronized { _totalItems }
 
-  def bytes = synchronized { queueSize }
+  def bytes: Long = synchronized { queueSize }
 
-  def journalSize = synchronized { _journalSize }
+  def journalSize: Long = synchronized { _journalSize }
 
-  def totalExpired = synchronized { _totalExpired }
+  def totalExpired: Long = synchronized { _totalExpired }
 
-  def currentAge = synchronized { _currentAge }
+  def currentAge: Long = synchronized { _currentAge }
 
   private def pack(expiry: Int, data: Array[Byte]): Array[Byte] = {
     val bytes = new Array[Byte](data.length + 4)
@@ -208,7 +208,7 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
     try {
       val fileIn = new FileInputStream(queuePath)
       val in = new DataInputStream(fileIn)
-      var offset = 0
+      var offset: Long = 0
       val intReader = new IntReader(ByteOrder.LITTLE_ENDIAN)
 
       log.info("Replaying transaction journal for '%s'", name)
@@ -254,5 +254,5 @@ object PersistentQueue {
   /* when a journal reaches maxJournalSize, the queue will wait until
    * it is empty, and will then rotate the journal.
    */
-  var maxJournalSize = 16 * 1024 * 1024
+  var maxJournalSize: Long = 16 * 1024 * 1024
 }

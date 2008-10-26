@@ -21,24 +21,24 @@ class QueueCollection(private val queueFolder: String) {
   private var shuttingDown = false
 
   // total of all data in all queues
-  private var _currentBytes = 0
+  private var _currentBytes: Long = 0
 
   // total of all items in all queues
-  private var _currentItems = 0
+  private var _currentItems: Long = 0
 
   // total items added since the server started up.
-  private var _totalAdded = 0
+  private var _totalAdded: Long = 0
 
   // hits/misses on removing items from the queue
-  private var _queueHits = 0
-  private var _queueMisses = 0
+  private var _queueHits: Long = 0
+  private var _queueMisses: Long = 0
 
   // reader accessors:
-  def currentBytes = _currentBytes
-  def currentItems = _currentItems
-  def totalAdded = _totalAdded
-  def queueHits = _queueHits
-  def queueMisses = _queueMisses
+  def currentBytes: Long = _currentBytes
+  def currentItems: Long = _currentItems
+  def totalAdded: Long = _totalAdded
+  def queueHits: Long = _queueHits
+  def queueMisses: Long = _queueMisses
 
 
   def queueNames: List[String] = synchronized {
@@ -130,7 +130,7 @@ class QueueCollection(private val queueFolder: String) {
     }
   }
 
-  def stats(key: String): (Int, Int, Int, Int, Int, Long) = {
+  def stats(key: String): (Long, Long, Long, Long, Long, Long) = {
     queue(key) match {
       case None => (0, 0, 0, 0, 0, 0)
       case Some(q) => (q.size, q.bytes, q.totalItems, q.journalSize, q.totalExpired, q.currentAge)
