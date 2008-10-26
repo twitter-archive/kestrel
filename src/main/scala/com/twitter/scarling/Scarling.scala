@@ -49,10 +49,15 @@ object Scarling {
 
   // load build info
   private var buildProperties = new Properties
-  buildProperties.load(getClass.getResource("build.properties").openStream)
+  try {
+    buildProperties.load(getClass.getResource("build.properties").openStream)
+  } catch {
+    case _ =>
+  }
   val SERVER_NAME = buildProperties.getProperty("name")
   val VERSION = buildProperties.getProperty("version")
   val BUILD_NAME = buildProperties.getProperty("build_name")
+  println("classpath: " + getJarPath)
 
 
   ByteBuffer.setUseDirectBuffers(false)
@@ -86,6 +91,18 @@ object Scarling {
     acceptor.bind(new InetSocketAddress(listenAddress, listenPort), new IoHandlerActorAdapter((session: IoSession) => new ScarlingHandler(session, config)), saConfig)
 
     log.info("Scarling started.")
+  }
+
+  private def getJarPath: Option[String] = {
+    val pattern = ("(.*?)" + SERVER_NAME + "-" + VERSION + "\\.jar$").r
+    println(pattern)
+    val found = System.getProperty("java.class.path") split System.getProperty("path.separator") map {
+      _ match {
+        case pattern(path) => Some(new java.io.File(path).getCanonicalPath)
+        case _ => None
+      }
+    } filter (_.isDefined)
+    found.firstOption.flatMap(x => x)
   }
 
   private def parseArgs(args: List[String]): Unit = {
