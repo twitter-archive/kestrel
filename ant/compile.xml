@@ -1,0 +1,145 @@
+<project xmlns:ivy="antlib:org.apache.ivy.ant">
+
+  <property name="thrift.source.dir" value="${source.dir}/thrift" />
+  <property name="thrift.target.dir" value="${target.dir}/gen-java" />
+
+  <target name="find-source">
+    <pathconvert property="build.java" setonempty="false">
+      <fileset dir="${source.dir}" includes="java/**/*.java" />
+    </pathconvert>
+    <pathconvert property="build.scala" setonempty="false">
+      <fileset dir="${source.dir}" includes="scala/**/*.scala" />
+    </pathconvert>
+    <pathconvert property="copy.config" setonempty="false">
+      <fileset dir="${basedir}" includes="config/*" />
+    </pathconvert>
+  </target>
+
+
+  <!-- generate thrift stubs if necessary -->
+
+  <macrodef name="generate-thrift">
+    <sequential>
+      <pathconvert property="thrift.gen.path">
+        <path location="${ivy.extra.thriftpackage}" />
+        <unpackagemapper from="${basedir}/*" to="${thrift.target.dir}/*" />
+      </pathconvert>
+      <apply executable="thrift" dest="${thrift.gen.path}" failonerror="true"
+        skipemptyfilesets="true" verbose="true">
+        <arg value="--gen" />
+        <arg value="java" />
+        <arg value="-o" />
+        <arg value="src/main" />
+        <arg value="" />
+        <fileset dir="${thrift.source.dir}" includes="**/*.thrift" />
+        <globmapper from="*.thrift" to="*.java" />
+      </apply>
+    </sequential>
+  </macrodef>
+
+  <macrodef name="compile-generated-thrift">
+    <sequential>
+      <javac srcdir="${thrift.target.dir}" destdir="${target.dir}/classes" deprecation="on">
+        <classpath>
+          <path refid="deps.path" />
+        </classpath>
+        <include name="**/*.java" />
+      </javac>
+    </sequential>
+  </macrodef>
+
+  <target name="compile-thrift" if="ivy.extra.thriftpackage">
+    <generate-thrift />
+    <compile-generated-thrift />
+  </target>
+
+
+  <!-- compile old-skool java -->
+
+  <target name="compile-java" if="build.java">
+    <javac srcdir="${source.dir}/java" destdir="${target.dir}/classes" deprecation="on">
+      <classpath>
+        <path refid="deps.path" />
+      </classpath>
+      <include name="**/*.java" />
+    </javac>
+  </target>
+
+
+  <!-- compile scala -->
+
+  <target name="compile-scala" if="build.scala">
+    <scalac srcdir="${source.dir}/scala" destdir="${target.dir}/classes" force="changed" deprecation="on">
+      <classpath>
+        <path refid="deps.path" />
+      </classpath>
+      <include name="**/*.scala" />
+    </scalac>
+  </target>
+
+
+  <!-- create properties file with build info -->
+
+  <target name="write-build-info" depends="init" if="ivy.extra.buildpackage">
+    <tstamp>
+      <format property="build.timestamp" pattern="yyyyMMdd-HHmmss" />
+    </tstamp>
+    <pathconvert property="build.properties.path">
+      <path location="${ivy.extra.buildpackage}" />
+      <unpackagemapper from="${basedir}/*" to="${target.dir}/classes/*" />
+    </pathconvert>
+    <propertyfile file="${build.properties.path}/build.properties">
+      <entry key="name" value="${ivy.module}" />
+      <entry key="version" value="${ivy.revision}" />
+      <entry key="build_name" value="${build.timestamp}" />
+    </propertyfile>
+  </target>
+
+
+  <!-- copy resources needed by tests and jar -->
+
+  <target name="copy-resources">
+    <copy todir="${dist.dir}/libs" flatten="true">
+      <path refid="deps.path" />
+    </copy>
+    <pathconvert refid="deps.path" pathsep=" " property="deps.path.jar-format">
+      <chainedmapper>
+        <flattenmapper />
+        <globmapper from="*" to="libs/*" />
+      </chainedmapper>
+    </pathconvert>
+
+    <copy todir="${target.dir}/test-classes/resources" failonerror="false">
+      <fileset dir="${test.source.dir}/resources" />
+    </copy>
+    <copy todir="${dist.dir}/resources" overwrite="true" failonerror="false">
+      <fileset dir="${source.dir}/resources" />
+    </copy>
+  </target>
+
+  <target name="copy-config" if="copy.config">
+    <copy todir="${dist.dir}/config">
+      <fileset dir="${basedir}/config" />
+    </copy>
+  </target>
+
+  <target name="copy-extra-libs" if="libs.extra">
+    <copy todir="${dist.dir}/libs">
+      <path refid="libs.extra" />
+    </copy>
+  </target>
+
+  <target name="copy-extra-dist" if="dist.extra">
+    <copy todir="${dist.dir}">
+      <path refid="dist.extra" />
+    </copy>
+  </target>
+
+  <target name="copy-extra" depends="copy-resources, copy-config, copy-extra-libs, copy-extra-dist" />
+
+
+  <target name="compile" depends="prepare, find-source, compile-thrift, compile-java,
+    compile-scala, write-build-info, copy-extra"
+    description="compile java and scala code" />
+
+</project>
