@@ -5,8 +5,7 @@ import java.nio.ByteOrder
 import scala.actors.Actor
 import scala.actors.Actor._
 import scala.collection.mutable
-import net.lag.extensions._
-import net.lag.configgy.{Config, Configgy}
+import net.lag.configgy.{Config, Configgy, RuntimeEnvironment}
 import net.lag.logging.Logger
 import org.apache.mina.common._
 import org.apache.mina.transport.socket.nio.SocketSessionConfig
@@ -119,7 +118,7 @@ class ScarlingHandler(val session: IoSession, val config: Config) extends Actor 
     var report = new mutable.ArrayBuffer[(String, String)]
     report += (("uptime", Scarling.uptime.toString))
     report += (("time", (System.currentTimeMillis / 1000).toString))
-    report += (("version", Scarling.VERSION))
+    report += (("version", RuntimeEnvironment.jarVersion))
     report += (("curr_items", Scarling.queues.currentItems.toString))
     report += (("total_items", Scarling.queues.totalAdded.toString))
     report += (("bytes", Scarling.queues.currentBytes.toString))
