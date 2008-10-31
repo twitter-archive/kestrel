@@ -9,7 +9,7 @@ import net.lag.logging.Logger
 class InaccessibleQueuePath extends Exception("Inaccessible queue path")
 
 
-class QueueCollection(private val queueFolder: String, private val queueConfigs: ConfigMap) {
+class QueueCollection(private val queueFolder: String, private var queueConfigs: ConfigMap) {
   private val log = Logger.get
 
   private val path = new File(queueFolder)
@@ -39,6 +39,8 @@ class QueueCollection(private val queueFolder: String, private val queueConfigs:
   def totalAdded: Long = _totalAdded
   def queueHits: Long = _queueHits
   def queueMisses: Long = _queueMisses
+
+  queueConfigs.subscribe { c => synchronized { queueConfigs = c.getOrElse(new Config) } }
 
 
   def queueNames: List[String] = synchronized {

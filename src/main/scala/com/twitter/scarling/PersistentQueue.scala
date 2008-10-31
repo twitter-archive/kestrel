@@ -3,7 +3,7 @@ package com.twitter.scarling
 import java.io._
 import java.nio.{ByteBuffer, ByteOrder}
 import scala.collection.mutable.Queue
-import net.lag.configgy.ConfigMap
+import net.lag.configgy.{Config, ConfigMap}
 import net.lag.logging.Logger
 
 
@@ -37,7 +37,7 @@ class IntWriter(private val order: ByteOrder) {
 
 
 class PersistentQueue(private val persistencePath: String, val name: String,
-                      val config: ConfigMap) {
+                      var config: ConfigMap) {
   private val log = Logger.get
 
   private val CMD_ADD = 0
@@ -71,6 +71,8 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   // force get/set operations to block while we're replaying any existing journal
   private val initialized = new Event
   private var closed = false
+
+  config.subscribe { c => synchronized { config = c.getOrElse(new Config) } }
 
   def size: Long = synchronized { queue.length }
 
