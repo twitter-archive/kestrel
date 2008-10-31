@@ -75,7 +75,7 @@ object PutMany {
     for (i <- 0 until clientCount) {
       val t = new Thread {
         override def run = {
-          val socket = SocketChannel.open(new InetSocketAddress("localhost", 22122))
+          val socket = SocketChannel.open(new InetSocketAddress("localhost", 22133))
           put(socket, "spam" + i, 10000 / clientCount)
         }
       }
