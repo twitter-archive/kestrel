@@ -3,7 +3,7 @@ package com.twitter.scarling
 import java.io._
 import java.nio.{ByteBuffer, ByteOrder}
 import scala.collection.mutable.Queue
-
+import net.lag.configgy.ConfigMap
 import net.lag.logging.Logger
 
 
@@ -36,7 +36,8 @@ class IntWriter(private val order: ByteOrder) {
 }
 
 
-class PersistentQueue(private val persistencePath: String, val name: String) {
+class PersistentQueue(private val persistencePath: String, val name: String,
+                      val config: ConfigMap) {
   private val log = Logger.get
 
   private val CMD_ADD = 0
@@ -71,13 +72,6 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
   private val initialized = new Event
   private var closed = false
 
-  // attempting to add an item after the queue reaches this size will fail.
-  var maxItems: Int = 0
-
-  // maximum expiration time for this queue (seconds).
-  var maxAge: Int = 0
-
-
   def size: Long = synchronized { queue.length }
 
   def totalItems: Long = synchronized { _totalItems }
@@ -108,22 +102,29 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
     return (expiry, bytes)
   }
 
+  private final def adjustExpiry(expiry: Int) = {
+    // maximum expiration time for this queue (seconds).
+    val maxAge = config("max_age", 0)
+    if (maxAge > 0) {
+      if (expiry > 0) (expiry min maxAge) else maxAge
+    } else {
+      expiry
+    }
+  }
+
   /**
    * Add a value to the end of the queue, transactionally.
    */
   def add(value: Array[Byte], expiry: Int): Boolean = {
     initialized.waitFor
     synchronized {
-      if (closed || (maxItems > 0 && queue.length >= maxItems)) {
+      // attempting to add an item after the queue reaches this size will fail.
+      val maxItems = config("max_items", Math.MAX_INT)
+      if (closed || queue.length >= maxItems) {
         return false
       }
 
-      val realExpiry = if (maxAge > 0) {
-        if (expiry > 0) (expiry min maxAge) else maxAge
-      } else {
-        expiry
-      }
-      val blob = pack(realExpiry, value)
+      val blob = pack(adjustExpiry(expiry), value)
 
       byteBuffer.reset()
       buffer.write(CMD_ADD)
@@ -170,7 +171,8 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
       checkRoll
       val (expiry, data) = unpack(item)
 
-      if ((expiry == 0) || (expiry >= nowSecs)) {
+      val realExpiry = adjustExpiry(expiry)
+      if ((realExpiry == 0) || (realExpiry >= nowSecs)) {
         _currentAge = now - addTime
         Some(data)
       } else {

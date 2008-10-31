@@ -2,7 +2,7 @@ package com.twitter.scarling
 
 import java.io.File
 import scala.collection.mutable
-import net.lag.configgy.ConfigMap
+import net.lag.configgy.{Config, ConfigMap}
 import net.lag.logging.Logger
 
 
@@ -62,16 +62,9 @@ class QueueCollection(private val queueFolder: String, private val queueConfigs:
         case q @ Some(_) => q
         case None =>
           setup = true
-          val q = new PersistentQueue(path.getPath, name)
+          val q = new PersistentQueue(path.getPath, name,
+                                      queueConfigs.getConfigMap(name).getOrElse(new Config))
           queues(name) = q
-          for (conf <- queueConfigs.getConfigMap(name)) {
-            for (i <- conf.getInt("max_items")) {
-              q.maxItems = i
-            }
-            for (i <- conf.getInt("max_age")) {
-              q.maxAge = i
-            }
-          }
           Some(q)
       }
     }

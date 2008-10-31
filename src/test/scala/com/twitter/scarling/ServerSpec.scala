@@ -37,10 +37,10 @@ object ServerSpec extends Specification with TestHelper {
     "configure per-queue" in {
       withTempFolder {
         makeServer
-        Scarling.queues.queue("starship").get.maxItems mustEqual 0
-        Scarling.queues.queue("starship").get.maxAge mustEqual 0
-        Scarling.queues.queue("weather_updates").get.maxItems mustEqual 1500000
-        Scarling.queues.queue("weather_updates").get.maxAge mustEqual 1800
+        Scarling.queues.queue("starship").map(_.config("max_age", 0)) mustEqual Some(0)
+        Scarling.queues.queue("starship").map(_.config("max_age", 0)) mustEqual Some(0)
+        Scarling.queues.queue("weather_updates").map(_.config("max_items", 0)) mustEqual Some(1500000)
+        Scarling.queues.queue("weather_updates").map(_.config("max_age", 0)) mustEqual Some(1800)
       }
     }
 

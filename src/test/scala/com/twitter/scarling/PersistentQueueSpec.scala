@@ -2,7 +2,7 @@
 package com.twitter.scarling
 
 import java.io.{File, FileInputStream}
-
+import net.lag.configgy.Config
 import org.specs._
 
 
@@ -11,7 +11,7 @@ object PersistentQueueSpec extends Specification with TestHelper {
   "PersistentQueue" should {
     "add and remove one item" in {
       withTempFolder {
-        val q = new PersistentQueue(folderName, "work")
+        val q = new PersistentQueue(folderName, "work", Config.fromMap(Map.empty))
         q.setup
 
         q.size mustEqual 0
@@ -44,7 +44,7 @@ object PersistentQueueSpec extends Specification with TestHelper {
 
     "rotate journals" in {
       withTempFolder {
-        val q = new PersistentQueue(folderName, "rolling")
+        val q = new PersistentQueue(folderName, "rolling", Config.fromMap(Map.empty))
         q.setup
         PersistentQueue.maxJournalSize = 64
 
@@ -77,7 +77,7 @@ object PersistentQueueSpec extends Specification with TestHelper {
 
     "recover the journal after a restart" in {
       withTempFolder {
-        val q = new PersistentQueue(folderName, "rolling")
+        val q = new PersistentQueue(folderName, "rolling", Config.fromMap(Map.empty))
         q.setup
         q.add("first".getBytes)
         q.add("second".getBytes)
@@ -85,7 +85,7 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q.journalSize mustEqual 30
         q.close
 
-        val q2 = new PersistentQueue(folderName, "rolling")
+        val q2 = new PersistentQueue(folderName, "rolling", Config.fromMap(Map.empty))
         q2.setup
         q2.journalSize mustEqual 30
         new String(q2.remove.get) mustEqual "second"
@@ -93,35 +93,39 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q2.size mustEqual 0
         q2.close
 
-        val q3 = new PersistentQueue(folderName, "rolling")
+        val q3 = new PersistentQueue(folderName, "rolling", Config.fromMap(Map.empty))
         q3.setup
         q3.journalSize mustEqual 31
         q3.size mustEqual 0
       }
     }
 
-    "honor maxItems" in {
+    "honor max_items" in {
       withTempFolder {
-        val q = new PersistentQueue(folderName, "weather_updates")
+        val q = new PersistentQueue(folderName, "weather_updates", Config.fromMap(Map("max_items" -> "1")))
         q.setup
-        q.maxItems = 1
         q.add("sunny".getBytes) mustEqual true
         q.add("rainy".getBytes) mustEqual false
         q.size mustEqual 1
       }
     }
-    
-    "honor maxAge" in {
+
+    "honor max_age" in {
       withTempFolder {
-        val q = new PersistentQueue(folderName, "weather_updates")
+        val config = Config.fromMap(Map("max_age" -> "1"))
+        val q = new PersistentQueue(folderName, "weather_updates", config)
         q.setup
-        q.maxAge = 1
         q.add("sunny".getBytes) mustEqual true
         q.size mustEqual 1
         Thread.sleep(1000)
         q.remove mustEqual None
+
+        config("max_age") = 60
+        q.add("rainy".getBytes) mustEqual true
+        config("max_age") = 1
+        Thread.sleep(1000)
+        q.remove mustEqual None
       }
-      
     }
   }
 }
