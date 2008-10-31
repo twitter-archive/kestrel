@@ -73,7 +73,7 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
 
   // attempting to add an item after the queue reaches this size will fail.
   var maxItems: Int = 0
-  
+
   // maximum expiration time for this queue (seconds).
   var maxAge: Int = 0
 

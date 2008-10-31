@@ -38,6 +38,7 @@ object ScarlingStats {
 
 object Scarling {
   private val log = Logger.get
+  val runtime = new RuntimeEnvironment(getClass)
 
   var queues: QueueCollection = null
 
@@ -51,7 +52,7 @@ object Scarling {
   var acceptor: IoAcceptor = null
 
   def main(args: Array[String]) = {
-    RuntimeEnvironment.load(args)
+    runtime.load(args)
     startup(Configgy.config)
   }
 

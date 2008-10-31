@@ -118,7 +118,7 @@ class ScarlingHandler(val session: IoSession, val config: Config) extends Actor 
     var report = new mutable.ArrayBuffer[(String, String)]
     report += (("uptime", Scarling.uptime.toString))
     report += (("time", (System.currentTimeMillis / 1000).toString))
-    report += (("version", RuntimeEnvironment.jarVersion))
+    report += (("version", Scarling.runtime.jarVersion))
     report += (("curr_items", Scarling.queues.currentItems.toString))
     report += (("total_items", Scarling.queues.totalAdded.toString))
     report += (("bytes", Scarling.queues.currentBytes.toString))
@@ -141,7 +141,9 @@ class ScarlingHandler(val session: IoSession, val config: Config) extends Actor 
       report += (("queue_" + qName + "_age", currentAge.toString))
     }
 
-    val summary = (for (item <- report) yield "STAT %s %s".format(item._1, item._2)).mkString("", "\r\n", "\r\nEND\r\n")
+    val summary = {
+      for ((key, value) <- report) yield "STAT %s %s".format(key, value)
+    }.mkString("", "\r\n", "\r\nEND\r\n")
     writeResponse(summary)
   }
 
