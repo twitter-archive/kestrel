@@ -11,8 +11,10 @@ import org.specs._
 
 object ServerSpec extends Specification with TestHelper {
 
+  var config: Config = null
+
   def makeServer = {
-    val config = new Config
+    config = new Config
     config("host") = "localhost"
     config("port") = 22122
     config("queue_path") = canonicalFolderName
@@ -37,10 +39,12 @@ object ServerSpec extends Specification with TestHelper {
     "configure per-queue" in {
       withTempFolder {
         makeServer
-        Scarling.queues.queue("starship").map(_.config("max_age", 0)) mustEqual Some(0)
-        Scarling.queues.queue("starship").map(_.config("max_age", 0)) mustEqual Some(0)
-        Scarling.queues.queue("weather_updates").map(_.config("max_items", 0)) mustEqual Some(1500000)
-        Scarling.queues.queue("weather_updates").map(_.config("max_age", 0)) mustEqual Some(1800)
+        Scarling.queues.queue("starship").map(_.maxItems) mustEqual Some(Math.MAX_INT)
+        Scarling.queues.queue("starship").map(_.maxAge) mustEqual Some(0)
+        Scarling.queues.queue("weather_updates").map(_.maxItems) mustEqual Some(1500000)
+        Scarling.queues.queue("weather_updates").map(_.maxAge) mustEqual Some(1800)
+        config("queues.starship.max_items") = 9999
+        Scarling.queues.queue("starship").map(_.maxItems) mustEqual Some(9999)
       }
     }
 

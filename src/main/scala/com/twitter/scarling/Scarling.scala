@@ -9,7 +9,7 @@ import scala.collection.mutable
 import org.apache.mina.common._
 import org.apache.mina.filter.codec.ProtocolCodecFilter
 import org.apache.mina.transport.socket.nio.{SocketAcceptor, SocketAcceptorConfig, SocketSessionConfig}
-import net.lag.configgy.{Config, Configgy, RuntimeEnvironment}
+import net.lag.configgy.{Config, ConfigMap, Configgy, RuntimeEnvironment}
 import net.lag.logging.Logger
 
 
@@ -56,11 +56,18 @@ object Scarling {
     startup(Configgy.config)
   }
 
+  def configure(c: Option[ConfigMap]) = {
+    for (config <- c) {
+      PersistentQueue.maxJournalSize = config.getInt("max_journal_size", 16 * 1024 * 1024)
+    }
+  }
+
   def startup(config: Config) = {
     val listenAddress = config.getString("host", "0.0.0.0")
     val listenPort = config.getInt("port", 22122)
-    queues = new QueueCollection(config.getString("queue_path", "/tmp"), config.getConfigMap("queues").getOrElse(new Config))
-    PersistentQueue.maxJournalSize = config.getInt("max_journal_size", 16 * 1024 * 1024)
+    queues = new QueueCollection(config.getString("queue_path", "/tmp"), config.configMap("queues"))
+    configure(Some(config))
+    config.subscribe(configure _)
 
     acceptorExecutor = Executors.newCachedThreadPool()
     acceptor = new SocketAcceptor(Runtime.getRuntime().availableProcessors() + 1, acceptorExecutor)

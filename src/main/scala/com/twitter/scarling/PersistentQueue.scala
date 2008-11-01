@@ -3,7 +3,7 @@ package com.twitter.scarling
 import java.io._
 import java.nio.{ByteBuffer, ByteOrder}
 import scala.collection.mutable.Queue
-import net.lag.configgy.{Config, ConfigMap}
+import net.lag.configgy.{Config, Configgy, ConfigMap}
 import net.lag.logging.Logger
 
 
@@ -37,7 +37,7 @@ class IntWriter(private val order: ByteOrder) {
 
 
 class PersistentQueue(private val persistencePath: String, val name: String,
-                      var config: ConfigMap) {
+                      val config: ConfigMap) {
   private val log = Logger.get
 
   private val CMD_ADD = 0
@@ -72,7 +72,14 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   private val initialized = new Event
   private var closed = false
 
-  config.subscribe { c => synchronized { config = c.getOrElse(new Config) } }
+  // attempting to add an item after the queue reaches this size will fail.
+  var maxItems = Math.MAX_INT
+
+  // maximum expiration time for this queue (seconds).
+  var maxAge = 0
+
+  config.subscribe(configure _)
+  configure(Some(config))
 
   def size: Long = synchronized { queue.length }
 
@@ -85,6 +92,13 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   def totalExpired: Long = synchronized { _totalExpired }
 
   def currentAge: Long = synchronized { _currentAge }
+
+  def configure(c: Option[ConfigMap]) = synchronized {
+    for (config <- c) {
+      maxItems = config("max_items", Math.MAX_INT)
+      maxAge = config("max_age", 0)
+    }
+  }
 
   private def pack(expiry: Int, data: Array[Byte]): Array[Byte] = {
     val bytes = new Array[Byte](data.length + 4)
@@ -105,8 +119,6 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   }
 
   private final def adjustExpiry(expiry: Int) = {
-    // maximum expiration time for this queue (seconds).
-    val maxAge = config("max_age", 0)
     if (maxAge > 0) {
       if (expiry > 0) (expiry min maxAge) else maxAge
     } else {
@@ -120,8 +132,6 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   def add(value: Array[Byte], expiry: Int): Boolean = {
     initialized.waitFor
     synchronized {
-      // attempting to add an item after the queue reaches this size will fail.
-      val maxItems = config("max_items", Math.MAX_INT)
       if (closed || queue.length >= maxItems) {
         return false
       }
@@ -256,7 +266,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
       case e: IOException =>
         log.error(e, "Exception replaying journal for '%s'", name)
         log.error("DATA MAY HAVE BEEN LOST!")
-        // this can happen if the server died abruptly in the middle
+        // this can happen if the server hardware died abruptly in the middle
         // of writing a journal. not awesome but we should recover.
     }
 
@@ -264,10 +274,6 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   }
 }
 
-
 object PersistentQueue {
-  /* when a journal reaches maxJournalSize, the queue will wait until
-   * it is empty, and will then rotate the journal.
-   */
-  var maxJournalSize: Long = 16 * 1024 * 1024
+  @volatile var maxJournalSize: Long = 16 * 1024 * 1024
 }

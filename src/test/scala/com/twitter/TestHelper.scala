@@ -1,5 +1,5 @@
 /** Copyright 2008 Twitter, Inc. */
-package com.twitter.scarling
+package com.twitter
 
 import java.io.File
 

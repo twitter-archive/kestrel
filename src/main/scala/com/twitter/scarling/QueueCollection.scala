@@ -40,7 +40,11 @@ class QueueCollection(private val queueFolder: String, private var queueConfigs:
   def queueHits: Long = _queueHits
   def queueMisses: Long = _queueMisses
 
-  queueConfigs.subscribe { c => synchronized { queueConfigs = c.getOrElse(new Config) } }
+  queueConfigs.subscribe { c =>
+    synchronized {
+      queueConfigs = c.getOrElse(new Config)
+    }
+  }
 
 
   def queueNames: List[String] = synchronized {
@@ -64,8 +68,7 @@ class QueueCollection(private val queueFolder: String, private var queueConfigs:
         case q @ Some(_) => q
         case None =>
           setup = true
-          val q = new PersistentQueue(path.getPath, name,
-                                      queueConfigs.getConfigMap(name).getOrElse(new Config))
+          val q = new PersistentQueue(path.getPath, name, queueConfigs.configMap(name))
           queues(name) = q
           Some(q)
       }
