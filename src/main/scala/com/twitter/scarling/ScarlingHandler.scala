@@ -94,6 +94,9 @@ class ScarlingHandler(val session: IoSession, val config: Config) extends Actor 
         }
       case "STATS" => stats
       case "SHUTDOWN" => shutdown
+      case "RELOAD" =>
+        Configgy.reload
+        session.write("Reloaded config.\r\n")
     }
   }
 
