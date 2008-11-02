@@ -128,5 +128,110 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q.remove mustEqual None
       }
     }
+
+    "drop into read-behind mode" in {
+      withTempFolder {
+        PersistentQueue.maxMemorySize = 1024
+        val q = new PersistentQueue(folderName, "things", Config.fromMap(Map.empty))
+        q.setup
+        for (i <- 0 until 10) {
+          val data = new Array[Byte](128)
+          data(0) = i.toByte
+          q.add(data)
+          q.inReadBehind mustEqual (i >= 8)
+        }
+        q.inReadBehind mustBe true
+        q.length mustEqual 10
+        q.bytes mustEqual 1280
+        q.memoryLength mustEqual 8
+        q.memoryBytes mustEqual 1024
+
+        // read 1 item. queue should pro-actively read the next item in from disk.
+        val d0 = q.remove.get
+        d0(0) mustEqual 0
+        q.inReadBehind mustBe true
+        q.length mustEqual 9
+        q.bytes mustEqual 1152
+        q.memoryLength mustEqual 8
+        q.memoryBytes mustEqual 1024
+
+        // adding a new item should be ok
+        val w10 = new Array[Byte](128)
+        w10(0) = 10.toByte
+        q.add(w10)
+        q.inReadBehind mustBe true
+        q.length mustEqual 10
+        q.bytes mustEqual 1280
+        q.memoryLength mustEqual 8
+        q.memoryBytes mustEqual 1024
+
+        // read again.
+        val d1 = q.remove.get
+        d1(0) mustEqual 1
+        q.inReadBehind mustBe true
+        q.length mustEqual 9
+        q.bytes mustEqual 1152
+        q.memoryLength mustEqual 8
+        q.memoryBytes mustEqual 1024
+
+        // and again.
+        val d2 = q.remove.get
+        d2(0) mustEqual 2
+        q.inReadBehind mustBe true
+        q.length mustEqual 8
+        q.bytes mustEqual 1024
+        q.memoryLength mustEqual 8
+        q.memoryBytes mustEqual 1024
+
+        for (i <- 3 until 11) {
+          val d = q.remove.get
+          d(0) mustEqual i
+          q.inReadBehind mustBe false
+          q.length mustEqual 10 - i
+          q.bytes mustEqual 128 * (10 - i)
+          q.memoryLength mustEqual 10 - i
+          q.memoryBytes mustEqual 128 * (10 - i)
+        }
+      }
+    }
+
+    "drop into read-behind mode on startup" in {
+      withTempFolder {
+        PersistentQueue.maxMemorySize = 1024
+        val q = new PersistentQueue(folderName, "things", Config.fromMap(Map.empty))
+        q.setup
+        for (i <- 0 until 10) {
+          val data = new Array[Byte](128)
+          data(0) = i.toByte
+          q.add(data)
+          q.inReadBehind mustEqual (i >= 8)
+        }
+        q.inReadBehind mustBe true
+        q.length mustEqual 10
+        q.bytes mustEqual 1280
+        q.memoryLength mustEqual 8
+        q.memoryBytes mustEqual 1024
+        q.close
+
+        val q2 = new PersistentQueue(folderName, "things", Config.fromMap(Map.empty))
+        q2.setup
+
+        q2.inReadBehind mustBe true
+        q2.length mustEqual 10
+        q2.bytes mustEqual 1280
+        q2.memoryLength mustEqual 8
+        q2.memoryBytes mustEqual 1024
+
+        for (i <- 0 until 10) {
+          val d = q2.remove.get
+          d(0) mustEqual i
+          q2.inReadBehind mustEqual (i < 2)
+          q2.length mustEqual 9 - i
+          q2.bytes mustEqual 128 * (9 - i)
+          q2.memoryLength mustEqual (if (i < 2) 8 else 9 - i)
+          q2.memoryBytes mustEqual (if (i < 2) 1024 else 128 * (9 - i))
+        }
+      }
+    }
   }
 }
