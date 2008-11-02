@@ -82,7 +82,7 @@ class QueueCollection(private val queueFolder: String, private var queueConfigs:
       queue.get.setup
       synchronized {
         _currentBytes += queue.get.bytes
-        _currentItems += queue.get.size
+        _currentItems += queue.get.length
       }
     }
     queue
@@ -99,7 +99,15 @@ class QueueCollection(private val queueFolder: String, private var queueConfigs:
     queue(key) match {
       case None => false
       case Some(q) =>
-        val result = q.add(item, expiry)
+        val now = System.currentTimeMillis
+        val normalizedExpiry: Long = if (expiry == 0) {
+          0
+        } else if (expiry < 1000000) {
+          now + expiry * 1000
+        } else {
+          expiry * 1000
+        }
+        val result = q.add(item, normalizedExpiry)
         if (result) {
           synchronized {
             _currentBytes += item.length
@@ -137,10 +145,13 @@ class QueueCollection(private val queueFolder: String, private var queueConfigs:
     }
   }
 
-  def stats(key: String): (Long, Long, Long, Long, Long, Long) = {
+  case class Stats(length: Long, bytes: Long, totalItems: Long, journalSize: Long,
+                   totalExpired: Long, currentAge: Long)
+
+  def stats(key: String): Stats = {
     queue(key) match {
-      case None => (0, 0, 0, 0, 0, 0)
-      case Some(q) => (q.size, q.bytes, q.totalItems, q.journalSize, q.totalExpired, q.currentAge)
+      case None => Stats(0, 0, 0, 0, 0, 0)
+      case Some(q) => Stats(q.length, q.bytes, q.totalItems, q.journalSize, q.totalExpired, q.currentAge)
     }
   }
 
