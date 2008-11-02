@@ -137,11 +137,13 @@ class ScarlingHandler(val session: IoSession, val config: Config) extends Actor 
 
     for (qName <- Scarling.queues.queueNames) {
       val s = Scarling.queues.stats(qName)
-      report += (("queue_" + qName + "_items", s.length.toString))
+      report += (("queue_" + qName + "_items", s.items.toString))
       report += (("queue_" + qName + "_bytes", s.bytes.toString))
       report += (("queue_" + qName + "_total_items", s.totalItems.toString))
       report += (("queue_" + qName + "_logsize", s.journalSize.toString))
       report += (("queue_" + qName + "_expired_items", s.totalExpired.toString))
+      report += (("queue_" + qName + "_mem_items", s.memoryItems.toString))
+      report += (("queue_" + qName + "_mem_bytes", s.memoryBytes.toString))
       report += (("queue_" + qName + "_age", s.currentAge.toString))
     }
 

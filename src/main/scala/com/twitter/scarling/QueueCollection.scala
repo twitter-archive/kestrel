@@ -145,13 +145,14 @@ class QueueCollection(private val queueFolder: String, private var queueConfigs:
     }
   }
 
-  case class Stats(length: Long, bytes: Long, totalItems: Long, journalSize: Long,
-                   totalExpired: Long, currentAge: Long)
+  case class Stats(items: Long, bytes: Long, totalItems: Long, journalSize: Long,
+                   totalExpired: Long, currentAge: Long, memoryItems: Long, memoryBytes: Long)
 
   def stats(key: String): Stats = {
     queue(key) match {
-      case None => Stats(0, 0, 0, 0, 0, 0)
-      case Some(q) => Stats(q.length, q.bytes, q.totalItems, q.journalSize, q.totalExpired, q.currentAge)
+      case None => Stats(0, 0, 0, 0, 0, 0, 0, 0)
+      case Some(q) => Stats(q.length, q.bytes, q.totalItems, q.journalSize, q.totalExpired,
+                            q.currentAge, q.memoryLength, q.memoryBytes)
     }
   }
 
