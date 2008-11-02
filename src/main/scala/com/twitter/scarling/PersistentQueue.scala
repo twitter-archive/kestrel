@@ -167,7 +167,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
       }
 
       if (!readJournal.isDefined && queueSize >= PersistentQueue.maxMemorySize) {
-        startReadBehind(journal.getChannel)
+        startReadBehind(journal.getChannel.position)
       }
 
       val item = QItem(System.currentTimeMillis, adjustExpiry(expiry), value)
@@ -228,7 +228,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
       // if we're in read-behind mode, scan forward in the journal to keep memory as full as
       // possible. this amortizes the disk overhead across all reads.
       while (readJournal.isDefined && _memoryBytes < PersistentQueue.maxMemorySize) {
-        fillReadBehind
+        fillReadBehind(journal.getChannel.position)
       }
 
       val realExpiry = adjustExpiry(item.expiry)
@@ -256,16 +256,16 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   }
 
 
-  private def startReadBehind(in: FileChannel): Unit = {
+  private def startReadBehind(pos: Long): Unit = {
     log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
-    val offset = in.position
-    readJournal = Some(new FileInputStream(queuePath))
-    readJournal map (_.getChannel.position(offset))
+    val rj = new FileInputStream(queuePath)
+    rj.getChannel.position(pos)
+    readJournal = Some(rj)
   }
 
-  private def fillReadBehind: Unit = {
+  private def fillReadBehind(pos: Long): Unit = {
     for (rj <- readJournal) {
-      if (rj.getChannel.position == journal.getChannel.position) {
+      if (rj.getChannel.position == pos) {
         // we've caught up.
         log.info("Coming out of read-behind for queue '%s'", name)
         rj.close
@@ -319,7 +319,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
             queueLength += 1
             offset += length
             if (!readJournal.isDefined && queueSize >= PersistentQueue.maxMemorySize) {
-              startReadBehind(fileIn.getChannel)
+              startReadBehind(fileIn.getChannel.position)
             }
           case JournalItem(CMD_REMOVE, length, _) =>
             val len = queue.dequeue.data.length
@@ -328,7 +328,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
             queueLength -= 1
             offset += length
             while (readJournal.isDefined && _memoryBytes < PersistentQueue.maxMemorySize) {
-              fillReadBehind
+              fillReadBehind(fileIn.getChannel.position)
             }
           case JournalItem(-1, _, _) =>
             done = true

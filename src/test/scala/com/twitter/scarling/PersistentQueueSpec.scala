@@ -233,5 +233,41 @@ object PersistentQueueSpec extends Specification with TestHelper {
         }
       }
     }
+
+    "drop into read-behind mode during journal processing, then return to ordinary times" in {
+      withTempFolder {
+        PersistentQueue.maxMemorySize = 1024
+        val q = new PersistentQueue(folderName, "things", Config.fromMap(Map.empty))
+        q.setup
+        for (i <- 0 until 10) {
+          val data = new Array[Byte](128)
+          data(0) = i.toByte
+          q.add(data)
+          q.inReadBehind mustEqual (i >= 8)
+        }
+        q.inReadBehind mustBe true
+        q.length mustEqual 10
+        q.bytes mustEqual 1280
+        q.memoryLength mustEqual 8
+        q.memoryBytes mustEqual 1024
+        for (i <- 0 until 10) {
+          q.remove
+        }
+        q.inReadBehind mustBe false
+        q.length mustEqual 0
+        q.bytes mustEqual 0
+        q.memoryLength mustEqual 0
+        q.memoryBytes mustEqual 0
+        q.close
+
+        val q2 = new PersistentQueue(folderName, "things", Config.fromMap(Map.empty))
+        q2.setup
+        q2.inReadBehind mustBe false
+        q2.length mustEqual 0
+        q2.bytes mustEqual 0
+        q2.memoryLength mustEqual 0
+        q2.memoryBytes mustEqual 0
+      }
+    }
   }
 }
