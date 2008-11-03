@@ -94,15 +94,15 @@ object ServerSpec extends Specification with TestHelper {
         val client = new TestClient("localhost", 22122)
 
         client.set("test_log_rotation", v) mustEqual "STORED"
-        new File(folderName + "/test_log_rotation").length mustEqual 8201
+        new File(folderName + "/test_log_rotation").length mustEqual 8192 + 16 + 5
         client.get("test_log_rotation") mustEqual v
-        new File(folderName + "/test_log_rotation").length mustEqual 8202
+        new File(folderName + "/test_log_rotation").length mustEqual 8192 + 16 + 5 + 1
 
         client.get("test_log_rotation") mustEqual ""
-        new File(folderName + "/test_log_rotation").length mustEqual 8202
+        new File(folderName + "/test_log_rotation").length mustEqual 8192 + 16 + 5 + 1
 
         client.set("test_log_rotation", v) mustEqual "STORED"
-        new File(folderName + "/test_log_rotation").length mustEqual 16403
+        new File(folderName + "/test_log_rotation").length mustEqual 2 * (8192 + 16 + 5) + 1
         client.get("test_log_rotation") mustEqual v
         new File(folderName + "/test_log_rotation").length mustEqual 0
         new File(folderName).listFiles.length mustEqual 1

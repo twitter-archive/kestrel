@@ -62,7 +62,7 @@ object QueueCollectionSpec extends Specification with TestHelper {
         qc.queueNames mustEqual Nil
         new String(qc.remove("ducklings").get) mustEqual "huey"
         // now the queue should be suddenly instantiated:
-        qc.currentBytes mustEqual 22
+        qc.currentBytes mustEqual 10
         qc.currentItems mustEqual 2
       }
     }
