@@ -1,0 +1,14 @@
+<project xmlns:ivy="antlib:org.apache.ivy.ant">
+
+  <target name="clean" depends="init" description="erase built files and targets">
+    <delete dir="${target.dir}" />
+    <delete dir="${dist.dir}" />
+    <!-- i dont think this is really a good idea: -->
+    <!-- delete dir="${ivy.jar.dir}/cache/${ivy.organisation}" /-->
+  </target>
+
+  <target name="clean-ivy" depends="prepare" description="erase ivy cache of downloaded packages">
+    <ivy:cleancache />
+  </target>
+
+</project>

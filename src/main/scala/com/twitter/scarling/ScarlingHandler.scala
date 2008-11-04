@@ -5,8 +5,7 @@ import java.nio.ByteOrder
 import scala.actors.Actor
 import scala.actors.Actor._
 import scala.collection.mutable
-import net.lag.extensions._
-import net.lag.configgy.{Config, Configgy}
+import net.lag.configgy.{Config, Configgy, RuntimeEnvironment}
 import net.lag.logging.Logger
 import org.apache.mina.common._
 import org.apache.mina.transport.socket.nio.SocketSessionConfig
@@ -95,6 +94,9 @@ class ScarlingHandler(val session: IoSession, val config: Config) extends Actor 
         }
       case "STATS" => stats
       case "SHUTDOWN" => shutdown
+      case "RELOAD" =>
+        Configgy.reload
+        session.write("Reloaded config.\r\n")
     }
   }
 
@@ -119,7 +121,7 @@ class ScarlingHandler(val session: IoSession, val config: Config) extends Actor 
     var report = new mutable.ArrayBuffer[(String, String)]
     report += (("uptime", Scarling.uptime.toString))
     report += (("time", (System.currentTimeMillis / 1000).toString))
-    report += (("version", Scarling.VERSION))
+    report += (("version", Scarling.runtime.jarVersion))
     report += (("curr_items", Scarling.queues.currentItems.toString))
     report += (("total_items", Scarling.queues.totalAdded.toString))
     report += (("bytes", Scarling.queues.currentBytes.toString))
@@ -134,15 +136,20 @@ class ScarlingHandler(val session: IoSession, val config: Config) extends Actor 
     report += (("limit_maxbytes", "0"))                         // ???
 
     for (qName <- Scarling.queues.queueNames) {
-      val (size, bytes, totalItems, journalSize, totalExpired, currentAge) = Scarling.queues.stats(qName)
-      report += (("queue_" + qName + "_items", size.toString))
-      report += (("queue_" + qName + "_total_items", totalItems.toString))
-      report += (("queue_" + qName + "_logsize", journalSize.toString))
-      report += (("queue_" + qName + "_expired_items", totalExpired.toString))
-      report += (("queue_" + qName + "_age", currentAge.toString))
+      val s = Scarling.queues.stats(qName)
+      report += (("queue_" + qName + "_items", s.items.toString))
+      report += (("queue_" + qName + "_bytes", s.bytes.toString))
+      report += (("queue_" + qName + "_total_items", s.totalItems.toString))
+      report += (("queue_" + qName + "_logsize", s.journalSize.toString))
+      report += (("queue_" + qName + "_expired_items", s.totalExpired.toString))
+      report += (("queue_" + qName + "_mem_items", s.memoryItems.toString))
+      report += (("queue_" + qName + "_mem_bytes", s.memoryBytes.toString))
+      report += (("queue_" + qName + "_age", s.currentAge.toString))
     }
 
-    val summary = (for (item <- report) yield "STAT %s %s".format(item._1, item._2)).mkString("", "\r\n", "\r\nEND\r\n")
+    val summary = {
+      for ((key, value) <- report) yield "STAT %s %s".format(key, value)
+    }.mkString("", "\r\n", "\r\nEND\r\n")
     writeResponse(summary)
   }
 

@@ -1,17 +1,13 @@
 <project xmlns:ivy="antlib:org.apache.ivy.ant">
 
   <!-- defaults for all projects -->
-  <!-- PROJECT MUST DEFINE: project.package, project.test.classname -->
-  <!-- optional: "project.jar.classname" to build an executable jar -->
-  <!-- optional: "skip.download" "skip.tests" -->
-  <property name="source.dir" value="${basedir}/src/main/scala" />
-  <property name="test.source.dir" value="${basedir}/src/test/scala" />
-  <property name="target.dir" value="${basedir}/target/classes" />
-  <property name="test.target.dir" value="${basedir}/target/test-classes" />
+  <property name="source.dir" value="${basedir}/src/main" />
+  <property name="test.source.dir" value="${basedir}/src/test" />
+  <property name="target.dir" value="${basedir}/target" />
 
   <property environment="env" />
 
-  <property name="ivy.install.version" value="2.0.0-beta2" />
+  <property name="ivy.install.version" value="2.0.0-rc1" />
   <property name="ivy.jar.dir" value="${user.home}/.ivy2" />
   <property name="ivy.jar.file" value="${ivy.jar.dir}/ivy-${ivy.install.version}.jar" />
   <property name="jsch.install.version" value="0.1.29" />
@@ -60,6 +56,14 @@
     <os name="Linux" />
   </condition>
 
-  <import file="base_rules.xml" />
+  <!-- where to look for the ivy config -->
+  <property name="ivy.dep.file" value="${basedir}/ivy/ivy.xml" />
+  <property name="ivy.settings.file" value="${basedir}/ivy/ivysettings.xml" />
 
+  <import file="clean.xml" />
+  <import file="prepare.xml" />
+  <import file="compile.xml" />
+  <import file="test.xml" />
+  <import file="docs.xml" />
+  <import file="package.xml" />
 </project>

@@ -79,7 +79,7 @@ class Decoder extends ProtocolDecoder {
 
 
   private val STATE_KEY = "scala.mina.memcache.state"
-  private val KNOWN_COMMANDS = List("GET", "SET", "STATS", "SHUTDOWN")
+  private val KNOWN_COMMANDS = List("GET", "SET", "STATS", "SHUTDOWN", "RELOAD")
   private val DATA_COMMANDS = List("SET")
 
 

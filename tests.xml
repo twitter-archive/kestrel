@@ -7,8 +7,8 @@
     <java classname="com.twitter.scarling.load.PutMany" fork="true" failonerror="true">
       <classpath>
         <path refid="test.path" />
-        <pathelement location="${target.dir}" />
-        <pathelement location="${test.target.dir}" />
+        <pathelement location="${target.dir}/classes" />
+        <pathelement location="${target.dir}/test-classes" />
       </classpath>
       <arg value="1" />
     </java>
@@ -18,8 +18,8 @@
     <java classname="com.twitter.scarling.load.PutMany" fork="true" failonerror="true">
       <classpath>
         <path refid="test.path" />
-        <pathelement location="${target.dir}" />
-        <pathelement location="${test.target.dir}" />
+        <pathelement location="${target.dir}/classes" />
+        <pathelement location="${target.dir}/test-classes" />
       </classpath>
       <arg value="10" />
     </java>
@@ -29,8 +29,8 @@
     <java classname="com.twitter.scarling.load.PutMany" fork="true" failonerror="true">
       <classpath>
         <path refid="test.path" />
-        <pathelement location="${target.dir}" />
-        <pathelement location="${test.target.dir}" />
+        <pathelement location="${target.dir}/classes" />
+        <pathelement location="${target.dir}/test-classes" />
       </classpath>
       <arg value="100" />
     </java>
@@ -40,8 +40,8 @@
     <java classname="com.twitter.scarling.load.PutMany" fork="true" failonerror="true">
       <classpath>
         <path refid="test.path" />
-        <pathelement location="${target.dir}" />
-        <pathelement location="${test.target.dir}" />
+        <pathelement location="${target.dir}/classes" />
+        <pathelement location="${target.dir}/test-classes" />
       </classpath>
       <arg value="1000" />
     </java>
@@ -51,8 +51,8 @@
     <java classname="com.twitter.scarling.load.PutMany" fork="true" failonerror="true">
       <classpath>
         <path refid="test.path" />
-        <pathelement location="${target.dir}" />
-        <pathelement location="${test.target.dir}" />
+        <pathelement location="${target.dir}/classes" />
+        <pathelement location="${target.dir}/test-classes" />
       </classpath>
       <arg value="2000" />
     </java>

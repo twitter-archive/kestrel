@@ -1,0 +1,27 @@
+<project xmlns:ivy="antlib:org.apache.ivy.ant">
+
+  <!-- read the ivy files but don't resolve anything yet -->
+  <target name="init" depends="install-ivy">
+    <ivy:info file="${ivy.dep.file}" />
+    <property name="dist.dir" value="${basedir}/dist/${ivy.module}-${ivy.revision}" />
+    <property name="docs.target.dir" value="${dist.dir}/docs" />
+  </target>
+
+  <target name="resolve" depends="init">
+    <ivy:retrieve conf="bootstrap,default,test" pattern="${target.dir}/libs/[conf]/[artifact]-[revision].[ext]" />
+    <ivy:cachepath pathid="bootstrap.path" conf="bootstrap" />
+    <ivy:cachepath pathid="deps.path" conf="default" />
+    <ivy:cachepath pathid="test.path" conf="test" />
+  </target>
+
+  <target name="prepare" depends="resolve" description="bootstrap ivy and scala, and download dependencies">
+    <taskdef resource="scala/tools/ant/antlib.xml" classpathref="bootstrap.path" />
+    <condition property="generate.scripts" value="true">
+      <available file="${basedir}/src/scripts" type="dir" />
+    </condition>
+    <mkdir dir="${target.dir}/classes" />
+    <mkdir dir="${target.dir}/test-classes" />
+    <mkdir dir="${dist.dir}" />
+  </target>
+
+</project>

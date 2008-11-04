@@ -2,14 +2,14 @@ package com.twitter.scarling
 
 import java.io.File
 import scala.collection.mutable
-
+import net.lag.configgy.{Config, ConfigMap}
 import net.lag.logging.Logger
 
 
 class InaccessibleQueuePath extends Exception("Inaccessible queue path")
 
 
-class QueueCollection(private val queueFolder: String) {
+class QueueCollection(private val queueFolder: String, private var queueConfigs: ConfigMap) {
   private val log = Logger.get
 
   private val path = new File(queueFolder)
@@ -34,11 +34,17 @@ class QueueCollection(private val queueFolder: String) {
   private var _queueMisses: Long = 0
 
   // reader accessors:
-  def currentBytes = _currentBytes
-  def currentItems = _currentItems
-  def totalAdded = _totalAdded
-  def queueHits = _queueHits
-  def queueMisses = _queueMisses
+  def currentBytes: Long = _currentBytes
+  def currentItems: Long = _currentItems
+  def totalAdded: Long = _totalAdded
+  def queueHits: Long = _queueHits
+  def queueMisses: Long = _queueMisses
+
+  queueConfigs.subscribe { c =>
+    synchronized {
+      queueConfigs = c.getOrElse(new Config)
+    }
+  }
 
 
   def queueNames: List[String] = synchronized {
@@ -47,8 +53,9 @@ class QueueCollection(private val queueFolder: String) {
 
   /**
    * Get a named queue, creating it if necessary.
+   * Exposed only to unit tests.
    */
-  private def queue(name: String): Option[PersistentQueue] = {
+  private[scarling] def queue(name: String): Option[PersistentQueue] = {
     var setup = false
     var queue: Option[PersistentQueue] = None
 
@@ -61,7 +68,7 @@ class QueueCollection(private val queueFolder: String) {
         case q @ Some(_) => q
         case None =>
           setup = true
-          val q = new PersistentQueue(path.getPath, name)
+          val q = new PersistentQueue(path.getPath, name, queueConfigs.configMap(name))
           queues(name) = q
           Some(q)
       }
@@ -75,7 +82,7 @@ class QueueCollection(private val queueFolder: String) {
       queue.get.setup
       synchronized {
         _currentBytes += queue.get.bytes
-        _currentItems += queue.get.size
+        _currentItems += queue.get.length
       }
     }
     queue
@@ -92,7 +99,15 @@ class QueueCollection(private val queueFolder: String) {
     queue(key) match {
       case None => false
       case Some(q) =>
-        val result = q.add(item, expiry)
+        val now = System.currentTimeMillis
+        val normalizedExpiry: Long = if (expiry == 0) {
+          0
+        } else if (expiry < 1000000) {
+          now + expiry * 1000
+        } else {
+          expiry * 1000
+        }
+        val result = q.add(item, normalizedExpiry)
         if (result) {
           synchronized {
             _currentBytes += item.length
@@ -130,10 +145,14 @@ class QueueCollection(private val queueFolder: String) {
     }
   }
 
-  def stats(key: String): (Long, Long, Long, Long, Long, Long) = {
+  case class Stats(items: Long, bytes: Long, totalItems: Long, journalSize: Long,
+                   totalExpired: Long, currentAge: Long, memoryItems: Long, memoryBytes: Long)
+
+  def stats(key: String): Stats = {
     queue(key) match {
-      case None => (0, 0, 0, 0, 0, 0)
-      case Some(q) => (q.size, q.bytes, q.totalItems, q.journalSize, q.totalExpired, q.currentAge)
+      case None => Stats(0, 0, 0, 0, 0, 0, 0, 0)
+      case Some(q) => Stats(q.length, q.bytes, q.totalItems, q.journalSize, q.totalExpired,
+                            q.currentAge, q.memoryLength, q.memoryBytes)
     }
   }
 

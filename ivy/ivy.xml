@@ -2,7 +2,7 @@
   <info
     organisation="com.twitter"
     module="scarling"
-    revision="0.5"
+    revision="0.6"
     e:testclass="com.twitter.TestRunner"
     e:jarclassname="com.twitter.scarling.Scarling"
     e:buildpackage="com/twitter/scarling"
@@ -15,10 +15,11 @@
   </configurations>
   <dependencies>
     <!-- i guess scala-compiler.jar is needed for MainGenericRunner -->
-    <dependency org="org.scala-lang" name="scala-compiler" rev="2.7.1" conf="bootstrap->*; test->*" />
-    <dependency org="org.scala-lang" name="scala-library" rev="2.7.1" />
+    <dependency org="org.scala-lang" name="scala-compiler" rev="2.7.2-rc3" conf="bootstrap->*; test->*" />
+    <dependency org="org.scala-lang" name="scala-library" rev="2.7.2-rc3" />
     <dependency org="org.scala-tools" name="vscaladoc" rev="1.1" conf="bootstrap->*" />
-    <dependency org="net.lag" name="configgy" rev="1.1" />
+    <dependency org="org.specs" name="specs" rev="1.3.1" />
+    <dependency org="net.lag" name="configgy" rev="1.2rc2" />
     <dependency org="org.apache.mina" name="mina-core" rev="1.1.7" />
     <dependency org="org.slf4j" name="slf4j-jdk14" rev="1.5.0" />
   </dependencies>

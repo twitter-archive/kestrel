@@ -2,8 +2,9 @@ package com.twitter.scarling
 
 import java.io._
 import java.nio.{ByteBuffer, ByteOrder}
+import java.nio.channels.FileChannel
 import scala.collection.mutable.Queue
-
+import net.lag.configgy.{Config, Configgy, ConfigMap}
 import net.lag.logging.Logger
 
 
@@ -36,11 +37,29 @@ class IntWriter(private val order: ByteOrder) {
 }
 
 
-class PersistentQueue(private val persistencePath: String, val name: String) {
+class PersistentQueue(private val persistencePath: String, val name: String,
+                      val config: ConfigMap) {
+
+  private case class QItem(addTime: Long, expiry: Long, data: Array[Byte]) {
+    def pack: Array[Byte] = {
+      val bytes = new Array[Byte](data.length + 16)
+      val buffer = ByteBuffer.wrap(bytes)
+      buffer.order(ByteOrder.LITTLE_ENDIAN)
+      buffer.putLong(addTime)
+      buffer.putLong(expiry)
+      buffer.put(data)
+      bytes
+    }
+  }
+
+  private case class JournalItem(command: Int, length: Int, item: Option[QItem])
+
+
   private val log = Logger.get
 
   private val CMD_ADD = 0
   private val CMD_REMOVE = 1
+  private val CMD_ADDX = 2
 
   private val queuePath: String = new File(persistencePath, name).getCanonicalPath()
 
@@ -56,9 +75,14 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
   // age (in milliseconds) of the last item read from the queue:
   private var _currentAge: Long = 0
 
-  private var queue = new Queue[(Long, Array[Byte])]
+  // # of items in the queue (including those not in memory)
+  private var queueLength: Long = 0
+
+  private var queue = new Queue[QItem]
   private var journal: FileOutputStream = null
   private var _journalSize: Long = 0
+  private var _memoryBytes: Long = 0
+  private var readJournal: Option[FileInputStream] = None
 
   // small temporary buffer for formatting ADD transactions into the journal:
   private var byteBuffer = new ByteArrayOutputStream(16)
@@ -71,51 +95,86 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
   private val initialized = new Event
   private var closed = false
 
+  // attempting to add an item after the queue reaches this size will fail.
+  var maxItems = Math.MAX_INT
 
-  def size = synchronized { queue.length }
+  // maximum expiration time for this queue (seconds).
+  var maxAge = 0
 
-  def totalItems = synchronized { _totalItems }
+  config.subscribe(configure _)
+  configure(Some(config))
 
-  def bytes = synchronized { queueSize }
+  def length: Long = synchronized { queueLength }
 
-  def journalSize = synchronized { _journalSize }
+  def totalItems: Long = synchronized { _totalItems }
 
-  def totalExpired = synchronized { _totalExpired }
+  def bytes: Long = synchronized { queueSize }
 
-  def currentAge = synchronized { _currentAge }
+  def journalSize: Long = synchronized { _journalSize }
 
-  private def pack(expiry: Int, data: Array[Byte]): Array[Byte] = {
-    val bytes = new Array[Byte](data.length + 4)
-    val buffer = ByteBuffer.wrap(bytes)
-    buffer.order(ByteOrder.LITTLE_ENDIAN)
-    buffer.putInt(expiry)
-    buffer.put(data)
-    bytes
+  def totalExpired: Long = synchronized { _totalExpired }
+
+  def currentAge: Long = synchronized { _currentAge }
+
+  // mostly for unit tests.
+  def memoryLength: Long = synchronized { queue.size }
+  def memoryBytes: Long = synchronized { _memoryBytes }
+  def inReadBehind = synchronized { readJournal.isDefined }
+
+  def configure(c: Option[ConfigMap]) = synchronized {
+    for (config <- c) {
+      maxItems = config("max_items", Math.MAX_INT)
+      maxAge = config("max_age", 0)
+    }
   }
 
-  private def unpack(data: Array[Byte]): (Int, Array[Byte]) = {
+
+  private def unpack(data: Array[Byte]): QItem = {
+    val buffer = ByteBuffer.wrap(data)
+    val bytes = new Array[Byte](data.length - 16)
+    buffer.order(ByteOrder.LITTLE_ENDIAN)
+    val addTime = buffer.getLong
+    val expiry = buffer.getLong
+    buffer.get(bytes)
+    return QItem(addTime, expiry, bytes)
+  }
+
+  private def unpackOldAdd(data: Array[Byte]): QItem = {
     val buffer = ByteBuffer.wrap(data)
     val bytes = new Array[Byte](data.length - 4)
     buffer.order(ByteOrder.LITTLE_ENDIAN)
     val expiry = buffer.getInt
     buffer.get(bytes)
-    return (expiry, bytes)
+    return QItem(System.currentTimeMillis, if (expiry == 0) 0 else expiry * 1000, bytes)
+  }
+
+  private final def adjustExpiry(expiry: Long): Long = {
+    if (maxAge > 0) {
+      if (expiry > 0) (expiry min maxAge) else maxAge
+    } else {
+      expiry
+    }
   }
 
   /**
    * Add a value to the end of the queue, transactionally.
    */
-  def add(value: Array[Byte], expiry: Int): Boolean = {
+  def add(value: Array[Byte], expiry: Long): Boolean = {
     initialized.waitFor
     synchronized {
-      if (closed) {
+      if (closed || queueLength >= maxItems) {
         return false
       }
 
-      val blob = pack(expiry, value)
+      if (!readJournal.isDefined && queueSize >= PersistentQueue.maxMemorySize) {
+        startReadBehind(journal.getChannel.position)
+      }
+
+      val item = QItem(System.currentTimeMillis, adjustExpiry(expiry), value)
+      val blob = item.pack
 
       byteBuffer.reset()
-      buffer.write(CMD_ADD)
+      buffer.write(CMD_ADDX)
       intWriter.writeInt(buffer, blob.length)
       byteBuffer.writeTo(journal)
       journal.write(blob)
@@ -129,8 +188,13 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
       _journalSize += (5 + blob.length)
 
       _totalItems += 1
-      queue += (System.currentTimeMillis, blob)
-      queueSize += blob.length
+      queueLength += 1
+      queueSize += value.length
+      if (! readJournal.isDefined) {
+        queue += item
+        _memoryBytes += value.length
+      }
+
       true
     }
   }
@@ -144,7 +208,7 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
   def remove: Option[Array[Byte]] = {
     initialized.waitFor
     synchronized {
-      if (queue.isEmpty || closed) {
+      if (closed || queueLength == 0) {
         return None
       }
 
@@ -153,15 +217,24 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
       _journalSize += 1
 
       val now = System.currentTimeMillis
-      val nowSecs = (now / 1000).toInt
-      val (addTime, item) = queue.dequeue
-      queueSize -= item.length
-      checkRoll
-      val (expiry, data) = unpack(item)
+      val item = queue.dequeue
+      queueLength -= 1
+      queueSize -= item.data.length
+      _memoryBytes -= item.data.length
 
-      if ((expiry == 0) || (expiry >= nowSecs)) {
-        _currentAge = now - addTime
-        Some(data)
+      if ((queueLength == 0) && (_journalSize >= PersistentQueue.maxJournalSize)) {
+        rollJournal
+      }
+      // if we're in read-behind mode, scan forward in the journal to keep memory as full as
+      // possible. this amortizes the disk overhead across all reads.
+      while (readJournal.isDefined && _memoryBytes < PersistentQueue.maxMemorySize) {
+        fillReadBehind(journal.getChannel.position)
+      }
+
+      val realExpiry = adjustExpiry(item.expiry)
+      if ((realExpiry == 0) || (realExpiry >= now)) {
+        _currentAge = now - item.addTime
+        Some(item.data)
       } else {
         _totalExpired += 1
         remove
@@ -183,15 +256,37 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
   }
 
 
+  private def startReadBehind(pos: Long): Unit = {
+    log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
+    val rj = new FileInputStream(queuePath)
+    rj.getChannel.position(pos)
+    readJournal = Some(rj)
+  }
+
+  private def fillReadBehind(pos: Long): Unit = {
+    for (rj <- readJournal) {
+      if (rj.getChannel.position == pos) {
+        // we've caught up.
+        log.info("Coming out of read-behind for queue '%s'", name)
+        rj.close
+        readJournal = None
+      } else {
+        readJournalEntry(new DataInputStream(readJournal.get),
+                         new IntReader(ByteOrder.LITTLE_ENDIAN)) match {
+          case JournalItem(CMD_ADDX, _, Some(item)) =>
+            queue += item
+            _memoryBytes += item.data.length
+          case JournalItem(_, _, _) =>
+        }
+      }
+    }
+  }
+
   private def openJournal: Unit = {
     journal = new FileOutputStream(queuePath, true)
   }
 
-  private def checkRoll: Unit = {
-    if ((queue.length > 0) || (_journalSize < PersistentQueue.maxJournalSize)) {
-      return
-    }
-
+  private def rollJournal: Unit = {
     log.info("Rolling journal file for '%s'", name)
     journal.close
 
@@ -212,47 +307,71 @@ class PersistentQueue(private val persistencePath: String, val name: String) {
       val intReader = new IntReader(ByteOrder.LITTLE_ENDIAN)
 
       log.info("Replaying transaction journal for '%s'", name)
-      var eof = false
-      while (!eof) {
-        in.read() match {
-          case -1 =>
-            eof = true
-          case CMD_ADD =>
-            val size = intReader.readInt(in)
-            val data = new Array[Byte](size)
-            in.readFully(data)
-            queue += (System.currentTimeMillis, data)
-            queueSize += data.length
-            offset += (5 + data.length)
-          case CMD_REMOVE =>
-            queueSize -= queue.dequeue._2.length
-            offset += 1
-          case n =>
-            log.error("INVALID opcode in journal at byte %d: %d", offset, n)
-            throw new IOException("invalid opcode")
+      var done = false
+      do {
+        readJournalEntry(in, intReader) match {
+          case JournalItem(CMD_ADDX, length, Some(item)) =>
+            if (!readJournal.isDefined) {
+              queue += item
+              _memoryBytes += item.data.length
+            }
+            queueSize += item.data.length
+            queueLength += 1
+            offset += length
+            if (!readJournal.isDefined && queueSize >= PersistentQueue.maxMemorySize) {
+              startReadBehind(fileIn.getChannel.position)
+            }
+          case JournalItem(CMD_REMOVE, length, _) =>
+            val len = queue.dequeue.data.length
+            queueSize -= len
+            _memoryBytes -= len
+            queueLength -= 1
+            offset += length
+            while (readJournal.isDefined && _memoryBytes < PersistentQueue.maxMemorySize) {
+              fillReadBehind(fileIn.getChannel.position)
+            }
+          case JournalItem(-1, _, _) =>
+            done = true
         }
-      }
-
+      } while (!done)
       _journalSize = offset
-      log.info("Finished transaction journal for '%s' (%d items, %d bytes)", name, size, offset)
+      log.info("Finished transaction journal for '%s' (%d items, %d bytes)", name, queueLength, offset)
     } catch {
       case e: FileNotFoundException =>
         log.info("No transaction journal for '%s'; starting with empty queue.", name)
       case e: IOException =>
         log.error(e, "Exception replaying journal for '%s'", name)
         log.error("DATA MAY HAVE BEEN LOST!")
-        // this can happen if the server died abruptly in the middle
+        // this can happen if the server hardware died abruptly in the middle
         // of writing a journal. not awesome but we should recover.
     }
 
     openJournal
   }
+
+  private def readJournalEntry(in: DataInputStream, intReader: IntReader): JournalItem = {
+    in.read() match {
+      case -1 =>
+        JournalItem(-1, 0, None)
+      case CMD_ADD =>
+        val size = intReader.readInt(in)
+        val data = new Array[Byte](size)
+        in.readFully(data)
+        JournalItem(CMD_ADDX, 5 + data.length, Some(unpackOldAdd(data)))
+      case CMD_REMOVE =>
+        JournalItem(CMD_REMOVE, 1, None)
+      case CMD_ADDX =>
+        val size = intReader.readInt(in)
+        val data = new Array[Byte](size)
+        in.readFully(data)
+        JournalItem(CMD_ADDX, 5 + data.length, Some(unpack(data)))
+      case n =>
+        throw new IOException("invalid opcode in journal: " + n.toInt)
+    }
+  }
 }
 
-
 object PersistentQueue {
-  /* when a journal reaches maxJournalSize, the queue will wait until
-   * it is empty, and will then rotate the journal.
-   */
-  var maxJournalSize = 16 * 1024 * 1024
+  @volatile var maxJournalSize: Long = 16 * 1024 * 1024
+  @volatile var maxMemorySize: Long = 128 * 1024 * 1024
 }
