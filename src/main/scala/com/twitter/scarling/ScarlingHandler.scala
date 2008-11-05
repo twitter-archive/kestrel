@@ -101,8 +101,20 @@ class ScarlingHandler(val session: IoSession, val config: Config) extends Actor 
   }
 
   private def get(name: String): Unit = {
+    var key = name
+    var timeout = 0
+    if (name contains '/') {
+      val options = name.split("/")
+      key = options(0)
+      for (i <- 1 until options.length) {
+        val opt = options(1)
+        if (opt startsWith "t=") {
+          timeout = opt.substring(2).toInt
+        }
+      }
+    }
     ScarlingStats.getRequests.incr
-    Scarling.queues.remove(name) match {
+    Scarling.queues.remove(name, timeout) {
       case None => writeResponse("END\r\n")
       case Some(data) => writeResponse("VALUE " + name + " 0 " + data.length + "\r\n", data)
     }

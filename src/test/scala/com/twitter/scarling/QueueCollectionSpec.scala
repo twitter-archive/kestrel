@@ -17,11 +17,12 @@ object QueueCollectionSpec extends Specification with TestHelper {
     dest.toList
   }
 
+
   "QueueCollection" should {
+
     doAfter {
       qc.shutdown
     }
-
 
     "create a queue" in {
       withTempFolder {
@@ -36,10 +37,10 @@ object QueueCollectionSpec extends Specification with TestHelper {
         qc.currentItems mustEqual 2
         qc.totalAdded mustEqual 2
 
-        new String(qc.remove("work1").get) mustEqual "stuff"
-        qc.remove("work1") mustEqual None
-        new String(qc.remove("work2").get) mustEqual "other stuff"
-        qc.remove("work2") mustEqual None
+        new String(qc.receive("work1").get) mustEqual "stuff"
+        qc.receive("work1") mustEqual None
+        new String(qc.receive("work2").get) mustEqual "other stuff"
+        qc.receive("work2") mustEqual None
 
         qc.currentBytes mustEqual 0
         qc.currentItems mustEqual 0
@@ -60,7 +61,7 @@ object QueueCollectionSpec extends Specification with TestHelper {
 
         qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
         qc.queueNames mustEqual Nil
-        new String(qc.remove("ducklings").get) mustEqual "huey"
+        new String(qc.receive("ducklings").get) mustEqual "huey"
         // now the queue should be suddenly instantiated:
         qc.currentBytes mustEqual 10
         qc.currentItems mustEqual 2
@@ -75,20 +76,20 @@ object QueueCollectionSpec extends Specification with TestHelper {
         qc.queueHits mustEqual 0
         qc.queueMisses mustEqual 0
 
-        new String(qc.remove("ducklings").get) mustEqual "ugly1"
+        new String(qc.receive("ducklings").get) mustEqual "ugly1"
         qc.queueHits mustEqual 1
         qc.queueMisses mustEqual 0
-        qc.remove("zombie") mustEqual None
+        qc.receive("zombie") mustEqual None
         qc.queueHits mustEqual 1
         qc.queueMisses mustEqual 1
 
-        new String(qc.remove("ducklings").get) mustEqual "ugly2"
+        new String(qc.receive("ducklings").get) mustEqual "ugly2"
         qc.queueHits mustEqual 2
         qc.queueMisses mustEqual 1
-        qc.remove("ducklings") mustEqual None
+        qc.receive("ducklings") mustEqual None
         qc.queueHits mustEqual 2
         qc.queueMisses mustEqual 2
-        qc.remove("ducklings") mustEqual None
+        qc.receive("ducklings") mustEqual None
         qc.queueHits mustEqual 2
         qc.queueMisses mustEqual 3
       }

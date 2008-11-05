@@ -1,6 +1,7 @@
 package com.twitter.scarling
 
 import java.io.File
+import java.util.concurrent.CountDownLatch
 import scala.collection.mutable
 import net.lag.configgy.{Config, ConfigMap}
 import net.lag.logging.Logger
@@ -125,24 +126,34 @@ class QueueCollection(private val queueFolder: String, private var queueConfigs:
    * Retrieve an item from a queue. If no item is available, or the server
    * is shutting down, None is returned.
    */
-  def remove(key: String): Option[Array[Byte]] = {
-    queue(key) match {
-      case None =>
-        synchronized { _queueMisses += 1 }
-        None
-      case Some(q) =>
-        val item = q.remove
-        synchronized {
-          item match {
-            case None => _queueMisses += 1
-            case Some(x) =>
-              _queueHits += 1
-              _currentBytes -= x.length
-              _currentItems -= 1
-          }
-        }
-        item
+  def remove(key: String, timeout: Int)(f: Option[Array[Byte]] => Unit): Unit = {
+    val item = queue(key) match {
+      case None => None
+      case Some(q) => q.remove
     }
+    synchronized {
+      item match {
+        case None =>
+          _queueMisses += 1
+        case Some(x) =>
+          _queueHits += 1
+          _currentBytes -= x.length
+          _currentItems -= 1
+      }
+    }
+    f(item)
+  }
+
+  // for testing.
+  def receive(key: String): Option[Array[Byte]] = {
+    var rv: Option[Array[Byte]] = None
+    val latch = new CountDownLatch(1)
+    remove(key, 0) { v =>
+      rv = v
+      latch.countDown
+    }
+    latch.await
+    rv
   }
 
   case class Stats(items: Long, bytes: Long, totalItems: Long, journalSize: Long,
