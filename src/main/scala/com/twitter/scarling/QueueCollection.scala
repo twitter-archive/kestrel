@@ -123,25 +123,28 @@ class QueueCollection(private val queueFolder: String, private var queueConfigs:
   def add(key: String, item: Array[Byte]): Boolean = add(key, item, 0)
 
   /**
-   * Retrieve an item from a queue. If no item is available, or the server
-   * is shutting down, None is returned.
+   * Retrieve an item from a queue and pass it to a continuation. If no item is available within
+   * the requested time, or the server is shutting down, None is passed.
    */
   def remove(key: String, timeout: Int)(f: Option[Array[Byte]] => Unit): Unit = {
-    val item = queue(key) match {
-      case None => None
-      case Some(q) => q.remove
+    queue(key) match {
+      case None =>
+        synchronized { _queueMisses += 1 }
+        f(None)
+      case Some(q) =>
+        q.remove(timeout) {
+          case None =>
+            synchronized { _queueMisses += 1 }
+            f(None)
+          case item @ Some(x) =>
+            synchronized {
+              _queueHits += 1
+              _currentBytes -= x.length
+              _currentItems -= 1
+            }
+            f(item)
+        }
     }
-    synchronized {
-      item match {
-        case None =>
-          _queueMisses += 1
-        case Some(x) =>
-          _queueHits += 1
-          _currentBytes -= x.length
-          _currentItems -= 1
-      }
-    }
-    f(item)
   }
 
   // for testing.

@@ -2,6 +2,8 @@
 package com.twitter.scarling
 
 import java.io.{File, FileInputStream}
+import java.util.concurrent.CountDownLatch
+import scala.actors.Actor.actor
 import net.lag.configgy.Config
 import org.specs._
 
@@ -267,6 +269,30 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q2.bytes mustEqual 0
         q2.memoryLength mustEqual 0
         q2.memoryBytes mustEqual 0
+      }
+    }
+
+    "handle timeout reads" in {
+      withTempFolder {
+        PersistentQueue.maxMemorySize = 1024
+        val q = new PersistentQueue(folderName, "things", Config.fromMap(Map.empty))
+        q.setup
+
+        actor {
+          Thread.sleep(100)
+          q.add("hello".getBytes)
+        }
+
+        var rv: String = null
+        val latch = new CountDownLatch(1)
+        actor {
+          q.remove(250) { item =>
+            rv = new String(item.get)
+            latch.countDown
+          }
+        }
+        latch.await
+        rv mustEqual "hello"
       }
     }
   }
