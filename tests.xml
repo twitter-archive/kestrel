@@ -58,4 +58,26 @@
     </java>
   </target>
 
+  <target name="many-clients-100" depends="prepare">
+    <java classname="com.twitter.scarling.load.ManyClients" fork="true" failonerror="true">
+      <classpath>
+        <path refid="test.path" />
+        <pathelement location="${target.dir}/classes" />
+        <pathelement location="${target.dir}/test-classes" />
+      </classpath>
+      <arg value="100" />
+    </java>
+  </target>
+
+  <target name="many-clients-500" depends="prepare">
+    <java classname="com.twitter.scarling.load.ManyClients" fork="true" failonerror="true">
+      <classpath>
+        <path refid="test.path" />
+        <pathelement location="${target.dir}/classes" />
+        <pathelement location="${target.dir}/test-classes" />
+      </classpath>
+      <arg value="500" />
+    </java>
+  </target>
+
 </project>
