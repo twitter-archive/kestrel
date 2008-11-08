@@ -253,23 +253,22 @@ class PersistentQueue(private val persistencePath: String, val name: String,
     }
   }
 
-  def remove(timeout: Int)(f: Option[Array[Byte]] => Unit): Unit = {
-    val timeoutAbsolute = System.currentTimeMillis + timeout
+  def remove(timeoutAbsolute: Long)(f: Option[Array[Byte]] => Unit): Unit = {
     synchronized {
       val item = remove()
       if (item.isDefined) {
         f(item)
-      } else if (timeout == 0) {
+      } else if (timeoutAbsolute == 0) {
         f(None)
       } else {
         val w = Waiter(Actor.self)
         waiters += w
         Actor.self.reactWithin((timeoutAbsolute - System.currentTimeMillis) max 0) {
-          case ItemArrived => f(remove())
+          case ItemArrived => remove(timeoutAbsolute)(f)
           case TIMEOUT => synchronized {
             waiters -= w
             // race: someone could have done an add() between the timeout and grabbing the lock.
-            Actor.self.receiveWithin(0) {
+            Actor.self.reactWithin(0) {
               case ItemArrived => f(remove())
               case TIMEOUT => f(remove())
             }
