@@ -114,9 +114,9 @@ class ScarlingHandler(val session: IoSession, val config: Config) extends Actor 
       }
     }
     ScarlingStats.getRequests.incr
-    Scarling.queues.remove(name, timeout) {
+    Scarling.queues.remove(key, timeout) {
       case None => writeResponse("END\r\n")
-      case Some(data) => writeResponse("VALUE " + name + " 0 " + data.length + "\r\n", data)
+      case Some(data) => writeResponse("VALUE " + key + " 0 " + data.length + "\r\n", data)
     }
   }
 
