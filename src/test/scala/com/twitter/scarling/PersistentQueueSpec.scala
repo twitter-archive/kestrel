@@ -28,7 +28,7 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q.bytes mustEqual 11
         q.journalSize mustEqual 32
 
-        new String(q.remove.get) mustEqual "hello kitty"
+        new String(q.remove.get.data) mustEqual "hello kitty"
 
         q.length mustEqual 0
         q.totalItems mustEqual 1
@@ -84,14 +84,14 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q.setup
         q.add("first".getBytes)
         q.add("second".getBytes)
-        new String(q.remove.get) mustEqual "first"
+        new String(q.remove.get.data) mustEqual "first"
         q.journalSize mustEqual 5 + 6 + 16 + 16 + 5 + 5 + 1
         q.close
 
         val q2 = new PersistentQueue(folderName, "rolling", Config.fromMap(Map.empty))
         q2.setup
         q2.journalSize mustEqual 5 + 6 + 16 + 16 + 5 + 5 + 1
-        new String(q2.remove.get) mustEqual "second"
+        new String(q2.remove.get.data) mustEqual "second"
         q2.journalSize mustEqual 5 + 6 + 16 + 16 + 5 + 5 + 1 + 1
         q2.length mustEqual 0
         q2.close
@@ -149,7 +149,7 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q.memoryBytes mustEqual 1024
 
         // read 1 item. queue should pro-actively read the next item in from disk.
-        val d0 = q.remove.get
+        val d0 = q.remove.get.data
         d0(0) mustEqual 0
         q.inReadBehind mustBe true
         q.length mustEqual 9
@@ -168,7 +168,7 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q.memoryBytes mustEqual 1024
 
         // read again.
-        val d1 = q.remove.get
+        val d1 = q.remove.get.data
         d1(0) mustEqual 1
         q.inReadBehind mustBe true
         q.length mustEqual 9
@@ -177,7 +177,7 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q.memoryBytes mustEqual 1024
 
         // and again.
-        val d2 = q.remove.get
+        val d2 = q.remove.get.data
         d2(0) mustEqual 2
         q.inReadBehind mustBe true
         q.length mustEqual 8
@@ -186,7 +186,7 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q.memoryBytes mustEqual 1024
 
         for (i <- 3 until 11) {
-          val d = q.remove.get
+          val d = q.remove.get.data
           d(0) mustEqual i
           q.inReadBehind mustBe false
           q.length mustEqual 10 - i
@@ -225,7 +225,7 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q2.memoryBytes mustEqual 1024
 
         for (i <- 0 until 10) {
-          val d = q2.remove.get
+          val d = q2.remove.get.data
           d(0) mustEqual i
           q2.inReadBehind mustEqual (i < 2)
           q2.length mustEqual 9 - i
@@ -286,8 +286,8 @@ object PersistentQueueSpec extends Specification with TestHelper {
         var rv: String = null
         val latch = new CountDownLatch(1)
         actor {
-          q.remove(System.currentTimeMillis + 250) { item =>
-            rv = new String(item.get)
+          q.remove(System.currentTimeMillis + 250, false) { item =>
+            rv = new String(item.get.data)
             latch.countDown
           }
         }

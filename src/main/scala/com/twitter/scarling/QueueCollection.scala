@@ -132,17 +132,17 @@ class QueueCollection(private val queueFolder: String, private var queueConfigs:
         synchronized { _queueMisses += 1 }
         f(None)
       case Some(q) =>
-        q.remove(if (timeout == 0) timeout else System.currentTimeMillis + timeout) {
+        q.remove(if (timeout == 0) timeout else System.currentTimeMillis + timeout, false) {
           case None =>
             synchronized { _queueMisses += 1 }
             f(None)
-          case item @ Some(x) =>
+          case Some(item) =>
             synchronized {
               _queueHits += 1
-              _currentBytes -= x.length
+              _currentBytes -= item.data.length
               _currentItems -= 1
             }
-            f(item)
+            f(Some(item.data))
         }
     }
   }

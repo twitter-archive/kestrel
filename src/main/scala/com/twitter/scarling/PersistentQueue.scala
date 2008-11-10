@@ -24,24 +24,10 @@ class IntReader(private val order: ByteOrder) {
 }
 
 
-// again, must be either behind a lock, or in a local var
-class IntWriter(private val order: ByteOrder) {
-  val buffer = new Array[Byte](4)
-  val byteBuffer = ByteBuffer.wrap(buffer)
-  byteBuffer.order(order)
-
-  def writeInt(out: DataOutputStream, n: Int) = {
-    byteBuffer.rewind
-    byteBuffer.putInt(n)
-    out.write(buffer)
-  }
-}
-
-
 class PersistentQueue(private val persistencePath: String, val name: String,
                       val config: ConfigMap) {
 
-  private case class QItem(addTime: Long, expiry: Long, data: Array[Byte]) {
+  case class QItem(addTime: Long, expiry: Long, data: Array[Byte], xid: Long) {
     def pack: Array[Byte] = {
       val bytes = new Array[Byte](data.length + 16)
       val buffer = ByteBuffer.wrap(bytes)
@@ -65,6 +51,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   private val CMD_ADD = 0
   private val CMD_REMOVE = 1
   private val CMD_ADDX = 2
+  private val CMD_REMOVE_TENTATIVE = 3
 
   private val queuePath: String = new File(persistencePath, name).getCanonicalPath()
 
@@ -90,11 +77,9 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   private var readJournal: Option[FileInputStream] = None
 
   // small temporary buffer for formatting ADD transactions into the journal:
-  private var byteBuffer = new ByteArrayOutputStream(16)
-  private var buffer = new DataOutputStream(byteBuffer)
-
-  // sad way to write little-endian ints when journaling queue adds
-  private val intWriter = new IntWriter(ByteOrder.LITTLE_ENDIAN)
+  private val buffer = new Array[Byte](16)
+  private val byteBuffer = ByteBuffer.wrap(buffer)
+  byteBuffer.order(ByteOrder.LITTLE_ENDIAN)
 
   // force get/set operations to block while we're replaying any existing journal
   private val initialized = new Event
@@ -108,6 +93,11 @@ class PersistentQueue(private val persistencePath: String, val name: String,
 
   // clients waiting on an item in this queue
   private val waiters = new mutable.ArrayBuffer[Waiter]
+
+  // track tentative removals
+  private var transactionCounter: Long = 0
+  private val openTransactions = new mutable.HashMap[Long, QItem]
+
 
   config.subscribe(configure _)
   configure(Some(config))
@@ -144,7 +134,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
     val addTime = buffer.getLong
     val expiry = buffer.getLong
     buffer.get(bytes)
-    return QItem(addTime, expiry, bytes)
+    return QItem(addTime, expiry, bytes, 0)
   }
 
   private def unpackOldAdd(data: Array[Byte]): QItem = {
@@ -153,7 +143,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
     buffer.order(ByteOrder.LITTLE_ENDIAN)
     val expiry = buffer.getInt
     buffer.get(bytes)
-    return QItem(System.currentTimeMillis, if (expiry == 0) 0 else expiry * 1000, bytes)
+    return QItem(System.currentTimeMillis, if (expiry == 0) 0 else expiry * 1000, bytes, 0)
   }
 
   private final def adjustExpiry(expiry: Long): Long = {
@@ -178,13 +168,16 @@ class PersistentQueue(private val persistencePath: String, val name: String,
         startReadBehind(journal.getChannel.position)
       }
 
-      val item = QItem(System.currentTimeMillis, adjustExpiry(expiry), value)
+      val item = QItem(System.currentTimeMillis, adjustExpiry(expiry), value, 0)
       val blob = item.pack
 
-      byteBuffer.reset()
-      buffer.write(CMD_ADDX)
-      intWriter.writeInt(buffer, blob.length)
-      byteBuffer.writeTo(journal)
+      byteBuffer.rewind
+      byteBuffer.put(CMD_ADDX.toByte)
+      byteBuffer.putInt(blob.length)
+      byteBuffer.flip
+      while (byteBuffer.position < byteBuffer.limit) {
+        journal.getChannel.write(byteBuffer)
+      }
       journal.write(blob)
       /* in theory, you might want to sync the file after each
        * transaction. however, the original starling doesn't.
@@ -213,19 +206,38 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   def add(value: Array[Byte]): Boolean = add(value, 0)
 
   /**
-   * Remove an item from the queue, transactionally. If no item is
-   * available, an empty byte array is returned.
+   * Remove an item from the queue. If no item is available, an empty byte
+   * array is returned.
+   *
+   * @param transaction true if this should be considered the first part
+   *     of a transaction, to be committed or rolled back (put back at the
+   *     head of the queue)
    */
-  def remove(): Option[Array[Byte]] = {
+  def remove(transaction: Boolean): Option[QItem] = {
     initialized.waitFor
+    var xid: Long = 0
+
     synchronized {
       if (closed || queueLength == 0) {
         return None
       }
 
-      journal.write(CMD_REMOVE)
-      journal.getFD.sync
-      _journalSize += 1
+      if (transaction) {
+        xid = transactionCounter
+        transactionCounter += 1
+        byteBuffer.rewind
+        byteBuffer.put(CMD_REMOVE_TENTATIVE.toByte)
+        byteBuffer.putLong(xid)
+        byteBuffer.flip
+        while (byteBuffer.position < byteBuffer.limit) {
+          journal.getChannel.write(byteBuffer)
+        }
+        _journalSize += 9
+      } else {
+        journal.write(CMD_REMOVE)
+        _journalSize += 1
+      }
+      //journal.getFD.sync
 
       val now = System.currentTimeMillis
       val item = queue.dequeue
@@ -233,7 +245,8 @@ class PersistentQueue(private val persistencePath: String, val name: String,
       queueSize -= item.data.length
       _memoryBytes -= item.data.length
 
-      if ((queueLength == 0) && (_journalSize >= PersistentQueue.maxJournalSize)) {
+      if ((queueLength == 0) && (_journalSize >= PersistentQueue.maxJournalSize) &&
+          (openTransactions.size == 0)) {
         rollJournal
       }
       // if we're in read-behind mode, scan forward in the journal to keep memory as full as
@@ -245,7 +258,10 @@ class PersistentQueue(private val persistencePath: String, val name: String,
       val realExpiry = adjustExpiry(item.expiry)
       if ((realExpiry == 0) || (realExpiry >= now)) {
         _currentAge = now - item.addTime
-        Some(item.data)
+        if (transaction) {
+          openTransactions(xid) = item
+        }
+        Some(QItem(item.addTime, item.expiry, item.data, xid))
       } else {
         _totalExpired += 1
         remove
@@ -253,7 +269,13 @@ class PersistentQueue(private val persistencePath: String, val name: String,
     }
   }
 
-  def remove(timeoutAbsolute: Long)(f: Option[Array[Byte]] => Unit): Unit = {
+  /**
+   * Remove an item from the queue. If no item is available, an empty byte
+   * array is returned.
+   */
+  def remove(): Option[QItem] = remove(false)
+
+  def remove(timeoutAbsolute: Long, transaction: Boolean)(f: Option[QItem] => Unit): Unit = {
     synchronized {
       val item = remove()
       if (item.isDefined) {
@@ -264,7 +286,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
         val w = Waiter(Actor.self)
         waiters += w
         Actor.self.reactWithin((timeoutAbsolute - System.currentTimeMillis) max 0) {
-          case ItemArrived => remove(timeoutAbsolute)(f)
+          case ItemArrived => remove(timeoutAbsolute, transaction)(f)
           case TIMEOUT => synchronized {
             waiters -= w
             // race: someone could have done an add() between the timeout and grabbing the lock.
