@@ -3,6 +3,7 @@ package com.twitter.scarling
 import java.io._
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.channels.FileChannel
+import java.util.concurrent.CountDownLatch
 import scala.actors.{Actor, TIMEOUT}
 import scala.collection.mutable
 import net.lag.configgy.{Config, Configgy, ConfigMap}
@@ -42,7 +43,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   private var journal = new Journal(new File(persistencePath, name).getCanonicalPath)
 
   // force get/set operations to block while we're replaying any existing journal
-  private val initialized = new Event
+  private val initialized = new CountDownLatch(1)
   private var closed = false
 
   // attempting to add an item after the queue reaches this size will fail.
@@ -98,7 +99,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
    * Add a value to the end of the queue, transactionally.
    */
   def add(value: Array[Byte], expiry: Long): Boolean = {
-    initialized.waitFor
+    initialized.await
     synchronized {
       if (closed || queueLength >= maxItems) {
         return false
@@ -137,7 +138,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
    *     head of the queue)
    */
   def remove(transaction: Boolean): Option[QItem] = {
-    initialized.waitFor
+    initialized.await
     var xid: Long = 0
 
     synchronized {
@@ -224,7 +225,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   def setup: Unit = synchronized {
     queueSize = 0
     replayJournal
-    initialized.set
+    initialized.countDown
   }
 
   def fillReadBehind(): Unit = {
