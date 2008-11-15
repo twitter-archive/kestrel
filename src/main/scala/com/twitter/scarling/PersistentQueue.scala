@@ -10,14 +10,13 @@ import net.lag.configgy.{Config, Configgy, ConfigMap}
 import net.lag.logging.Logger
 
 
-case class QItem(addTime: Long, expiry: Long, data: Array[Byte], xid: Long)
+case class QItem(addTime: Long, expiry: Long, data: Array[Byte], var xid: Int)
 
 
 class PersistentQueue(private val persistencePath: String, val name: String,
                       val config: ConfigMap) {
 
   private case class Waiter(actor: Actor)
-
   private case object ItemArrived
 
 
@@ -56,8 +55,8 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   private val waiters = new mutable.ArrayBuffer[Waiter]
 
   // track tentative removals
-  private var transactionCounter: Long = 0
-  private val openTransactions = new mutable.HashMap[Long, QItem]
+  private var xidCounter: Int = 0
+  private val openTransactions = new mutable.HashMap[Int, QItem]
 
   def length: Long = synchronized { queueLength }
 
@@ -139,7 +138,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
    */
   def remove(transaction: Boolean): Option[QItem] = {
     initialized.await
-    var xid: Long = 0
+    var xid: Int = 0
 
     synchronized {
       if (closed || queueLength == 0) {
@@ -147,6 +146,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
       }
 
       if (transaction) {
+        xid = nextXid
         journal.removeTentative()
       } else {
         journal.remove()
@@ -162,6 +162,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
           (openTransactions.size == 0)) {
         log.info("Rolling journal file for '%s'", name)
         journal.roll
+        journal.saveXid(xidCounter)
       }
       // if we're in read-behind mode, scan forward in the journal to keep memory as full as
       // possible. this amortizes the disk overhead across all reads.
@@ -175,7 +176,8 @@ class PersistentQueue(private val persistencePath: String, val name: String,
         if (transaction) {
           openTransactions(xid) = item
         }
-        Some(QItem(item.addTime, item.expiry, item.data, xid))
+        item.xid = xid
+        Some(item)
       } else {
         _totalExpired += 1
         remove
@@ -222,10 +224,17 @@ class PersistentQueue(private val persistencePath: String, val name: String,
     journal.close()
   }
 
-  def setup: Unit = synchronized {
+  def setup(): Unit = synchronized {
     queueSize = 0
     replayJournal
     initialized.countDown
+  }
+
+  private def nextXid(): Int = {
+    do {
+      xidCounter += 1
+    } while (openTransactions contains xidCounter)
+    xidCounter
   }
 
   def fillReadBehind(): Unit = {

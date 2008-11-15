@@ -71,8 +71,8 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q.length mustEqual 0
         q.totalItems mustEqual 2
         q.bytes mustEqual 0
-        q.journalSize mustEqual 0
-        new File(folderName, "rolling").length mustEqual 0
+        q.journalSize mustEqual 5   // saved xid.
+        new File(folderName, "rolling").length mustEqual 5
 
         PersistentQueue.maxJournalSize = 16 * 1024 * 1024
       }
