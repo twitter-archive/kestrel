@@ -15,8 +15,8 @@
   </configurations>
   <dependencies>
     <!-- i guess scala-compiler.jar is needed for MainGenericRunner -->
-    <dependency org="org.scala-lang" name="scala-compiler" rev="2.7.2-rc6" conf="bootstrap->*; test->*" />
-    <dependency org="org.scala-lang" name="scala-library" rev="2.7.2-rc6" />
+    <dependency org="org.scala-lang" name="scala-compiler" rev="2.7.2" conf="bootstrap->*; test->*" />
+    <dependency org="org.scala-lang" name="scala-library" rev="2.7.2" />
     <dependency org="org.scala-tools" name="vscaladoc" rev="1.1" conf="bootstrap->*" />
     <dependency org="org.specs" name="specs" rev="1.3.1" />
     <dependency org="net.lag" name="configgy" rev="1.2-rc3" />
