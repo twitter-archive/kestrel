@@ -11,6 +11,8 @@ abstract case class JournalItem
 object JournalItem {
   case class Add(item: QItem) extends JournalItem
   case object Remove extends JournalItem
+  case object RemoveTentative extends JournalItem
+  case class SavedXid(xid: Int) extends JournalItem
   case object EndOfFile extends JournalItem
 }
 
@@ -44,6 +46,7 @@ class Journal(queuePath: String) {
   private val CMD_REMOVE = 1
   private val CMD_ADDX = 2
   private val CMD_REMOVE_TENTATIVE = 3
+  private val CMD_SAVE_XID = 4
 
 
   def open(): Unit = {
@@ -93,17 +96,25 @@ class Journal(queuePath: String) {
   }
 
   def removeTentative() = {
-/*    xid = transactionCounter
-    transactionCounter += 1
-    byteBuffer.rewind
+    byteBuffer.clear
     byteBuffer.put(CMD_REMOVE_TENTATIVE.toByte)
-    byteBuffer.putLong(xid)
     byteBuffer.flip
     while (byteBuffer.position < byteBuffer.limit) {
-      journal.getChannel.write(byteBuffer)
+      writer.write(byteBuffer)
     }
-    _size += 9
-*/  }
+    size += 1
+  }
+
+  def saveXid(xid: Int) = {
+    byteBuffer.clear
+    byteBuffer.put(CMD_SAVE_XID.toByte)
+    byteBuffer.putInt(xid)
+    byteBuffer.flip
+    while (byteBuffer.position < byteBuffer.limit) {
+      writer.write(byteBuffer)
+    }
+    size += 5
+  }
 
   def startReadBehind(): Unit = {
     val pos = if (replayer.isDefined) replayer.get.position else writer.position
@@ -181,6 +192,16 @@ class Journal(queuePath: String) {
               if (replaying) size += 5 + data.length
               JournalItem.Add(unpack(data))
           }
+        case CMD_REMOVE_TENTATIVE =>
+          if (replaying) size += 1
+          JournalItem.RemoveTentative
+        case CMD_SAVE_XID =>
+          readInt(in) match {
+            case None => JournalItem.EndOfFile
+            case Some(xid) =>
+              if (replaying) size += 5
+              JournalItem.SavedXid(xid)
+          }
         case n =>
           throw new IOException("invalid opcode in journal: " + n.toInt)
       }
@@ -188,6 +209,24 @@ class Journal(queuePath: String) {
   }
 
   private def readBlock(in: FileChannel): Option[Array[Byte]] = {
+    readInt(in) match {
+      case None => None
+      case Some(size) =>
+        val data = new Array[Byte](size)
+        val dataBuffer = ByteBuffer.wrap(data)
+        var x: Int = 0
+        do {
+          x = in.read(dataBuffer)
+        } while (dataBuffer.position < dataBuffer.limit && x >= 0)
+        if (x < 0) {
+          None
+        } else {
+          Some(data)
+        }
+    }
+  }
+
+  private def readInt(in: FileChannel): Option[Int] = {
     byteBuffer.rewind
     byteBuffer.limit(4)
     var x: Int = 0
@@ -198,17 +237,7 @@ class Journal(queuePath: String) {
       None
     } else {
       byteBuffer.rewind
-      val size = byteBuffer.getInt()
-      val data = new Array[Byte](size)
-      val dataBuffer = ByteBuffer.wrap(data)
-      do {
-        x = in.read(dataBuffer)
-      } while (dataBuffer.position < dataBuffer.limit && x >= 0)
-      if (x < 0) {
-        None
-      } else {
-        Some(data)
-      }
+      Some(byteBuffer.getInt())
     }
   }
 
