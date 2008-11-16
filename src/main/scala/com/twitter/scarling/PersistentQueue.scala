@@ -104,28 +104,20 @@ class PersistentQueue(private val persistencePath: String, val name: String,
     initialized.await
     synchronized {
       if (closed || queueLength >= maxItems) {
-        return false
+        false
+      } else {
+        val item = QItem(System.currentTimeMillis, adjustExpiry(expiry), value, 0)
+        if (!journal.inReadBehind && queueSize >= PersistentQueue.maxMemorySize) {
+          log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
+          journal.startReadBehind
+        }
+        _add(item)
+        journal.add(item)
+        if (waiters.size > 0) {
+          waiters.remove(0).actor ! ItemArrived
+        }
+        true
       }
-
-      if (!journal.inReadBehind && queueSize >= PersistentQueue.maxMemorySize) {
-        log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
-        journal.startReadBehind
-      }
-
-      val item = QItem(System.currentTimeMillis, adjustExpiry(expiry), value, 0)
-      journal.add(item)
-      _totalItems += 1
-      queueLength += 1
-      queueSize += value.length
-      if (! journal.inReadBehind) {
-        queue += item
-        _memoryBytes += value.length
-      }
-
-      if (waiters.size > 0) {
-        waiters.remove(0).actor ! ItemArrived
-      }
-      true
     }
   }
 
@@ -141,49 +133,20 @@ class PersistentQueue(private val persistencePath: String, val name: String,
    */
   def remove(transaction: Boolean): Option[QItem] = {
     initialized.await
-    var xid: Int = 0
-
     synchronized {
       if (closed || queueLength == 0) {
-        return None
-      }
-
-      if (transaction) {
-        xid = nextXid
-        journal.removeTentative()
+        None
       } else {
-        journal.remove()
-      }
+        val item = _remove(transaction)
+        if (transaction) journal.removeTentative() else journal.remove()
 
-      val now = System.currentTimeMillis
-      val item = queue.dequeue
-      queueLength -= 1
-      queueSize -= item.data.length
-      _memoryBytes -= item.data.length
-
-      if ((queueLength == 0) && (journal.size >= PersistentQueue.maxJournalSize) &&
-          (openTransactions.size == 0)) {
-        log.info("Rolling journal file for '%s'", name)
-        journal.roll
-        journal.saveXid(xidCounter)
-      }
-      // if we're in read-behind mode, scan forward in the journal to keep memory as full as
-      // possible. this amortizes the disk overhead across all reads.
-      while (journal.inReadBehind && _memoryBytes < PersistentQueue.maxMemorySize) {
-        fillReadBehind
-      }
-
-      val realExpiry = adjustExpiry(item.expiry)
-      if ((realExpiry == 0) || (realExpiry >= now)) {
-        _currentAge = now - item.addTime
-        if (transaction) {
-          item.xid = xid
-          openTransactions(xid) = item
+        if ((queueLength == 0) && (journal.size >= PersistentQueue.maxJournalSize) &&
+            (openTransactions.size == 0)) {
+          log.info("Rolling journal file for '%s'", name)
+          journal.roll
+          journal.saveXid(xidCounter)
         }
-        Some(item)
-      } else {
-        _totalExpired += 1
-        remove
+        item
       }
     }
   }
@@ -226,20 +189,12 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   def unremove(xid: Int): Unit = {
     initialized.await
     synchronized {
-      if (closed) {
-        return
-      }
-
-      journal.unremove(xid)
-      val item = openTransactions.removeKey(xid).get
-      _totalItems += 1
-      queueLength += 1
-      queueSize += item.data.length
-      queue unget item
-      _memoryBytes += item.data.length
-
-      if (waiters.size > 0) {
-        waiters.remove(0).actor ! ItemArrived
+      if (!closed) {
+        journal.unremove(xid)
+        _unremove(xid)
+        if (waiters.size > 0) {
+          waiters.remove(0).actor ! ItemArrived
+        }
       }
     }
   }
@@ -288,37 +243,17 @@ class PersistentQueue(private val persistencePath: String, val name: String,
 
     journal.replay(name) {
       case JournalItem.Add(item) =>
-        if (!journal.inReadBehind) {
-          queue += item
-          _memoryBytes += item.data.length
-        }
-        queueSize += item.data.length
-        queueLength += 1
+        _add(item)
+        // when processing the journal, this has to happen after:
         if (!journal.inReadBehind && queueSize >= PersistentQueue.maxMemorySize) {
           log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
-          journal.startReadBehind()
+          journal.startReadBehind
         }
-
-      case JournalItem.Remove =>
-        removeViaJournal(false)
-
-      case JournalItem.RemoveTentative =>
-        removeViaJournal(true)
-
-      case JournalItem.SavedXid(xid) =>
-        xidCounter = xid
-
-      case JournalItem.Unremove(xid) =>
-        val item = openTransactions.removeKey(xid).get
-        _totalItems += 1
-        queueLength += 1
-        queueSize += item.data.length
-        queue unget item
-        _memoryBytes += item.data.length
-
-      case JournalItem.ConfirmRemove(xid) =>
-        openTransactions.removeKey(xid)
-
+      case JournalItem.Remove => _remove(false)
+      case JournalItem.RemoveTentative => _remove(true)
+      case JournalItem.SavedXid(xid) => xidCounter = xid
+      case JournalItem.Unremove(xid) => _unremove(xid)
+      case JournalItem.ConfirmRemove(xid) => openTransactions.removeKey(xid)
       case x => log.error("Unexpected item in journal: %s", x)
     }
     log.info("Finished transaction journal for '%s' (%d items, %d bytes)", name, queueLength,
@@ -326,25 +261,63 @@ class PersistentQueue(private val persistencePath: String, val name: String,
     journal.open
   }
 
-  private def removeViaJournal(transaction: Boolean) = {
+
+  //  -----  internal implementations
+
+  private def _add(item: QItem): Unit = {
+    if (!journal.inReadBehind) {
+      queue += item
+      _memoryBytes += item.data.length
+    }
+    _totalItems += 1
+    queueSize += item.data.length
+    queueLength += 1
+  }
+
+  private def _remove(transaction: Boolean): Option[QItem] = {
+    if (queue.isEmpty) return None
+
+    val now = System.currentTimeMillis
     val item = queue.dequeue
     val len = item.data.length
     queueSize -= len
     _memoryBytes -= len
     queueLength -= 1
-    if (transaction) {
-      val xid = nextXid
-      item.xid = xid
-      openTransactions(xid) = item
-    }
+    val xid = if (transaction) nextXid else 0
+
+    // if we're in read-behind mode, scan forward in the journal to keep memory as full as
+    // possible. this amortizes the disk overhead across all reads.
     while (journal.inReadBehind && _memoryBytes < PersistentQueue.maxMemorySize) {
       fillReadBehind
       if (!journal.inReadBehind) {
         log.info("Coming out of read-behind for queue '%s'", name)
       }
     }
+
+    val realExpiry = adjustExpiry(item.expiry)
+    if ((realExpiry == 0) || (realExpiry >= now)) {
+      _currentAge = now - item.addTime
+      if (transaction) {
+        item.xid = xid
+        openTransactions(xid) = item
+      }
+      Some(item)
+    } else {
+      _totalExpired += 1
+      _remove(transaction)
+    }
+  }
+
+  private def _unremove(xid: Int) = {
+    val item = openTransactions.removeKey(xid).get
+    _totalItems += 1
+    queueLength += 1
+    queueSize += item.data.length
+    queue unget item
+    _memoryBytes += item.data.length
   }
 }
+
 
 object PersistentQueue {
   @volatile var maxJournalSize: Long = 16 * 1024 * 1024
