@@ -37,7 +37,10 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   // # of items in the queue (including those not in memory)
   private var queueLength: Long = 0
 
-  private var queue = new mutable.Queue[QItem]
+  private var queue = new mutable.Queue[QItem] {
+    // scala's Queue doesn't (yet?) have a way to put back.
+    def unget(item: QItem) = prependElem(item)
+  }
   private var _memoryBytes: Long = 0
   private var journal = new Journal(new File(persistencePath, name).getCanonicalPath)
 
@@ -174,9 +177,9 @@ class PersistentQueue(private val persistencePath: String, val name: String,
       if ((realExpiry == 0) || (realExpiry >= now)) {
         _currentAge = now - item.addTime
         if (transaction) {
+          item.xid = xid
           openTransactions(xid) = item
         }
-        item.xid = xid
         Some(item)
       } else {
         _totalExpired += 1
@@ -212,6 +215,41 @@ class PersistentQueue(private val persistencePath: String, val name: String,
             }
           }
         }
+      }
+    }
+  }
+
+  /**
+   * Return a transactionally-removed item to the queue. This is a rolled-
+   * back transaction.
+   */
+  def unremove(xid: Int): Unit = {
+    initialized.await
+    synchronized {
+      if (closed) {
+        return
+      }
+
+      journal.unremove(xid)
+      val item = openTransactions.removeKey(xid).get
+      _totalItems += 1
+      queueLength += 1
+      queueSize += item.data.length
+      queue unget item
+      _memoryBytes += item.data.length
+
+      if (waiters.size > 0) {
+        waiters.remove(0).actor ! ItemArrived
+      }
+    }
+  }
+
+  def confirmRemove(xid: Int): Unit = {
+    initialized.await
+    synchronized {
+      if (!closed) {
+        journal.confirmRemove(xid)
+        openTransactions.removeKey(xid)
       }
     }
   }

@@ -13,6 +13,8 @@ object JournalItem {
   case object Remove extends JournalItem
   case object RemoveTentative extends JournalItem
   case class SavedXid(xid: Int) extends JournalItem
+  case class Unremove(xid: Int) extends JournalItem
+  case class ConfirmRemove(xid: Int) extends JournalItem
   case object EndOfFile extends JournalItem
 }
 
@@ -47,6 +49,8 @@ class Journal(queuePath: String) {
   private val CMD_ADDX = 2
   private val CMD_REMOVE_TENTATIVE = 3
   private val CMD_SAVE_XID = 4
+  private val CMD_UNREMOVE = 5
+  private val CMD_CONFIRM_REMOVE = 6
 
 
   def open(): Unit = {
@@ -108,6 +112,28 @@ class Journal(queuePath: String) {
   def saveXid(xid: Int) = {
     byteBuffer.clear
     byteBuffer.put(CMD_SAVE_XID.toByte)
+    byteBuffer.putInt(xid)
+    byteBuffer.flip
+    while (byteBuffer.position < byteBuffer.limit) {
+      writer.write(byteBuffer)
+    }
+    size += 5
+  }
+
+  def unremove(xid: Int) = {
+    byteBuffer.clear
+    byteBuffer.put(CMD_UNREMOVE.toByte)
+    byteBuffer.putInt(xid)
+    byteBuffer.flip
+    while (byteBuffer.position < byteBuffer.limit) {
+      writer.write(byteBuffer)
+    }
+    size += 5
+  }
+
+  def confirmRemove(xid: Int) = {
+    byteBuffer.clear
+    byteBuffer.put(CMD_CONFIRM_REMOVE.toByte)
     byteBuffer.putInt(xid)
     byteBuffer.flip
     while (byteBuffer.position < byteBuffer.limit) {
@@ -201,6 +227,20 @@ class Journal(queuePath: String) {
             case Some(xid) =>
               if (replaying) size += 5
               JournalItem.SavedXid(xid)
+          }
+        case CMD_UNREMOVE =>
+          readInt(in) match {
+            case None => JournalItem.EndOfFile
+            case Some(xid) =>
+              if (replaying) size += 5
+              JournalItem.Unremove(xid)
+          }
+        case CMD_CONFIRM_REMOVE =>
+          readInt(in) match {
+            case None => JournalItem.EndOfFile
+            case Some(xid) =>
+              if (replaying) size += 5
+              JournalItem.ConfirmRemove(xid)
           }
         case n =>
           throw new IOException("invalid opcode in journal: " + n.toInt)
