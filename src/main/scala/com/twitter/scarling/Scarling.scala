@@ -2,7 +2,7 @@ package com.twitter.scarling
 
 import java.net.InetSocketAddress
 import java.util.Properties
-import java.util.concurrent.{Executors, ExecutorService, TimeUnit}
+import java.util.concurrent.{CountDownLatch, Executors, ExecutorService, TimeUnit}
 import scala.actors.{Actor, Scheduler}
 import scala.actors.Actor._
 import scala.collection.mutable
@@ -51,7 +51,10 @@ object Scarling {
   var acceptorExecutor: ExecutorService = null
   var acceptor: IoAcceptor = null
 
-  def main(args: Array[String]) = {
+  private val deathSwitch = new CountDownLatch(1)
+
+
+  def main(args: Array[String]): Unit = {
     runtime.load(args)
     startup(Configgy.config)
   }
@@ -82,6 +85,11 @@ object Scarling {
     acceptor.bind(new InetSocketAddress(listenAddress, listenPort), new IoHandlerActorAdapter((session: IoSession) => new ScarlingHandler(session, config)), saConfig)
 
     log.info("Scarling started.")
+
+    // make sure there's always one actor running so scala 272rc6 doesn't kill off the actors library.
+    actor {
+      deathSwitch.await
+    }
   }
 
   def shutdown = {
@@ -91,6 +99,7 @@ object Scarling {
     Scheduler.shutdown
     acceptorExecutor.shutdown
     acceptorExecutor.awaitTermination(5, TimeUnit.SECONDS)
+    deathSwitch.countDown
   }
 
   def uptime = (System.currentTimeMillis - _startTime) / 1000

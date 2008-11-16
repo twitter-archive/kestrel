@@ -3,7 +3,8 @@ package com.twitter.scarling
 import java.io._
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.channels.FileChannel
-import scala.collection.mutable.Queue
+import scala.actors.{Actor, TIMEOUT}
+import scala.collection.mutable
 import net.lag.configgy.{Config, Configgy, ConfigMap}
 import net.lag.logging.Logger
 
@@ -54,6 +55,10 @@ class PersistentQueue(private val persistencePath: String, val name: String,
 
   private case class JournalItem(command: Int, length: Int, item: Option[QItem])
 
+  private case class Waiter(actor: Actor)
+
+  private case object ItemArrived
+
 
   private val log = Logger.get
 
@@ -78,7 +83,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   // # of items in the queue (including those not in memory)
   private var queueLength: Long = 0
 
-  private var queue = new Queue[QItem]
+  private var queue = new mutable.Queue[QItem]
   private var journal: FileOutputStream = null
   private var _journalSize: Long = 0
   private var _memoryBytes: Long = 0
@@ -100,6 +105,9 @@ class PersistentQueue(private val persistencePath: String, val name: String,
 
   // maximum expiration time for this queue (seconds).
   var maxAge = 0
+
+  // clients waiting on an item in this queue
+  private val waiters = new mutable.ArrayBuffer[Waiter]
 
   config.subscribe(configure _)
   configure(Some(config))
@@ -195,6 +203,9 @@ class PersistentQueue(private val persistencePath: String, val name: String,
         _memoryBytes += value.length
       }
 
+      if (waiters.size > 0) {
+        waiters.remove(0).actor ! ItemArrived
+      }
       true
     }
   }
@@ -205,7 +216,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
    * Remove an item from the queue, transactionally. If no item is
    * available, an empty byte array is returned.
    */
-  def remove: Option[Array[Byte]] = {
+  def remove(): Option[Array[Byte]] = {
     initialized.waitFor
     synchronized {
       if (closed || queueLength == 0) {
@@ -238,6 +249,31 @@ class PersistentQueue(private val persistencePath: String, val name: String,
       } else {
         _totalExpired += 1
         remove
+      }
+    }
+  }
+
+  def remove(timeoutAbsolute: Long)(f: Option[Array[Byte]] => Unit): Unit = {
+    synchronized {
+      val item = remove()
+      if (item.isDefined) {
+        f(item)
+      } else if (timeoutAbsolute == 0) {
+        f(None)
+      } else {
+        val w = Waiter(Actor.self)
+        waiters += w
+        Actor.self.reactWithin((timeoutAbsolute - System.currentTimeMillis) max 0) {
+          case ItemArrived => remove(timeoutAbsolute)(f)
+          case TIMEOUT => synchronized {
+            waiters -= w
+            // race: someone could have done an add() between the timeout and grabbing the lock.
+            Actor.self.reactWithin(0) {
+              case ItemArrived => f(remove())
+              case TIMEOUT => f(remove())
+            }
+          }
+        }
       }
     }
   }
