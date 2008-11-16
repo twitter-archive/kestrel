@@ -284,6 +284,8 @@ class PersistentQueue(private val persistencePath: String, val name: String,
 
   def replayJournal(): Unit = {
     log.info("Replaying transaction journal for '%s'", name)
+    xidCounter = 0
+
     journal.replay(name) {
       case JournalItem.Add(item) =>
         if (!journal.inReadBehind) {
@@ -298,22 +300,49 @@ class PersistentQueue(private val persistencePath: String, val name: String,
         }
 
       case JournalItem.Remove =>
-        val len = queue.dequeue.data.length
-        queueSize -= len
-        _memoryBytes -= len
-        queueLength -= 1
-        while (journal.inReadBehind && _memoryBytes < PersistentQueue.maxMemorySize) {
-          fillReadBehind
-          if (!journal.inReadBehind) {
-            log.info("Coming out of read-behind for queue '%s'", name)
-          }
-        }
+        removeViaJournal(false)
+
+      case JournalItem.RemoveTentative =>
+        removeViaJournal(true)
+
+      case JournalItem.SavedXid(xid) =>
+        xidCounter = xid
+
+      case JournalItem.Unremove(xid) =>
+        val item = openTransactions.removeKey(xid).get
+        _totalItems += 1
+        queueLength += 1
+        queueSize += item.data.length
+        queue unget item
+        _memoryBytes += item.data.length
+
+      case JournalItem.ConfirmRemove(xid) =>
+        openTransactions.removeKey(xid)
 
       case x => log.error("Unexpected item in journal: %s", x)
     }
     log.info("Finished transaction journal for '%s' (%d items, %d bytes)", name, queueLength,
              journal.size)
     journal.open
+  }
+
+  private def removeViaJournal(transaction: Boolean) = {
+    val item = queue.dequeue
+    val len = item.data.length
+    queueSize -= len
+    _memoryBytes -= len
+    queueLength -= 1
+    if (transaction) {
+      val xid = nextXid
+      item.xid = xid
+      openTransactions(xid) = item
+    }
+    while (journal.inReadBehind && _memoryBytes < PersistentQueue.maxMemorySize) {
+      fillReadBehind
+      if (!journal.inReadBehind) {
+        log.info("Coming out of read-behind for queue '%s'", name)
+      }
+    }
   }
 }
 
