@@ -13,9 +13,9 @@ In Blaine's words:
 > that speaks MemCache can take advantage of Starling's queue facilities.
 
 The concept of starling is to have a single server handle reliable, ordered
-message queues. When you put a cluster of these servers together, *with no
-cross communication*, and pick a server at random whenever you do a `set` or
-`get`, you end up with a reliable, *loosely ordered* message queue.
+message queues. When you put a cluster of these servers together,
+*with no cross communication*, and pick a server at random whenever you do a
+`set` or `get`, you end up with a reliable, *loosely ordered* message queue.
 
 In many situations, loose ordering is sufficient. Dropping the requirement on
 cross communication makes it horizontally scale to infinity and beyond: no
