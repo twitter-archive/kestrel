@@ -106,6 +106,32 @@ object ServerSpec extends Specification with TestHelper {
       }
     }
 
+    "auto-commit cycles of transactional gets" in {
+      withTempFolder {
+        makeServer
+        val v = (Math.random * 0x7fffffff).toInt
+        val client = new TestClient("localhost", 22122)
+        client.set("auto-commit", v.toString) mustEqual "STORED"
+        client.set("auto-commit", (v + 1).toString) mustEqual "STORED"
+        client.set("auto-commit", (v + 2).toString) mustEqual "STORED"
+
+        val client2 = new TestClient("localhost", 22122)
+        client2.get("auto-commit/open") mustEqual v.toString
+        client2.get("auto-commit/open") mustEqual (v + 1).toString
+        client2.get("auto-commit/open") mustEqual (v + 2).toString
+        client2.disconnect
+        Thread.sleep(10)
+
+        val client3 = new TestClient("localhost", 22122)
+        client3.get("auto-commit") mustEqual (v + 2).toString
+
+        var stats = client3.stats
+        stats("queue_auto-commit_items") mustEqual "0"
+        stats("queue_auto-commit_total_items") mustEqual "3"
+        stats("queue_auto-commit_bytes") mustEqual "0"
+      }
+    }
+
     "age" in {
       withTempFolder {
         makeServer
