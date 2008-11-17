@@ -126,13 +126,13 @@ class QueueCollection(private val queueFolder: String, private var queueConfigs:
    * Retrieve an item from a queue and pass it to a continuation. If no item is available within
    * the requested time, or the server is shutting down, None is passed.
    */
-  def remove(key: String, timeout: Int)(f: Option[Array[Byte]] => Unit): Unit = {
+  def remove(key: String, timeout: Int, transaction: Boolean)(f: Option[QItem] => Unit): Unit = {
     queue(key) match {
       case None =>
         synchronized { _queueMisses += 1 }
         f(None)
       case Some(q) =>
-        q.remove(if (timeout == 0) timeout else System.currentTimeMillis + timeout, false) {
+        q.remove(if (timeout == 0) timeout else System.currentTimeMillis + timeout, transaction) {
           case None =>
             synchronized { _queueMisses += 1 }
             f(None)
@@ -142,7 +142,7 @@ class QueueCollection(private val queueFolder: String, private var queueConfigs:
               _currentBytes -= item.data.length
               _currentItems -= 1
             }
-            f(Some(item.data))
+            f(Some(item))
         }
     }
   }
@@ -151,12 +151,32 @@ class QueueCollection(private val queueFolder: String, private var queueConfigs:
   def receive(key: String): Option[Array[Byte]] = {
     var rv: Option[Array[Byte]] = None
     val latch = new CountDownLatch(1)
-    remove(key, 0) { v =>
-      rv = v
-      latch.countDown
+    remove(key, 0, false) {
+      case None =>
+        rv = None
+        latch.countDown
+      case Some(v) =>
+        rv = Some(v.data)
+        latch.countDown
     }
     latch.await
     rv
+  }
+
+  def unremove(key: String, xid: Int): Unit = {
+    queue(key) match {
+      case None =>
+      case Some(q) =>
+        q.unremove(xid)
+    }
+  }
+
+  def confirmRemove(key: String, xid: Int): Unit = {
+    queue(key) match {
+      case None =>
+      case Some(q) =>
+        q.confirmRemove(xid)
+    }
   }
 
   case class Stats(items: Long, bytes: Long, totalItems: Long, journalSize: Long,

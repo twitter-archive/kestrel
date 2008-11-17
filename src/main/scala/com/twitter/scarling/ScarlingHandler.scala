@@ -19,6 +19,11 @@ class ScarlingHandler(val session: IoSession, val config: Config) extends Actor 
   private val sessionID = ScarlingStats.sessionID.incr
   private val remoteAddress = session.getRemoteAddress.asInstanceOf[InetSocketAddress]
 
+  private var pendingTransaction: Option[(String, Int)] = None
+
+  // used internally to indicate a client error: tried to close a transaction on the wrong queue.
+  private class MismatchedQueueException extends Exception
+
 
   if (session.getTransportType == TransportType.SOCKET) {
     session.getConfig.asInstanceOf[SocketSessionConfig].setReceiveBufferSize(2048)
@@ -56,6 +61,7 @@ class ScarlingHandler(val session: IoSession, val config: Config) extends Actor 
 
         case MinaMessage.SessionClosed =>
           log.debug("End of session %d", sessionID)
+          abortAnyTransaction
           ScarlingStats.sessions.decr
           exit()
 
@@ -103,20 +109,74 @@ class ScarlingHandler(val session: IoSession, val config: Config) extends Actor 
   private def get(name: String): Unit = {
     var key = name
     var timeout = 0
+    var closing = false
+    var opening = false
     if (name contains '/') {
       val options = name.split("/")
       key = options(0)
       for (i <- 1 until options.length) {
-        val opt = options(1)
+        val opt = options(i)
         if (opt startsWith "t=") {
           timeout = opt.substring(2).toInt
         }
+        if (opt == "close") closing = true
+        if (opt == "open") opening = true
       }
     }
-    ScarlingStats.getRequests.incr
-    Scarling.queues.remove(key, timeout) {
-      case None => writeResponse("END\r\n")
-      case Some(data) => writeResponse("VALUE " + key + " 0 " + data.length + "\r\n", data)
+    log.debug("get q=%s t=%d open=%s close=%s", key, timeout, opening, closing)
+
+    try {
+      if (closing) {
+        if (!closeTransaction(key)) {
+          log.warning("Attempt to close a non-existent transaction on '%s' (sid %d, %s:%d)",
+                      key, sessionID, remoteAddress.getHostName, remoteAddress.getPort)
+          writeResponse("ERROR\r\n")
+          session.close
+        } else {
+          writeResponse("END\r\n")
+        }
+      } else {
+        if (opening) closeTransaction(key)
+        ScarlingStats.getRequests.incr
+        Scarling.queues.remove(key, timeout, opening) {
+          case None =>
+            writeResponse("END\r\n")
+          case Some(item) =>
+            log.debug("get %s", item)
+            if (opening) pendingTransaction = Some((key, item.xid))
+            writeResponse("VALUE " + key + " 0 " + item.data.length + "\r\n", item.data)
+        }
+      }
+    } catch {
+      case e: MismatchedQueueException =>
+        log.warning("Attempt to close a transaction on the wrong queue '%s' (sid %d, %s:%d)",
+                    key, sessionID, remoteAddress.getHostName, remoteAddress.getPort)
+        writeResponse("ERROR\r\n")
+        session.close
+    }
+  }
+
+  // returns true if a transaction was actually closed.
+  private def closeTransaction(name: String): Boolean = {
+    pendingTransaction match {
+      case None => false
+      case Some((qname, xid)) =>
+        if (qname != name) {
+          throw new MismatchedQueueException
+        } else {
+          Scarling.queues.confirmRemove(qname, xid)
+          pendingTransaction = None
+        }
+        true
+    }
+  }
+
+  private def abortAnyTransaction() = {
+    pendingTransaction match {
+      case None =>
+      case Some((qname, xid)) =>
+        Scarling.queues.unremove(qname, xid)
+        pendingTransaction = None
     }
   }
 

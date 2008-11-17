@@ -159,7 +159,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
 
   def remove(timeoutAbsolute: Long, transaction: Boolean)(f: Option[QItem] => Unit): Unit = {
     synchronized {
-      val item = remove()
+      val item = remove(transaction)
       if (item.isDefined) {
         f(item)
       } else if (timeoutAbsolute == 0) {
@@ -173,8 +173,8 @@ class PersistentQueue(private val persistencePath: String, val name: String,
             waiters -= w
             // race: someone could have done an add() between the timeout and grabbing the lock.
             Actor.self.reactWithin(0) {
-              case ItemArrived => f(remove())
-              case TIMEOUT => f(remove())
+              case ItemArrived => f(remove(transaction))
+              case TIMEOUT => f(remove(transaction))
             }
           }
         }
