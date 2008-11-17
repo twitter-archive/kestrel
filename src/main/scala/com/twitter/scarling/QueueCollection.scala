@@ -100,7 +100,7 @@ class QueueCollection(private val queueFolder: String, private var queueConfigs:
     queue(key) match {
       case None => false
       case Some(q) =>
-        val now = System.currentTimeMillis
+        val now = Time.now
         val normalizedExpiry: Long = if (expiry == 0) {
           0
         } else if (expiry < 1000000) {
@@ -132,7 +132,7 @@ class QueueCollection(private val queueFolder: String, private var queueConfigs:
         synchronized { _queueMisses += 1 }
         f(None)
       case Some(q) =>
-        q.remove(if (timeout == 0) timeout else System.currentTimeMillis + timeout, transaction) {
+        q.remove(if (timeout == 0) timeout else Time.now + timeout, transaction) {
           case None =>
             synchronized { _queueMisses += 1 }
             f(None)

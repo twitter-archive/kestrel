@@ -106,7 +106,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
       if (closed || queueLength >= maxItems) {
         false
       } else {
-        val item = QItem(System.currentTimeMillis, adjustExpiry(expiry), value, 0)
+        val item = QItem(Time.now, adjustExpiry(expiry), value, 0)
         if (!journal.inReadBehind && queueSize >= PersistentQueue.maxMemorySize) {
           log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
           journal.startReadBehind
@@ -167,7 +167,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
       } else {
         val w = Waiter(Actor.self)
         waiters += w
-        Actor.self.reactWithin((timeoutAbsolute - System.currentTimeMillis) max 0) {
+        Actor.self.reactWithin((timeoutAbsolute - Time.now) max 0) {
           case ItemArrived => remove(timeoutAbsolute, transaction)(f)
           case TIMEOUT => synchronized {
             waiters -= w
@@ -277,7 +277,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   private def _remove(transaction: Boolean): Option[QItem] = {
     if (queue.isEmpty) return None
 
-    val now = System.currentTimeMillis
+    val now = Time.now
     val item = queue.dequeue
     val len = item.data.length
     queueSize -= len
@@ -310,7 +310,6 @@ class PersistentQueue(private val persistencePath: String, val name: String,
 
   private def _unremove(xid: Int) = {
     val item = openTransactions.removeKey(xid).get
-    _totalItems += 1
     queueLength += 1
     queueSize += item.data.length
     queue unget item

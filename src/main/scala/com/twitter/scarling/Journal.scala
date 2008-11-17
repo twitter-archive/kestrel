@@ -59,7 +59,7 @@ class Journal(queuePath: String) {
 
   def roll(): Unit = {
     writer.close
-    val backupFile = new File(queuePath + "." + System.currentTimeMillis)
+    val backupFile = new File(queuePath + "." + Time.now)
     new File(queuePath).renameTo(backupFile)
     open
     size = 0
@@ -307,6 +307,6 @@ class Journal(queuePath: String) {
     buffer.order(ByteOrder.LITTLE_ENDIAN)
     val expiry = buffer.getInt
     buffer.get(bytes)
-    return QItem(System.currentTimeMillis, if (expiry == 0) 0 else expiry * 1000, bytes, 0)
+    return QItem(Time.now, if (expiry == 0) 0 else expiry * 1000, bytes, 0)
   }
 }

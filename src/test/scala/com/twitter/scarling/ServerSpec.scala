@@ -66,10 +66,43 @@ object ServerSpec extends Specification with TestHelper {
         val v = (Math.random * 0x7fffffff).toInt
         val client = new TestClient("localhost", 22122)
         client.get("test_set_with_expiry") mustEqual ""
-        client.set("test_set_with_epxiry", (v + 2).toString, (System.currentTimeMillis / 1000).toInt) mustEqual "STORED"
+        client.set("test_set_with_expiry", (v + 2).toString, (Time.now / 1000).toInt) mustEqual "STORED"
         client.set("test_set_with_expiry", v.toString) mustEqual "STORED"
-        Thread.sleep(1000)
+        Time.advance(1000)
         client.get("test_set_with_expiry") mustEqual v.toString
+      }
+    }
+
+    "auto-rollback a transaction on disconnect" in {
+      withTempFolder {
+        makeServer
+        val v = (Math.random * 0x7fffffff).toInt
+        val client = new TestClient("localhost", 22122)
+        client.set("auto-rollback", v.toString) mustEqual "STORED"
+
+        val client2 = new TestClient("localhost", 22122)
+        client2.get("auto-rollback/open") mustEqual v.toString
+        val client3 = new TestClient("localhost", 22122)
+        client3.get("auto-rollback") mustEqual ""
+        var stats = client3.stats
+        stats("queue_auto-rollback_items") mustEqual "0"
+        stats("queue_auto-rollback_total_items") mustEqual "1"
+        stats("queue_auto-rollback_bytes") mustEqual "0"
+
+        // oops, client2 dies before committing!
+        client2.disconnect
+        Thread.sleep(10)
+        stats = client3.stats
+        stats("queue_auto-rollback_items") mustEqual "1"
+        stats("queue_auto-rollback_total_items") mustEqual "1"
+        stats("queue_auto-rollback_bytes") mustEqual v.toString.length.toString
+
+        // subsequent fetch must get the same data item back.
+        client3.get("auto-rollback/open") mustEqual v.toString
+        stats = client3.stats
+        stats("queue_auto-rollback_items") mustEqual "0"
+        stats("queue_auto-rollback_total_items") mustEqual "1"
+        stats("queue_auto-rollback_bytes") mustEqual "0"
       }
     }
 
@@ -78,7 +111,7 @@ object ServerSpec extends Specification with TestHelper {
         makeServer
         val client = new TestClient("localhost", 22122)
         client.set("test_age", "nibbler") mustEqual "STORED"
-        Thread.sleep(1000)
+        Time.advance(1000)
         client.get("test_age") mustEqual "nibbler"
         client.stats.contains("queue_test_age_age") mustEqual true
         client.stats("queue_test_age_age").toInt >= 1000 mustEqual true

@@ -134,13 +134,13 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q.setup
         q.add("sunny".getBytes) mustEqual true
         q.length mustEqual 1
-        Thread.sleep(1000)
+        Time.advance(1000)
         q.remove mustEqual None
 
         config("max_age") = 60
         q.add("rainy".getBytes) mustEqual true
         config("max_age") = 1
-        Thread.sleep(1000)
+        Time.advance(1000)
         q.remove mustEqual None
       }
     }
@@ -300,7 +300,7 @@ object PersistentQueueSpec extends Specification with TestHelper {
         var rv: String = null
         val latch = new CountDownLatch(1)
         actor {
-          q.remove(System.currentTimeMillis + 250, false) { item =>
+          q.remove(Time.now + 250, false) { item =>
             rv = new String(item.get.data)
             latch.countDown
           }

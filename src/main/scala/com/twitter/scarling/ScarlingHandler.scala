@@ -192,7 +192,7 @@ class ScarlingHandler(val session: IoSession, val config: Config) extends Actor 
   private def stats = {
     var report = new mutable.ArrayBuffer[(String, String)]
     report += (("uptime", Scarling.uptime.toString))
-    report += (("time", (System.currentTimeMillis / 1000).toString))
+    report += (("time", (Time.now / 1000).toString))
     report += (("version", Scarling.runtime.jarVersion))
     report += (("curr_items", Scarling.queues.currentItems.toString))
     report += (("total_items", Scarling.queues.totalAdded.toString))
