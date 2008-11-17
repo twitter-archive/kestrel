@@ -2,7 +2,7 @@
   <info
     organisation="com.twitter"
     module="scarling"
-    revision="0.6"
+    revision="0.8"
     e:testclass="com.twitter.TestRunner"
     e:jarclassname="com.twitter.scarling.Scarling"
     e:buildpackage="com/twitter/scarling"
