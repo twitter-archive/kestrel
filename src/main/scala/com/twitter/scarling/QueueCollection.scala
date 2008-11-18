@@ -7,13 +7,17 @@ import net.lag.configgy.{Config, ConfigMap}
 import net.lag.logging.Logger
 
 
-class InaccessibleQueuePath extends Exception("Inaccessible queue path")
+class InaccessibleQueuePath extends Exception("Inaccessible queue path: Must be directory and writable")
 
 
 class QueueCollection(private val queueFolder: String, private var queueConfigs: ConfigMap) {
   private val log = Logger.get
 
   private val path = new File(queueFolder)
+
+  /**
+   * TODO: Use File.mkdirs if possible.
+   */
   if (! path.isDirectory || ! path.canWrite) {
       throw new InaccessibleQueuePath
   }
