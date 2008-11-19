@@ -10,6 +10,20 @@ import org.specs._
 
 object PersistentQueueSpec extends Specification with TestHelper {
 
+  def dumpJournal(folderName: String, qname: String): String = {
+    var rv = List[JournalItem]()
+    new Journal(new File(folderName, qname).getCanonicalPath).replay(qname) { item => rv = item :: rv }
+    rv.reverse map {
+      case JournalItem.Add(item) => "add(%s)".format(new String(item.data))
+      case JournalItem.Remove => "remove"
+      case JournalItem.RemoveTentative => "remove-tentative"
+      case JournalItem.SavedXid(xid) => "xid(%d)".format(xid)
+      case JournalItem.Unremove(xid) => "unremove(%d)".format(xid)
+      case JournalItem.ConfirmRemove(xid) => "confirm-remove(%d)".format(xid)
+    } mkString ", "
+  }
+
+
   "PersistentQueue" should {
     "add and remove one item" in {
       withTempFolder {
@@ -28,7 +42,7 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q.bytes mustEqual 11
         q.journalSize mustEqual 32
 
-        new String(q.remove.get) mustEqual "hello kitty"
+        new String(q.remove.get.data) mustEqual "hello kitty"
 
         q.length mustEqual 0
         q.totalItems mustEqual 1
@@ -71,8 +85,8 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q.length mustEqual 0
         q.totalItems mustEqual 2
         q.bytes mustEqual 0
-        q.journalSize mustEqual 0
-        new File(folderName, "rolling").length mustEqual 0
+        q.journalSize mustEqual 5   // saved xid.
+        new File(folderName, "rolling").length mustEqual 5
 
         PersistentQueue.maxJournalSize = 16 * 1024 * 1024
       }
@@ -84,14 +98,14 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q.setup
         q.add("first".getBytes)
         q.add("second".getBytes)
-        new String(q.remove.get) mustEqual "first"
+        new String(q.remove.get.data) mustEqual "first"
         q.journalSize mustEqual 5 + 6 + 16 + 16 + 5 + 5 + 1
         q.close
 
         val q2 = new PersistentQueue(folderName, "rolling", Config.fromMap(Map.empty))
         q2.setup
         q2.journalSize mustEqual 5 + 6 + 16 + 16 + 5 + 5 + 1
-        new String(q2.remove.get) mustEqual "second"
+        new String(q2.remove.get.data) mustEqual "second"
         q2.journalSize mustEqual 5 + 6 + 16 + 16 + 5 + 5 + 1 + 1
         q2.length mustEqual 0
         q2.close
@@ -120,13 +134,13 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q.setup
         q.add("sunny".getBytes) mustEqual true
         q.length mustEqual 1
-        Thread.sleep(1000)
+        Time.advance(1000)
         q.remove mustEqual None
 
         config("max_age") = 60
         q.add("rainy".getBytes) mustEqual true
         config("max_age") = 1
-        Thread.sleep(1000)
+        Time.advance(1000)
         q.remove mustEqual None
       }
     }
@@ -149,7 +163,7 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q.memoryBytes mustEqual 1024
 
         // read 1 item. queue should pro-actively read the next item in from disk.
-        val d0 = q.remove.get
+        val d0 = q.remove.get.data
         d0(0) mustEqual 0
         q.inReadBehind mustBe true
         q.length mustEqual 9
@@ -168,7 +182,7 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q.memoryBytes mustEqual 1024
 
         // read again.
-        val d1 = q.remove.get
+        val d1 = q.remove.get.data
         d1(0) mustEqual 1
         q.inReadBehind mustBe true
         q.length mustEqual 9
@@ -177,7 +191,7 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q.memoryBytes mustEqual 1024
 
         // and again.
-        val d2 = q.remove.get
+        val d2 = q.remove.get.data
         d2(0) mustEqual 2
         q.inReadBehind mustBe true
         q.length mustEqual 8
@@ -186,7 +200,7 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q.memoryBytes mustEqual 1024
 
         for (i <- 3 until 11) {
-          val d = q.remove.get
+          val d = q.remove.get.data
           d(0) mustEqual i
           q.inReadBehind mustBe false
           q.length mustEqual 10 - i
@@ -225,7 +239,7 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q2.memoryBytes mustEqual 1024
 
         for (i <- 0 until 10) {
-          val d = q2.remove.get
+          val d = q2.remove.get.data
           d(0) mustEqual i
           q2.inReadBehind mustEqual (i < 2)
           q2.length mustEqual 9 - i
@@ -286,13 +300,56 @@ object PersistentQueueSpec extends Specification with TestHelper {
         var rv: String = null
         val latch = new CountDownLatch(1)
         actor {
-          q.remove(System.currentTimeMillis + 250) { item =>
-            rv = new String(item.get)
+          q.remove(Time.now + 250, false) { item =>
+            rv = new String(item.get.data)
             latch.countDown
           }
         }
         latch.await
         rv mustEqual "hello"
+      }
+    }
+
+    "correctly interleave transactions in the journal" in {
+      withTempFolder {
+        PersistentQueue.maxMemorySize = 1024
+        val q = new PersistentQueue(folderName, "things", Config.fromMap(Map.empty))
+        q.setup
+        q.add("house".getBytes)
+        q.add("cat".getBytes)
+        q.journalSize mustEqual 2 * 21 + 8
+
+        val house = q.remove(true).get
+        new String(house.data) mustEqual "house"
+        house.xid mustEqual 1
+        q.journalSize mustEqual 2 * 21 + 8 + 1
+
+        val cat = q.remove(true).get
+        new String(cat.data) mustEqual "cat"
+        cat.xid mustEqual 2
+        q.journalSize mustEqual 2 * 21 + 8 + 1 + 1
+
+        q.unremove(house.xid)
+        q.journalSize mustEqual 2 * 21 + 8 + 1 + 1 + 5
+
+        q.confirmRemove(cat.xid)
+        q.journalSize mustEqual 2 * 21 + 8 + 1 + 1 + 5 + 5
+        q.length mustEqual 1
+        q.bytes mustEqual 5
+
+        new String(q.remove.get.data) mustEqual "house"
+        q.length mustEqual 0
+        q.bytes mustEqual 0
+
+        q.close
+        dumpJournal(folderName, "things") mustEqual
+          "add(house), add(cat), remove-tentative, remove-tentative, unremove(1), confirm-remove(2), remove"
+
+        // and journal is replayed correctly.
+        val q2 = new PersistentQueue(folderName, "things", Config.fromMap(Map.empty))
+        q2.setup
+        q2.length mustEqual 0
+        q2.bytes mustEqual 0
       }
     }
   }

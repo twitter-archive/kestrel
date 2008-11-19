@@ -5,6 +5,9 @@
             <url name="scala-tools.org" m2compatible="true">
                 <artifact pattern="http://scala-tools.org/repo-releases/[organisation]/[module]/[revision]/[artifact]-[revision].[ext]" />
             </url>
+            <url name="scala-tools.org-snapshots" m2compatible="true">
+                <artifact pattern="http://scala-tools.org/repo-snapshots/[organisation]/[module]/[revision]/[artifact]-[revision].[ext]" />
+            </url>
             <ibiblio name="maven2" m2compatible="true"/>
             <url name="lag.net" m2compatible="true">
                 <artifact pattern="http://www.lag.net/repo/[organisation]/[module]/[revision]/[artifact]-[revision].[ext]" />

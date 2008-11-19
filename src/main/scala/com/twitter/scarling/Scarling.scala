@@ -43,7 +43,7 @@ object Scarling {
   var queues: QueueCollection = null
 
   private val _expiryStats = new mutable.HashMap[String, Int]
-  private val _startTime = System.currentTimeMillis
+  private val _startTime = Time.now
 
   ByteBuffer.setUseDirectBuffers(false)
   ByteBuffer.setAllocator(new SimpleByteBufferAllocator())
@@ -98,9 +98,10 @@ object Scarling {
     acceptor.unbindAll
     Scheduler.shutdown
     acceptorExecutor.shutdown
+    // the line below causes a 1s pause in unit tests. :(
     acceptorExecutor.awaitTermination(5, TimeUnit.SECONDS)
     deathSwitch.countDown
   }
 
-  def uptime = (System.currentTimeMillis - _startTime) / 1000
+  def uptime = (Time.now - _startTime) / 1000
 }
