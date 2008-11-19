@@ -136,7 +136,16 @@ class ScarlingHandler(val session: IoSession, val config: Config) extends Actor 
           writeResponse("END\r\n")
         }
       } else {
-        if (opening) closeTransaction(key)
+        if (opening) {
+          closeTransaction(key)
+        } else if (pendingTransaction.isDefined) {
+          log.warning("Attempt to perform a non-transactional fetch with an open transaction on " +
+                      " '%s' (sid %d, %s:%d)", key, sessionID, remoteAddress.getHostName,
+                      remoteAddress.getPort)
+          writeResponse("ERROR\r\n")
+          session.close
+          return
+        }
         ScarlingStats.getRequests.incr
         Scarling.queues.remove(key, timeout, opening) {
           case None =>
