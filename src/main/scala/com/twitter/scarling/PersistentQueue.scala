@@ -3,70 +3,24 @@ package com.twitter.scarling
 import java.io._
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.channels.FileChannel
+import java.util.concurrent.CountDownLatch
 import scala.actors.{Actor, TIMEOUT}
 import scala.collection.mutable
 import net.lag.configgy.{Config, Configgy, ConfigMap}
 import net.lag.logging.Logger
 
 
-// why does java make this so hard? :/
-// this is not threadsafe so may only be used as a local var.
-class IntReader(private val order: ByteOrder) {
-  val buffer = new Array[Byte](4)
-  val byteBuffer = ByteBuffer.wrap(buffer)
-  byteBuffer.order(order)
-
-  def readInt(in: DataInputStream) = {
-    in.readFully(buffer)
-    byteBuffer.rewind
-    byteBuffer.getInt
-  }
-}
-
-
-// again, must be either behind a lock, or in a local var
-class IntWriter(private val order: ByteOrder) {
-  val buffer = new Array[Byte](4)
-  val byteBuffer = ByteBuffer.wrap(buffer)
-  byteBuffer.order(order)
-
-  def writeInt(out: DataOutputStream, n: Int) = {
-    byteBuffer.rewind
-    byteBuffer.putInt(n)
-    out.write(buffer)
-  }
-}
+case class QItem(addTime: Long, expiry: Long, data: Array[Byte], var xid: Int)
 
 
 class PersistentQueue(private val persistencePath: String, val name: String,
                       val config: ConfigMap) {
 
-  private case class QItem(addTime: Long, expiry: Long, data: Array[Byte]) {
-    def pack: Array[Byte] = {
-      val bytes = new Array[Byte](data.length + 16)
-      val buffer = ByteBuffer.wrap(bytes)
-      buffer.order(ByteOrder.LITTLE_ENDIAN)
-      buffer.putLong(addTime)
-      buffer.putLong(expiry)
-      buffer.put(data)
-      bytes
-    }
-  }
-
-  private case class JournalItem(command: Int, length: Int, item: Option[QItem])
-
   private case class Waiter(actor: Actor)
-
   private case object ItemArrived
 
 
   private val log = Logger.get
-
-  private val CMD_ADD = 0
-  private val CMD_REMOVE = 1
-  private val CMD_ADDX = 2
-
-  private val queuePath: String = new File(persistencePath, name).getCanonicalPath()
 
   // current size of all data in the queue:
   private var queueSize: Long = 0
@@ -83,21 +37,15 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   // # of items in the queue (including those not in memory)
   private var queueLength: Long = 0
 
-  private var queue = new mutable.Queue[QItem]
-  private var journal: FileOutputStream = null
-  private var _journalSize: Long = 0
+  private var queue = new mutable.Queue[QItem] {
+    // scala's Queue doesn't (yet?) have a way to put back.
+    def unget(item: QItem) = prependElem(item)
+  }
   private var _memoryBytes: Long = 0
-  private var readJournal: Option[FileInputStream] = None
-
-  // small temporary buffer for formatting ADD transactions into the journal:
-  private var byteBuffer = new ByteArrayOutputStream(16)
-  private var buffer = new DataOutputStream(byteBuffer)
-
-  // sad way to write little-endian ints when journaling queue adds
-  private val intWriter = new IntWriter(ByteOrder.LITTLE_ENDIAN)
+  private var journal = new Journal(new File(persistencePath, name).getCanonicalPath)
 
   // force get/set operations to block while we're replaying any existing journal
-  private val initialized = new Event
+  private val initialized = new CountDownLatch(1)
   private var closed = false
 
   // attempting to add an item after the queue reaches this size will fail.
@@ -109,8 +57,9 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   // clients waiting on an item in this queue
   private val waiters = new mutable.ArrayBuffer[Waiter]
 
-  config.subscribe(configure _)
-  configure(Some(config))
+  // track tentative removals
+  private var xidCounter: Int = 0
+  private val openTransactions = new mutable.HashMap[Int, QItem]
 
   def length: Long = synchronized { queueLength }
 
@@ -118,7 +67,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
 
   def bytes: Long = synchronized { queueSize }
 
-  def journalSize: Long = synchronized { _journalSize }
+  def journalSize: Long = synchronized { journal.size }
 
   def totalExpired: Long = synchronized { _totalExpired }
 
@@ -127,33 +76,17 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   // mostly for unit tests.
   def memoryLength: Long = synchronized { queue.size }
   def memoryBytes: Long = synchronized { _memoryBytes }
-  def inReadBehind = synchronized { readJournal.isDefined }
+  def inReadBehind = synchronized { journal.inReadBehind }
+
+
+  config.subscribe(configure _)
+  configure(Some(config))
 
   def configure(c: Option[ConfigMap]) = synchronized {
     for (config <- c) {
       maxItems = config("max_items", Math.MAX_INT)
       maxAge = config("max_age", 0)
     }
-  }
-
-
-  private def unpack(data: Array[Byte]): QItem = {
-    val buffer = ByteBuffer.wrap(data)
-    val bytes = new Array[Byte](data.length - 16)
-    buffer.order(ByteOrder.LITTLE_ENDIAN)
-    val addTime = buffer.getLong
-    val expiry = buffer.getLong
-    buffer.get(bytes)
-    return QItem(addTime, expiry, bytes)
-  }
-
-  private def unpackOldAdd(data: Array[Byte]): QItem = {
-    val buffer = ByteBuffer.wrap(data)
-    val bytes = new Array[Byte](data.length - 4)
-    buffer.order(ByteOrder.LITTLE_ENDIAN)
-    val expiry = buffer.getInt
-    buffer.get(bytes)
-    return QItem(System.currentTimeMillis, if (expiry == 0) 0 else expiry * 1000, bytes)
   }
 
   private final def adjustExpiry(expiry: Long): Long = {
@@ -168,94 +101,65 @@ class PersistentQueue(private val persistencePath: String, val name: String,
    * Add a value to the end of the queue, transactionally.
    */
   def add(value: Array[Byte], expiry: Long): Boolean = {
-    initialized.waitFor
+    initialized.await
     synchronized {
       if (closed || queueLength >= maxItems) {
-        return false
+        false
+      } else {
+        val item = QItem(Time.now, adjustExpiry(expiry), value, 0)
+        if (!journal.inReadBehind && queueSize >= PersistentQueue.maxMemorySize) {
+          log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
+          journal.startReadBehind
+        }
+        _add(item)
+        journal.add(item)
+        if (waiters.size > 0) {
+          waiters.remove(0).actor ! ItemArrived
+        }
+        true
       }
-
-      if (!readJournal.isDefined && queueSize >= PersistentQueue.maxMemorySize) {
-        startReadBehind(journal.getChannel.position)
-      }
-
-      val item = QItem(System.currentTimeMillis, adjustExpiry(expiry), value)
-      val blob = item.pack
-
-      byteBuffer.reset()
-      buffer.write(CMD_ADDX)
-      intWriter.writeInt(buffer, blob.length)
-      byteBuffer.writeTo(journal)
-      journal.write(blob)
-      /* in theory, you might want to sync the file after each
-       * transaction. however, the original starling doesn't.
-       * i think if you can cope with a truncated journal file,
-       * this is fine, because a non-synced file only matters on
-       * catastrophic disk/machine failure.
-       */
-      //journal.getFD.sync
-      _journalSize += (5 + blob.length)
-
-      _totalItems += 1
-      queueLength += 1
-      queueSize += value.length
-      if (! readJournal.isDefined) {
-        queue += item
-        _memoryBytes += value.length
-      }
-
-      if (waiters.size > 0) {
-        waiters.remove(0).actor ! ItemArrived
-      }
-      true
     }
   }
 
   def add(value: Array[Byte]): Boolean = add(value, 0)
 
   /**
-   * Remove an item from the queue, transactionally. If no item is
-   * available, an empty byte array is returned.
+   * Remove an item from the queue. If no item is available, an empty byte
+   * array is returned.
+   *
+   * @param transaction true if this should be considered the first part
+   *     of a transaction, to be committed or rolled back (put back at the
+   *     head of the queue)
    */
-  def remove(): Option[Array[Byte]] = {
-    initialized.waitFor
+  def remove(transaction: Boolean): Option[QItem] = {
+    initialized.await
     synchronized {
       if (closed || queueLength == 0) {
-        return None
-      }
-
-      journal.write(CMD_REMOVE)
-      journal.getFD.sync
-      _journalSize += 1
-
-      val now = System.currentTimeMillis
-      val item = queue.dequeue
-      queueLength -= 1
-      queueSize -= item.data.length
-      _memoryBytes -= item.data.length
-
-      if ((queueLength == 0) && (_journalSize >= PersistentQueue.maxJournalSize)) {
-        rollJournal
-      }
-      // if we're in read-behind mode, scan forward in the journal to keep memory as full as
-      // possible. this amortizes the disk overhead across all reads.
-      while (readJournal.isDefined && _memoryBytes < PersistentQueue.maxMemorySize) {
-        fillReadBehind(journal.getChannel.position)
-      }
-
-      val realExpiry = adjustExpiry(item.expiry)
-      if ((realExpiry == 0) || (realExpiry >= now)) {
-        _currentAge = now - item.addTime
-        Some(item.data)
+        None
       } else {
-        _totalExpired += 1
-        remove
+        val item = _remove(transaction)
+        if (transaction) journal.removeTentative() else journal.remove()
+
+        if ((queueLength == 0) && (journal.size >= PersistentQueue.maxJournalSize) &&
+            (openTransactions.size == 0)) {
+          log.info("Rolling journal file for '%s'", name)
+          journal.roll
+          journal.saveXid(xidCounter)
+        }
+        item
       }
     }
   }
 
-  def remove(timeoutAbsolute: Long)(f: Option[Array[Byte]] => Unit): Unit = {
+  /**
+   * Remove an item from the queue. If no item is available, an empty byte
+   * array is returned.
+   */
+  def remove(): Option[QItem] = remove(false)
+
+  def remove(timeoutAbsolute: Long, transaction: Boolean)(f: Option[QItem] => Unit): Unit = {
     synchronized {
-      val item = remove()
+      val item = remove(transaction)
       if (item.isDefined) {
         f(item)
       } else if (timeoutAbsolute == 0) {
@@ -263,17 +167,44 @@ class PersistentQueue(private val persistencePath: String, val name: String,
       } else {
         val w = Waiter(Actor.self)
         waiters += w
-        Actor.self.reactWithin((timeoutAbsolute - System.currentTimeMillis) max 0) {
-          case ItemArrived => remove(timeoutAbsolute)(f)
+        Actor.self.reactWithin((timeoutAbsolute - Time.now) max 0) {
+          case ItemArrived => remove(timeoutAbsolute, transaction)(f)
           case TIMEOUT => synchronized {
             waiters -= w
             // race: someone could have done an add() between the timeout and grabbing the lock.
             Actor.self.reactWithin(0) {
-              case ItemArrived => f(remove())
-              case TIMEOUT => f(remove())
+              case ItemArrived => f(remove(transaction))
+              case TIMEOUT => f(remove(transaction))
             }
           }
         }
+      }
+    }
+  }
+
+  /**
+   * Return a transactionally-removed item to the queue. This is a rolled-
+   * back transaction.
+   */
+  def unremove(xid: Int): Unit = {
+    initialized.await
+    synchronized {
+      if (!closed) {
+        journal.unremove(xid)
+        _unremove(xid)
+        if (waiters.size > 0) {
+          waiters.remove(0).actor ! ItemArrived
+        }
+      }
+    }
+  }
+
+  def confirmRemove(xid: Int): Unit = {
+    initialized.await
+    synchronized {
+      if (!closed) {
+        journal.confirmRemove(xid)
+        openTransactions.removeKey(xid)
       }
     }
   }
@@ -286,126 +217,106 @@ class PersistentQueue(private val persistencePath: String, val name: String,
     journal.close()
   }
 
-  def setup: Unit = synchronized {
+  def setup(): Unit = synchronized {
+    queueSize = 0
     replayJournal
-    initialized.set
+    initialized.countDown
   }
 
-
-  private def startReadBehind(pos: Long): Unit = {
-    log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
-    val rj = new FileInputStream(queuePath)
-    rj.getChannel.position(pos)
-    readJournal = Some(rj)
+  private def nextXid(): Int = {
+    do {
+      xidCounter += 1
+    } while (openTransactions contains xidCounter)
+    xidCounter
   }
 
-  private def fillReadBehind(pos: Long): Unit = {
-    for (rj <- readJournal) {
-      if (rj.getChannel.position == pos) {
-        // we've caught up.
-        log.info("Coming out of read-behind for queue '%s'", name)
-        rj.close
-        readJournal = None
-      } else {
-        readJournalEntry(new DataInputStream(readJournal.get),
-                         new IntReader(ByteOrder.LITTLE_ENDIAN)) match {
-          case JournalItem(CMD_ADDX, _, Some(item)) =>
-            queue += item
-            _memoryBytes += item.data.length
-          case JournalItem(_, _, _) =>
+  def fillReadBehind(): Unit = {
+    journal.fillReadBehind { item =>
+      queue += item
+      _memoryBytes += item.data.length
+    }
+  }
+
+  def replayJournal(): Unit = {
+    log.info("Replaying transaction journal for '%s'", name)
+    xidCounter = 0
+
+    journal.replay(name) {
+      case JournalItem.Add(item) =>
+        _add(item)
+        // when processing the journal, this has to happen after:
+        if (!journal.inReadBehind && queueSize >= PersistentQueue.maxMemorySize) {
+          log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
+          journal.startReadBehind
         }
+      case JournalItem.Remove => _remove(false)
+      case JournalItem.RemoveTentative => _remove(true)
+      case JournalItem.SavedXid(xid) => xidCounter = xid
+      case JournalItem.Unremove(xid) => _unremove(xid)
+      case JournalItem.ConfirmRemove(xid) => openTransactions.removeKey(xid)
+      case x => log.error("Unexpected item in journal: %s", x)
+    }
+    log.info("Finished transaction journal for '%s' (%d items, %d bytes)", name, queueLength,
+             journal.size)
+    journal.open
+  }
+
+
+  //  -----  internal implementations
+
+  private def _add(item: QItem): Unit = {
+    if (!journal.inReadBehind) {
+      queue += item
+      _memoryBytes += item.data.length
+    }
+    _totalItems += 1
+    queueSize += item.data.length
+    queueLength += 1
+  }
+
+  private def _remove(transaction: Boolean): Option[QItem] = {
+    if (queue.isEmpty) return None
+
+    val now = Time.now
+    val item = queue.dequeue
+    val len = item.data.length
+    queueSize -= len
+    _memoryBytes -= len
+    queueLength -= 1
+    val xid = if (transaction) nextXid else 0
+
+    // if we're in read-behind mode, scan forward in the journal to keep memory as full as
+    // possible. this amortizes the disk overhead across all reads.
+    while (journal.inReadBehind && _memoryBytes < PersistentQueue.maxMemorySize) {
+      fillReadBehind
+      if (!journal.inReadBehind) {
+        log.info("Coming out of read-behind for queue '%s'", name)
       }
     }
-  }
 
-  private def openJournal: Unit = {
-    journal = new FileOutputStream(queuePath, true)
-  }
-
-  private def rollJournal: Unit = {
-    log.info("Rolling journal file for '%s'", name)
-    journal.close
-
-    val backupFile = new File(queuePath + "." + System.currentTimeMillis)
-    new File(queuePath).renameTo(backupFile)
-    openJournal
-    _journalSize = 0
-    backupFile.delete
-  }
-
-  private def replayJournal: Unit = {
-    queueSize = 0
-
-    try {
-      val fileIn = new FileInputStream(queuePath)
-      val in = new DataInputStream(fileIn)
-      var offset: Long = 0
-      val intReader = new IntReader(ByteOrder.LITTLE_ENDIAN)
-
-      log.info("Replaying transaction journal for '%s'", name)
-      var done = false
-      do {
-        readJournalEntry(in, intReader) match {
-          case JournalItem(CMD_ADDX, length, Some(item)) =>
-            if (!readJournal.isDefined) {
-              queue += item
-              _memoryBytes += item.data.length
-            }
-            queueSize += item.data.length
-            queueLength += 1
-            offset += length
-            if (!readJournal.isDefined && queueSize >= PersistentQueue.maxMemorySize) {
-              startReadBehind(fileIn.getChannel.position)
-            }
-          case JournalItem(CMD_REMOVE, length, _) =>
-            val len = queue.dequeue.data.length
-            queueSize -= len
-            _memoryBytes -= len
-            queueLength -= 1
-            offset += length
-            while (readJournal.isDefined && _memoryBytes < PersistentQueue.maxMemorySize) {
-              fillReadBehind(fileIn.getChannel.position)
-            }
-          case JournalItem(-1, _, _) =>
-            done = true
-        }
-      } while (!done)
-      _journalSize = offset
-      log.info("Finished transaction journal for '%s' (%d items, %d bytes)", name, queueLength, offset)
-    } catch {
-      case e: FileNotFoundException =>
-        log.info("No transaction journal for '%s'; starting with empty queue.", name)
-      case e: IOException =>
-        log.error(e, "Exception replaying journal for '%s'", name)
-        log.error("DATA MAY HAVE BEEN LOST!")
-        // this can happen if the server hardware died abruptly in the middle
-        // of writing a journal. not awesome but we should recover.
+    val realExpiry = adjustExpiry(item.expiry)
+    if ((realExpiry == 0) || (realExpiry >= now)) {
+      _currentAge = now - item.addTime
+      if (transaction) {
+        item.xid = xid
+        openTransactions(xid) = item
+      }
+      Some(item)
+    } else {
+      _totalExpired += 1
+      _remove(transaction)
     }
-
-    openJournal
   }
 
-  private def readJournalEntry(in: DataInputStream, intReader: IntReader): JournalItem = {
-    in.read() match {
-      case -1 =>
-        JournalItem(-1, 0, None)
-      case CMD_ADD =>
-        val size = intReader.readInt(in)
-        val data = new Array[Byte](size)
-        in.readFully(data)
-        JournalItem(CMD_ADDX, 5 + data.length, Some(unpackOldAdd(data)))
-      case CMD_REMOVE =>
-        JournalItem(CMD_REMOVE, 1, None)
-      case CMD_ADDX =>
-        val size = intReader.readInt(in)
-        val data = new Array[Byte](size)
-        in.readFully(data)
-        JournalItem(CMD_ADDX, 5 + data.length, Some(unpack(data)))
-      case n =>
-        throw new IOException("invalid opcode in journal: " + n.toInt)
-    }
+  private def _unremove(xid: Int) = {
+    val item = openTransactions.removeKey(xid).get
+    queueLength += 1
+    queueSize += item.data.length
+    queue unget item
+    _memoryBytes += item.data.length
   }
 }
+
 
 object PersistentQueue {
   @volatile var maxJournalSize: Long = 16 * 1024 * 1024
