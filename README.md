@@ -35,8 +35,8 @@ Scarling is:
 - small
 
   Currently about 1K lines of scala (including comments), because it relies
-  on Appache Mina (a rough equivalent of Danger's ziggurat or Ruby's
-  eventmachine) and actors. And frankly because Scala is extremely
+  on Apache Mina (a rough equivalent of Danger's ziggurat or Ruby's
+  EventMachine) and actors. And frankly because Scala is extremely
   expressive.
 
 - durable
