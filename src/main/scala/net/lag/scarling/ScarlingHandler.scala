@@ -154,13 +154,12 @@ class ScarlingHandler(val session: IoSession, val config: Config) extends Actor 
                       key, sessionID, remoteAddress.getHostName, remoteAddress.getPort)
           writeResponse("ERROR\r\n")
           session.close
-        } else {
+        } else if (!opening) {
           writeResponse("END\r\n")
         }
-      } else {
-        if (opening) {
-          closeTransaction(key)
-        } else if (pendingTransaction.isDefined) {
+      }
+      if (opening || !closing) {
+        if (pendingTransaction.isDefined) {
           log.warning("Attempt to perform a non-transactional fetch with an open transaction on " +
                       " '%s' (sid %d, %s:%d)", key, sessionID, remoteAddress.getHostName,
                       remoteAddress.getPort)

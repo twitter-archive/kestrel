@@ -173,8 +173,8 @@ object ServerSpec extends Specification with TestHelper {
 
         val client2 = new TestClient("localhost", 22122)
         client2.get("auto-commit/open") mustEqual v.toString
-        client2.get("auto-commit/open") mustEqual (v + 1).toString
-        client2.get("auto-commit/open") mustEqual (v + 2).toString
+        client2.get("auto-commit/close/open") mustEqual (v + 1).toString
+        client2.get("auto-commit/close/open") mustEqual (v + 2).toString
         client2.disconnect
         Thread.sleep(10)
 
