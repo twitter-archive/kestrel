@@ -1,5 +1,5 @@
 /** Copyright 2008 Twitter, Inc. */
-package com.twitter.scarling.memcache
+package net.lag.scarling.memcache
 
 import org.apache.mina.common.{ByteBuffer, IoSession}
 import org.apache.mina.common.support.{BaseIoSession}

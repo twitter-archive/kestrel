@@ -1,5 +1,5 @@
 /** Copyright 2008 Twitter, Inc. */
-package com.twitter
+package net.lag
 
 import net.lag.configgy.Configgy
 import net.lag.logging.Logger

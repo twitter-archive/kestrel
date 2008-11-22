@@ -1,4 +1,4 @@
-package com.twitter.scarling
+package net.lag.scarling
 
 import net.lag.logging.Logger
 import java.io._

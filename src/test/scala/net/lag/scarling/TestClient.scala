@@ -1,4 +1,4 @@
-package com.twitter.scarling
+package net.lag.scarling
 
 import java.io._
 import java.net.Socket

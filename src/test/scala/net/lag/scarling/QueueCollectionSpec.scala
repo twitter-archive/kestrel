@@ -1,5 +1,5 @@
 /** Copyright 2008 Twitter, Inc. */
-package com.twitter.scarling
+package net.lag.scarling
 
 import scala.util.Sorting
 import java.io.{File, FileInputStream}

@@ -1,4 +1,4 @@
-package com.twitter.scarling
+package net.lag.scarling
 
 // stolen from nick's ruby version.
 // this lets unit tests muck around with temporality without calling Thread.sleep().

@@ -1,5 +1,5 @@
 /** Copyright 2008 Twitter, Inc. */
-package com.twitter.scarling
+package net.lag.scarling
 
 import java.io.File
 import java.net.Socket

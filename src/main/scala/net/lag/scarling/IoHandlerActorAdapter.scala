@@ -1,4 +1,4 @@
-package com.twitter.scarling
+package net.lag.scarling
 
 import scala.actors.Actor
 import org.apache.mina.common._

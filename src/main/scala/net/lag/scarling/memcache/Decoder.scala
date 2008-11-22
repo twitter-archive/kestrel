@@ -1,4 +1,4 @@
-package com.twitter.scarling.memcache
+package net.lag.scarling.memcache
 
 import scala.collection.mutable
 import org.apache.mina.common.{ByteBuffer, IoSession}

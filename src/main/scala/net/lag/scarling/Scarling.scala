@@ -1,4 +1,4 @@
-package com.twitter.scarling
+package net.lag.scarling
 
 import java.net.InetSocketAddress
 import java.util.Properties

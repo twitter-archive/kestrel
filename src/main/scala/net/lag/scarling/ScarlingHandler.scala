@@ -1,4 +1,4 @@
-package com.twitter.scarling
+package net.lag.scarling
 
 import java.net.InetSocketAddress
 import java.nio.ByteOrder
@@ -7,9 +7,9 @@ import scala.actors.Actor._
 import scala.collection.mutable
 import net.lag.configgy.{Config, Configgy, RuntimeEnvironment}
 import net.lag.logging.Logger
+import net.lag.scarling.memcache.ProtocolException
 import org.apache.mina.common._
 import org.apache.mina.transport.socket.nio.SocketSessionConfig
-import com.twitter.scarling.memcache.ProtocolException
 
 
 class ScarlingHandler(val session: IoSession, val config: Config) extends Actor {

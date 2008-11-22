@@ -1,4 +1,4 @@
-package com.twitter.scarling.load
+package net.lag.scarling.load
 
 import java.net._
 import java.nio._

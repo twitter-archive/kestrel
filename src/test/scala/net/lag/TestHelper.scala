@@ -1,5 +1,5 @@
 /** Copyright 2008 Twitter, Inc. */
-package com.twitter
+package net.lag
 
 import java.io.File
 

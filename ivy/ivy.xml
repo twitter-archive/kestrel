@@ -1,11 +1,11 @@
 <ivy-module version="1.0" xmlns:e="http://ant.apache.org/ivy/extra">
   <info
-    organisation="com.twitter"
+    organisation="net.lag"
     module="scarling"
     revision="0.8"
-    e:testclass="com.twitter.TestRunner"
-    e:jarclassname="com.twitter.scarling.Scarling"
-    e:buildpackage="com/twitter/scarling"
+    e:testclass="net.lag.TestRunner"
+    e:jarclassname="net.lag.scarling.Scarling"
+    e:buildpackage="net.lag.scarling"
   />
 
   <configurations>
