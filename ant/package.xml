@@ -25,25 +25,33 @@
     <copy todir="${dist.dir}/scripts" overwrite="true">
       <fileset dir="${basedir}/src/scripts" />
       <filterset>
-        <filter token="CLASSPATH" value="${classpath}:${target.dir}" />
-        <filter token="TEST_CLASSPATH" value="${test.classpath}:${target.dir}" />
+        <filter token="CLASSPATH" value="${classpath}:${target.dir}/classes" />
+        <filter token="TEST_CLASSPATH" value="${test.classpath}:${target.dir}/classes:${target.dir}/test-classes" />
       </filterset>
     </copy>
     <chmod dir="${dist.dir}/scripts" includes="*" perm="ugo+x" />
   </target>
 
   <target name="package" depends="test, make-non-executable-jar, make-executable-jar,
-    generate-scripts" description="build complete jar(s) and docs">
+    generate-scripts, docs" description="build complete jar(s) and docs">
     <ivy:makepom ivyfile="${basedir}/ivy/ivy.xml" pomfile="${dist.dir}/${ivy.module}-${ivy.revision}.pom" />
     <ivy:deliver conf="*(public)" />
     <zip destfile="${basedir}/dist/${ivy.module}-${ivy.revision}.zip"
-      basedir="${basedir}/dist"
-      includes="${ivy.module}-${ivy.revision}/${ivy.module}-${ivy.revision}.jar ${ivy.module}-${ivy.revision}/libs/** ${ivy.module}-${ivy.revision}/config/**" />
+      basedir="${basedir}/dist">
+      <include name="${ivy.module}-${ivy.revision}/${ivy.module}-${ivy.revision}.jar" />
+      <include name="${ivy.module}-${ivy.revision}/*.so" />
+      <include name="${ivy.module}-${ivy.revision}/*.jnilib" />
+      <include name="${ivy.module}-${ivy.revision}/libs/**" />
+      <include name="${ivy.module}-${ivy.revision}/config/**" />
+    </zip>
+    <ivy:publish resolver="local" overwrite="true">
+      <artifacts pattern="${dist.dir}/[artifact]-[revision].[ext]" />
+    </ivy:publish>
   </target>
 
   <target name="jars" depends="package" />
 
-  <target name="dist" depends="package">
+  <target name="dist" depends="package" description="create a source distribution zipfile">
     <copy todir="${dist.dir}" failonerror="false">
       <fileset dir="${basedir}" includes="INSTALL* LICENSE* README* build.xml" />
     </copy>
@@ -61,5 +69,4 @@
       includes="${ivy.module}-${ivy.revision}/**"
       excludes="${ivy.module}-${ivy.revision}/libs/** ${ivy.module}-${ivy.revision}/*.jar" />
   </target>
-
 </project>

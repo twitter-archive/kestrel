@@ -13,10 +13,6 @@
   <property name="jsch.install.version" value="0.1.29" />
   <property name="jsch.jar.file" value="${ivy.jar.dir}/jsch-${jsch.install.version}.jar" />
 
-  <!-- override some ivy config -->
-  <property name="ivy.distrib.dir" value="${dist.dir}" />
-  <property name="ivy.deliver.ivy.pattern" value="${dist.dir}/[artifact]-[revision].[ext]" />
-
   <!--
     download ivy from the web site so that it can be used without being
     installed. if the file has already been downloaded, we use a rename
@@ -52,7 +48,13 @@
   <condition property="os.libsname" value="osx">
     <os name="Mac OS X" />
   </condition>
+  <condition property="os.jni.ext" value="jnilib">
+    <os name="Mac OS X" />
+  </condition>
   <condition property="os.libsname" value="linux">
+    <os name="Linux" />
+  </condition>
+  <condition property="os.jni.ext" value="so">
     <os name="Linux" />
   </condition>
 

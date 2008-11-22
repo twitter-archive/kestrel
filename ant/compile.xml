@@ -3,18 +3,6 @@
   <property name="thrift.source.dir" value="${source.dir}/thrift" />
   <property name="thrift.target.dir" value="${target.dir}/gen-java" />
 
-  <target name="find-source">
-    <pathconvert property="build.java" setonempty="false">
-      <fileset dir="${source.dir}" includes="java/**/*.java" />
-    </pathconvert>
-    <pathconvert property="build.scala" setonempty="false">
-      <fileset dir="${source.dir}" includes="scala/**/*.scala" />
-    </pathconvert>
-    <pathconvert property="copy.config" setonempty="false">
-      <fileset dir="${basedir}" includes="config/*" />
-    </pathconvert>
-  </target>
-
 
   <!-- generate thrift stubs if necessary -->
 
@@ -24,12 +12,13 @@
         <path location="${ivy.extra.thriftpackage}" />
         <unpackagemapper from="${basedir}/*" to="${thrift.target.dir}/*" />
       </pathconvert>
+      <mkdir dir="${thrift.target.dir}" />
       <apply executable="thrift" dest="${thrift.gen.path}" failonerror="true"
         skipemptyfilesets="true" verbose="true">
         <arg value="--gen" />
         <arg value="java" />
         <arg value="-o" />
-        <arg value="src/main" />
+        <arg value="${target.dir}" />
         <arg value="" />
         <fileset dir="${thrift.source.dir}" includes="**/*.thrift" />
         <globmapper from="*.thrift" to="*.java" />
@@ -51,6 +40,29 @@
   <target name="compile-thrift" if="ivy.extra.thriftpackage">
     <generate-thrift />
     <compile-generated-thrift />
+  </target>
+
+
+  <!-- if there's any jni, compile it -->
+
+  <target name="check-jni-source" if="build.jni">
+    <!-- tricksy. remove any target files if any non-target files are newer. -->
+    <dependset>
+      <srcfileset dir="src/main/jni" excludes="**/target/*.${os.jni.ext} **/target/*.jar" />
+      <targetfileset dir="src/main/jni" includes="**/target/*.${os.jni.ext} **/target/*.jar" />
+    </dependset>
+    <!-- and then only set build.jni.ok if those targets are "older" than build.xml (ie missing) -->
+    <uptodate property="build.jni.ok" targetfile="src/main/jni/build.xml">
+      <srcfiles dir="src/main/jni" includes="**/target/*.${os.jni.ext} **/target/*.jar" />
+    </uptodate>
+  </target>
+
+  <target name="compile-jni" depends="check-jni-source" if="build.jni.ok">
+    <ant dir="src/main/jni" target="compile" inheritAll="false" />
+    <copy todir="${dist.dir}" flatten="true">
+      <fileset dir="src/main/jni" includes="**/target/*.${os.jni.ext}" />
+      <fileset dir="src/main/jni" includes="**/target/*.jar" />
+    </copy>
   </target>
 
 
@@ -123,6 +135,12 @@
     </copy>
   </target>
 
+  <target name="copy-extra-config" if="config.extra">
+    <copy todir="${dist.dir}/config">
+      <fileset dir="${config.extra}" />
+    </copy>
+  </target>
+
   <target name="copy-extra-libs" if="libs.extra">
     <copy todir="${dist.dir}/libs">
       <path refid="libs.extra" />
@@ -135,11 +153,11 @@
     </copy>
   </target>
 
-  <target name="copy-extra" depends="copy-resources, copy-config, copy-extra-libs, copy-extra-dist" />
+  <target name="copy-extra" depends="copy-resources, copy-config, copy-extra-config, copy-extra-libs, copy-extra-dist" />
 
 
-  <target name="compile" depends="prepare, find-source, compile-thrift, compile-java,
-    compile-scala, write-build-info, copy-extra"
+  <target name="compile" depends="prepare, find-source, compile-thrift, check-jni-source, compile-jni,
+    compile-java, compile-scala, write-build-info, copy-extra"
     description="compile java and scala code" />
 
 </project>

@@ -11,4 +11,10 @@
     <ivy:cleancache />
   </target>
 
+  <target name="clean-jni" depends="prepare" description="clean out any built jni targets" if="build.jni">
+    <ant dir="src/main/jni" target="clean" />
+  </target>
+
+  <target name="distclean" depends="clean, clean-jni, clean-ivy" />
+
 </project>
