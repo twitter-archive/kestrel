@@ -111,9 +111,10 @@ class PersistentQueue(private val persistencePath: String, val name: String,
     }
   }
 
-  private final def adjustExpiry(expiry: Long): Long = {
+  private final def adjustExpiry(startingTime: Long, expiry: Long): Long = {
     if (maxAge > 0) {
-      if (expiry > 0) (expiry min maxAge) else maxAge
+      val maxExpiry = startingTime + maxAge
+      if (expiry > 0) (expiry min maxExpiry) else maxExpiry
     } else {
       expiry
     }
@@ -128,7 +129,8 @@ class PersistentQueue(private val persistencePath: String, val name: String,
       if (closed || queueLength >= maxItems) {
         false
       } else {
-        val item = QItem(Time.now, adjustExpiry(expiry), value, 0)
+        val now = Time.now
+        val item = QItem(now, adjustExpiry(now, expiry), value, 0)
         if (!journal.inReadBehind && queueSize >= PersistentQueue.maxMemorySize) {
           log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
           journal.startReadBehind
@@ -245,17 +247,24 @@ class PersistentQueue(private val persistencePath: String, val name: String,
     initialized.countDown
   }
 
-  private def nextXid(): Int = {
+  private final def nextXid(): Int = {
     do {
       xidCounter += 1
     } while (openTransactions contains xidCounter)
     xidCounter
   }
 
-  def fillReadBehind(): Unit = {
-    journal.fillReadBehind { item =>
-      queue += item
-      _memoryBytes += item.data.length
+  private final def fillReadBehind(): Unit = {
+    // if we're in read-behind mode, scan forward in the journal to keep memory as full as
+    // possible. this amortizes the disk overhead across all reads.
+    while (journal.inReadBehind && _memoryBytes < PersistentQueue.maxMemorySize) {
+      journal.fillReadBehind { item =>
+        queue += item
+        _memoryBytes += item.data.length
+      }
+      if (!journal.inReadBehind) {
+        log.info("Coming out of read-behind for queue '%s'", name)
+      }
     }
   }
 
@@ -294,9 +303,11 @@ class PersistentQueue(private val persistencePath: String, val name: String,
     _totalItems += 1
     queueSize += item.data.length
     queueLength += 1
+    discardExpired
   }
 
   private def _remove(transaction: Boolean): Option[QItem] = {
+    discardExpired
     if (queue.isEmpty) return None
 
     val now = Time.now
@@ -307,26 +318,27 @@ class PersistentQueue(private val persistencePath: String, val name: String,
     queueLength -= 1
     val xid = if (transaction) nextXid else 0
 
-    // if we're in read-behind mode, scan forward in the journal to keep memory as full as
-    // possible. this amortizes the disk overhead across all reads.
-    while (journal.inReadBehind && _memoryBytes < PersistentQueue.maxMemorySize) {
-      fillReadBehind
-      if (!journal.inReadBehind) {
-        log.info("Coming out of read-behind for queue '%s'", name)
-      }
+    fillReadBehind
+    _currentAge = now - item.addTime
+    if (transaction) {
+      item.xid = xid
+      openTransactions(xid) = item
     }
+    Some(item)
+  }
 
-    val realExpiry = adjustExpiry(item.expiry)
-    if ((realExpiry == 0) || (realExpiry >= now)) {
-      _currentAge = now - item.addTime
-      if (transaction) {
-        item.xid = xid
-        openTransactions(xid) = item
+  private final def discardExpired(): Unit = {
+    if (!queue.isEmpty) {
+      val realExpiry = adjustExpiry(queue.first.addTime, queue.first.expiry)
+      if ((realExpiry != 0) && (realExpiry < Time.now)) {
+        _totalExpired += 1
+        val len = queue.dequeue.data.length
+        queueSize -= len
+        _memoryBytes -= len
+        queueLength -= 1
+        fillReadBehind
+        discardExpired
       }
-      Some(item)
-    } else {
-      _totalExpired += 1
-      _remove(transaction)
     }
   }
 
