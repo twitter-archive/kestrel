@@ -1,8 +1,8 @@
 
-Scarling
-========
+Kestrel
+=======
 
-Scarling is a port of Blaine Cook's "starling" message queue
+Kestrel is a port of Blaine Cook's "starling" message queue
 system from ruby to scala: <http://rubyforge.org/projects/starling/>
 
 In Blaine's words:
@@ -22,10 +22,14 @@ cross communication makes it horizontally scale to infinity and beyond: no
 multicast, no clustering, no "elections", no coordination at all. No talking!
 Shhh!
 
+Kestrel adds several additional features, like ginormous queues, reliable
+fetch, and blocking/timeout fetch -- as well as the scalability offered by
+actors and the JVM.
+
 Features
 --------
 
-Scarling is:
+Kestrel is:
 
 - fast
 
@@ -34,20 +38,27 @@ Scarling is:
   
 - small
 
-  Currently about 1K lines of scala (including comments), because it relies
+  Currently about 1.5K lines of scala (including comments), because it relies
   on Apache Mina (a rough equivalent of Danger's ziggurat or Ruby's
-  EventMachine) and actors. And frankly because Scala is extremely
+  EventMachine) and actors -- and frankly because Scala is extremely
   expressive.
 
 - durable
 
   Queues are stored in memory for speed, but logged into a journal on disk
   so that servers can be shutdown or moved without losing any data.
-  
+
+- reliable
+
+  A client can ask to "tentatively" fetch an item from a queue, and if that
+  client disconnects from kestrel before confirming ownership of the item,
+  the item is handed to another client. In this way, crashing clients don't
+  cause lost messages.
+
 Anti-Features
 -------------
 
-Scarling is not:
+Kestrel is not:
 
 - strongly ordered
 
@@ -57,9 +68,9 @@ Scarling is not:
 
 - transactional
 
-  Currently when you `get` an item from a queue, it is removed instantly
-  from that queue and you are responsible for it. If a client crashes after
-  getting at item, it may be lost.
+  This is not a database. Item ownership is transferred with acknowledgement,
+  but kestrel does not concern itself with what happens to an item after a
+  client has accepted it.
 
 
 Use
@@ -73,7 +84,7 @@ Scala libraries and dependencies will be downloaded from maven repositories
 the first time you do a build. The finished distribution will be in `dist`.
 
 A sample startup script is included, or you may run the jar directly. All
-configuration is loaded from `scarling.conf`.
+configuration is loaded from `kestrel.conf`.
 
 
 Performance
@@ -93,7 +104,7 @@ core).
           100                100        3.1s
     =========  =================  ==========
 
-Scarling uses N+1 I/O processor threads (where N = the number of available CPU
+Kestrel uses N+1 I/O processor threads (where N = the number of available CPU
 cores), and a pool of worker threads for handling actor events. Therefore it
 handles more poorly for small numbers of heavy-use clients, and better for
 large numbers of clients.

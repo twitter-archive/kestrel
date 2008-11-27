@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project name="scarling-tests" default="default" basedir=".">
-  <description> Scarling load tests </description>
+<project name="kestrel-tests" default="default" basedir=".">
+  <description> Kestrel load tests </description>
   <import file="ant/bootstrap.xml" />
 
   <target name="put-many-1" depends="prepare">
