@@ -20,7 +20,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-package net.lag.scarling
+package net.lag.kestrel
 
 import java.net.InetSocketAddress
 import java.util.Properties
@@ -47,7 +47,7 @@ class Counter {
 }
 
 
-object ScarlingStats {
+object KestrelStats {
   val bytesRead = new Counter
   val bytesWritten = new Counter
   val sessions = new Counter
@@ -58,7 +58,7 @@ object ScarlingStats {
 }
 
 
-object Scarling {
+object Kestrel {
   private val log = Logger.get
   val runtime = new RuntimeEnvironment(getClass)
 

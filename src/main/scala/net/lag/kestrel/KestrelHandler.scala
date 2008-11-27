@@ -20,7 +20,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-package net.lag.scarling
+package net.lag.kestrel
 
 import java.net.InetSocketAddress
 import java.nio.ByteOrder
@@ -29,12 +29,12 @@ import scala.actors.Actor._
 import scala.collection.mutable
 import net.lag.configgy.{Config, Configgy, RuntimeEnvironment}
 import net.lag.logging.Logger
-import net.lag.scarling.memcache.ProtocolException
+import net.lag.kestrel.memcache.ProtocolException
 import org.apache.mina.common._
 import org.apache.mina.transport.socket.nio.SocketSessionConfig
 
 
-class ScarlingHandler(val session: IoSession, val config: Config) extends Actor {
+class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
   private val log = Logger.get
 
   private val IDLE_TIMEOUT = 60
