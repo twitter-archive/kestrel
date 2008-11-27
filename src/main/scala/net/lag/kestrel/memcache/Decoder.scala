@@ -20,7 +20,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-package net.lag.scarling.memcache
+package net.lag.kestrel.memcache
 
 import scala.collection.mutable
 import org.apache.mina.common.{ByteBuffer, IoSession}
@@ -49,7 +49,7 @@ class ProtocolException(desc: String) extends Exception(desc)
 class Encoder extends ProtocolEncoder {
   def encode(session: IoSession, message: AnyRef, out: ProtocolEncoderOutput) = {
     val buffer = message.asInstanceOf[Response].data
-    ScarlingStats.bytesWritten.incr(buffer.remaining)
+    KestrelStats.bytesWritten.incr(buffer.remaining)
     out.write(buffer)
   }
 
@@ -120,7 +120,7 @@ class Decoder extends ProtocolDecoder {
       session.setAttribute(STATE_KEY, state)
     }
 
-    ScarlingStats.bytesRead.incr(in.remaining)
+    KestrelStats.bytesRead.incr(in.remaining)
     state.buffer.put(in)
     state.buffer.flip
 

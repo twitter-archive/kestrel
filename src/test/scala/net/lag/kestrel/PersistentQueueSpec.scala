@@ -20,7 +20,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-package net.lag.scarling
+package net.lag.kestrel
 
 import java.io.{File, FileInputStream}
 import java.util.concurrent.CountDownLatch

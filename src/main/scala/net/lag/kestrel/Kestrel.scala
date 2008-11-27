@@ -104,9 +104,9 @@ object Kestrel {
     saConfig.setBacklog(1000)
     saConfig.getSessionConfig.setTcpNoDelay(true)
     saConfig.getFilterChain.addLast("codec", new ProtocolCodecFilter(new memcache.Encoder, new memcache.Decoder))
-    acceptor.bind(new InetSocketAddress(listenAddress, listenPort), new IoHandlerActorAdapter((session: IoSession) => new ScarlingHandler(session, config)), saConfig)
+    acceptor.bind(new InetSocketAddress(listenAddress, listenPort), new IoHandlerActorAdapter((session: IoSession) => new KestrelHandler(session, config)), saConfig)
 
-    log.info("Scarling started.")
+    log.info("Kestrel started.")
 
     // make sure there's always one actor running so scala 272rc6 doesn't kill off the actors library.
     actor {

@@ -20,7 +20,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-package net.lag.scarling.load
+package net.lag.kestrel.load
 
 import java.net._
 import java.nio._

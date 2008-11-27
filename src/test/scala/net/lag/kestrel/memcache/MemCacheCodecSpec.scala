@@ -20,7 +20,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-package net.lag.scarling.memcache
+package net.lag.kestrel.memcache
 
 import org.apache.mina.common.{ByteBuffer, IoSession}
 import org.apache.mina.common.support.{BaseIoSession}

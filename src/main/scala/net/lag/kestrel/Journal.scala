@@ -20,7 +20,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-package net.lag.scarling
+package net.lag.kestrel
 
 import net.lag.logging.Logger
 import java.io._

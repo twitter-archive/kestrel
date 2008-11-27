@@ -20,7 +20,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-package net.lag.scarling
+package net.lag.kestrel
 
 import java.io.File
 import java.util.concurrent.CountDownLatch
@@ -82,7 +82,7 @@ class QueueCollection(private val queueFolder: String, private var queueConfigs:
    * Get a named queue, creating it if necessary.
    * Exposed only to unit tests.
    */
-  private[scarling] def queue(name: String): Option[PersistentQueue] = {
+  private[kestrel] def queue(name: String): Option[PersistentQueue] = {
     var setup = false
     var queue: Option[PersistentQueue] = None
 

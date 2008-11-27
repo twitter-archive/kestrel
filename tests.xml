@@ -4,7 +4,7 @@
   <import file="ant/bootstrap.xml" />
 
   <target name="put-many-1" depends="prepare">
-    <java classname="net.lag.scarling.load.PutMany" fork="true" failonerror="true">
+    <java classname="net.lag.kestrel.load.PutMany" fork="true" failonerror="true">
       <classpath>
         <path refid="test.path" />
         <pathelement location="${target.dir}/classes" />
@@ -15,7 +15,7 @@
   </target>
 
   <target name="put-many-10" depends="prepare">
-    <java classname="net.lag.scarling.load.PutMany" fork="true" failonerror="true">
+    <java classname="net.lag.kestrel.load.PutMany" fork="true" failonerror="true">
       <classpath>
         <path refid="test.path" />
         <pathelement location="${target.dir}/classes" />
@@ -26,7 +26,7 @@
   </target>
 
   <target name="put-many-100" depends="prepare">
-    <java classname="net.lag.scarling.load.PutMany" fork="true" failonerror="true">
+    <java classname="net.lag.kestrel.load.PutMany" fork="true" failonerror="true">
       <classpath>
         <path refid="test.path" />
         <pathelement location="${target.dir}/classes" />
@@ -37,7 +37,7 @@
   </target>
 
   <target name="put-many-1000" depends="prepare">
-    <java classname="net.lag.scarling.load.PutMany" fork="true" failonerror="true">
+    <java classname="net.lag.kestrel.load.PutMany" fork="true" failonerror="true">
       <classpath>
         <path refid="test.path" />
         <pathelement location="${target.dir}/classes" />
@@ -48,7 +48,7 @@
   </target>
 
   <target name="put-many-2000" depends="prepare">
-    <java classname="net.lag.scarling.load.PutMany" fork="true" failonerror="true">
+    <java classname="net.lag.kestrel.load.PutMany" fork="true" failonerror="true">
       <classpath>
         <path refid="test.path" />
         <pathelement location="${target.dir}/classes" />
@@ -59,7 +59,7 @@
   </target>
 
   <target name="many-clients-100" depends="prepare">
-    <java classname="net.lag.scarling.load.ManyClients" fork="true" failonerror="true">
+    <java classname="net.lag.kestrel.load.ManyClients" fork="true" failonerror="true">
       <classpath>
         <path refid="test.path" />
         <pathelement location="${target.dir}/classes" />
@@ -70,7 +70,7 @@
   </target>
 
   <target name="many-clients-500" depends="prepare">
-    <java classname="net.lag.scarling.load.ManyClients" fork="true" failonerror="true">
+    <java classname="net.lag.kestrel.load.ManyClients" fork="true" failonerror="true">
       <classpath>
         <path refid="test.path" />
         <pathelement location="${target.dir}/classes" />

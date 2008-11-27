@@ -1,11 +1,11 @@
 <ivy-module version="1.0" xmlns:e="http://ant.apache.org/ivy/extra">
   <info
     organisation="net.lag"
-    module="scarling"
+    module="kestrel"
     revision="0.8"
     e:testclass="net.lag.TestRunner"
-    e:jarclassname="net.lag.scarling.Scarling"
-    e:buildpackage="net.lag.scarling"
+    e:jarclassname="net.lag.kestrel.Kestrel"
+    e:buildpackage="net.lag.kestrel"
   />
 
   <configurations>

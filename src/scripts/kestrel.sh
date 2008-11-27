@@ -4,7 +4,7 @@
 #
 
 QUEUE_PATH="/var/spool/kestrel"
-SCARLING_HOME="/usr/local/kestrel"
+KESTREL_HOME="/usr/local/kestrel"
 AS_USER="daemon"
 VERSION="0.5"
 DAEMON="/usr/local/bin/daemon"
@@ -49,7 +49,7 @@ case "$1" in
   start)
     echo -n "Starting kestrel... "
 
-    if [ ! -r $SCARLING_HOME/kestrel-$VERSION.jar ]; then
+    if [ ! -r $KESTREL_HOME/kestrel-$VERSION.jar ]; then
       echo "FAIL"
       echo "*** kestrel jar missing - not starting"
       exit 1
@@ -65,7 +65,7 @@ case "$1" in
     fi
     
     ulimit -n 8192 || echo -n " (no ulimit)"
-    $DAEMON $daemon_args --user $AS_USER --stdout=/var/log/kestrel/stdout --stderr=/var/log/kestrel/error -- ${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar ${SCARLING_HOME}/kestrel-${VERSION}.jar
+    $DAEMON $daemon_args --user $AS_USER --stdout=/var/log/kestrel/stdout --stderr=/var/log/kestrel/error -- ${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar ${KESTREL_HOME}/kestrel-${VERSION}.jar
     tries=0
     while ! running; do
       tries=$((tries + 1))

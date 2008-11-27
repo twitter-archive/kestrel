@@ -20,7 +20,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-package net.lag.scarling
+package net.lag.kestrel
 
 import scala.actors.Actor
 import org.apache.mina.common._

@@ -38,7 +38,7 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
   private val log = Logger.get
 
   private val IDLE_TIMEOUT = 60
-  private val sessionID = ScarlingStats.sessionID.incr
+  private val sessionID = KestrelStats.sessionID.incr
   private val remoteAddress = session.getRemoteAddress.asInstanceOf[InetSocketAddress]
 
   private var pendingTransaction: Option[(String, Int)] = None
@@ -57,8 +57,8 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
     session.setIdleTime(IdleStatus.BOTH_IDLE, idleTimeout)
   }
 
-  ScarlingStats.sessions.incr
-  ScarlingStats.totalConnections.incr
+  KestrelStats.sessions.incr
+  KestrelStats.totalConnections.incr
   log.debug("New session %d from %s:%d", sessionID, remoteAddress.getHostName, remoteAddress.getPort)
   start
 
@@ -84,7 +84,7 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
         case MinaMessage.SessionClosed =>
           log.debug("End of session %d", sessionID)
           abortAnyTransaction
-          ScarlingStats.sessions.decr
+          KestrelStats.sessions.decr
           exit()
 
         case MinaMessage.SessionIdle(status) =>
@@ -106,7 +106,7 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
     buffer.put(data)
     buffer.put("\r\nEND\r\n".getBytes)
     buffer.flip
-    ScarlingStats.bytesWritten.incr(buffer.capacity)
+    KestrelStats.bytesWritten.incr(buffer.capacity)
     session.write(new memcache.Response(buffer))
   }
 
@@ -167,8 +167,8 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
           session.close
           return
         }
-        ScarlingStats.getRequests.incr
-        Scarling.queues.remove(key, timeout, opening) {
+        KestrelStats.getRequests.incr
+        Kestrel.queues.remove(key, timeout, opening) {
           case None =>
             writeResponse("END\r\n")
           case Some(item) =>
@@ -194,7 +194,7 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
         if (qname != name) {
           throw new MismatchedQueueException
         } else {
-          Scarling.queues.confirmRemove(qname, xid)
+          Kestrel.queues.confirmRemove(qname, xid)
           pendingTransaction = None
         }
         true
@@ -205,14 +205,14 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
     pendingTransaction match {
       case None =>
       case Some((qname, xid)) =>
-        Scarling.queues.unremove(qname, xid)
+        Kestrel.queues.unremove(qname, xid)
         pendingTransaction = None
     }
   }
 
   private def set(name: String, flags: Int, expiry: Int, data: Array[Byte]) = {
-    ScarlingStats.setRequests.incr
-    if (Scarling.queues.add(name, data, expiry)) {
+    KestrelStats.setRequests.incr
+    if (Kestrel.queues.add(name, data, expiry)) {
       writeResponse("STORED\r\n")
     } else {
       writeResponse("NOT_STORED\r\n")
@@ -221,24 +221,24 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
 
   private def stats = {
     var report = new mutable.ArrayBuffer[(String, String)]
-    report += (("uptime", Scarling.uptime.toString))
+    report += (("uptime", Kestrel.uptime.toString))
     report += (("time", (Time.now / 1000).toString))
-    report += (("version", Scarling.runtime.jarVersion))
-    report += (("curr_items", Scarling.queues.currentItems.toString))
-    report += (("total_items", Scarling.queues.totalAdded.toString))
-    report += (("bytes", Scarling.queues.currentBytes.toString))
-    report += (("curr_connections", ScarlingStats.sessions.toString))
-    report += (("total_connections", ScarlingStats.totalConnections.toString))
-    report += (("cmd_get", ScarlingStats.getRequests.toString))
-    report += (("cmd_set", ScarlingStats.setRequests.toString))
-    report += (("get_hits", Scarling.queues.queueHits.toString))
-    report += (("get_misses", Scarling.queues.queueMisses.toString))
-    report += (("bytes_read", ScarlingStats.bytesRead.toString))
-    report += (("bytes_written", ScarlingStats.bytesWritten.toString))
+    report += (("version", Kestrel.runtime.jarVersion))
+    report += (("curr_items", Kestrel.queues.currentItems.toString))
+    report += (("total_items", Kestrel.queues.totalAdded.toString))
+    report += (("bytes", Kestrel.queues.currentBytes.toString))
+    report += (("curr_connections", KestrelStats.sessions.toString))
+    report += (("total_connections", KestrelStats.totalConnections.toString))
+    report += (("cmd_get", KestrelStats.getRequests.toString))
+    report += (("cmd_set", KestrelStats.setRequests.toString))
+    report += (("get_hits", Kestrel.queues.queueHits.toString))
+    report += (("get_misses", Kestrel.queues.queueMisses.toString))
+    report += (("bytes_read", KestrelStats.bytesRead.toString))
+    report += (("bytes_written", KestrelStats.bytesWritten.toString))
     report += (("limit_maxbytes", "0"))                         // ???
 
-    for (qName <- Scarling.queues.queueNames) {
-      val s = Scarling.queues.stats(qName)
+    for (qName <- Kestrel.queues.queueNames) {
+      val s = Kestrel.queues.stats(qName)
       report += (("queue_" + qName + "_items", s.items.toString))
       report += (("queue_" + qName + "_bytes", s.bytes.toString))
       report += (("queue_" + qName + "_total_items", s.totalItems.toString))
@@ -256,6 +256,6 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
   }
 
   private def shutdown = {
-    Scarling.shutdown
+    Kestrel.shutdown
   }
 }

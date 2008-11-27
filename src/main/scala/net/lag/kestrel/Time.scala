@@ -20,7 +20,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-package net.lag.scarling
+package net.lag.kestrel
 
 // stolen from nick's ruby version.
 // this lets unit tests muck around with temporality without calling Thread.sleep().

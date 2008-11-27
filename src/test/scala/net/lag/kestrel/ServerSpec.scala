@@ -20,7 +20,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-package net.lag.scarling
+package net.lag.kestrel
 
 import java.io.File
 import java.net.Socket
@@ -48,24 +48,24 @@ object ServerSpec extends Specification with TestHelper {
     config("queues.weather_updates.max_items") = 1500000
     config("queues.weather_updates.max_age") = 1800
 
-    Scarling.startup(config)
+    Kestrel.startup(config)
   }
 
 
   "Server" should {
     doAfter {
-      Scarling.shutdown
+      Kestrel.shutdown
     }
 
     "configure per-queue" in {
       withTempFolder {
         makeServer
-        Scarling.queues.queue("starship").map(_.maxItems) mustEqual Some(Math.MAX_INT)
-        Scarling.queues.queue("starship").map(_.maxAge) mustEqual Some(0)
-        Scarling.queues.queue("weather_updates").map(_.maxItems) mustEqual Some(1500000)
-        Scarling.queues.queue("weather_updates").map(_.maxAge) mustEqual Some(1800)
+        Kestrel.queues.queue("starship").map(_.maxItems) mustEqual Some(Math.MAX_INT)
+        Kestrel.queues.queue("starship").map(_.maxAge) mustEqual Some(0)
+        Kestrel.queues.queue("weather_updates").map(_.maxItems) mustEqual Some(1500000)
+        Kestrel.queues.queue("weather_updates").map(_.maxAge) mustEqual Some(1800)
         config("queues.starship.max_items") = 9999
-        Scarling.queues.queue("starship").map(_.maxItems) mustEqual Some(9999)
+        Kestrel.queues.queue("starship").map(_.maxItems) mustEqual Some(9999)
       }
     }
 

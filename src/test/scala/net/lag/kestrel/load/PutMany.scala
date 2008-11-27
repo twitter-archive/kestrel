@@ -20,7 +20,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-package net.lag.scarling.load
+package net.lag.kestrel.load
 
 import java.net._
 import java.nio._
@@ -29,7 +29,7 @@ import net.lag.extensions._
 
 
 /**
- * Spam a scarling server with 1M copies of a pop song lyric, to see how
+ * Spam a kestrel server with 1M copies of a pop song lyric, to see how
  * quickly it can absorb them.
  */
 object PutMany {
