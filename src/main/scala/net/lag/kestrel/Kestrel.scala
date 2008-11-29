@@ -28,13 +28,13 @@ import java.util.concurrent.{CountDownLatch, Executors, ExecutorService, TimeUni
 import scala.actors.{Actor, Scheduler}
 import scala.actors.Actor._
 import scala.collection.mutable
-//import org.apache.mina.core.service.IoAcceptor
 import org.apache.mina.core.session.IoSession
 import org.apache.mina.filter.codec.ProtocolCodecFilter
 import org.apache.mina.transport.socket.SocketAcceptor
 import org.apache.mina.transport.socket.nio.{NioProcessor, NioSocketAcceptor}
 import net.lag.configgy.{Config, ConfigMap, Configgy, RuntimeEnvironment}
 import net.lag.logging.Logger
+import net.lag.naggati.IoHandlerActorAdapter
 
 
 class Counter {
