@@ -23,7 +23,8 @@
 package net.lag.kestrel
 
 import scala.actors.Actor
-import org.apache.mina.common._
+import org.apache.mina.core.service.IoHandler
+import org.apache.mina.core.session.{IdleStatus, IoSession}
 import net.lag.logging.Logger
 
 

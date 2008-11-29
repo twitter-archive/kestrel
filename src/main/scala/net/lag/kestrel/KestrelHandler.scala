@@ -29,9 +29,10 @@ import scala.actors.Actor._
 import scala.collection.mutable
 import net.lag.configgy.{Config, Configgy, RuntimeEnvironment}
 import net.lag.logging.Logger
-import net.lag.kestrel.memcache.ProtocolException
-import org.apache.mina.common._
-import org.apache.mina.transport.socket.nio.SocketSessionConfig
+import net.lag.naggati.ProtocolError
+import org.apache.mina.core.buffer.IoBuffer
+import org.apache.mina.core.session.{IdleStatus, IoSession}
+import org.apache.mina.transport.socket.SocketSessionConfig
 
 
 class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
@@ -47,14 +48,12 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
   private class MismatchedQueueException extends Exception
 
 
-  if (session.getTransportType == TransportType.SOCKET) {
-    session.getConfig.asInstanceOf[SocketSessionConfig].setReceiveBufferSize(2048)
-  }
+  session.getConfig.setReadBufferSize(2048)
 
   // config can be null in unit tests
   val idleTimeout = if (config == null) IDLE_TIMEOUT else config.getInt("timeout", IDLE_TIMEOUT)
   if (idleTimeout > 0) {
-    session.setIdleTime(IdleStatus.BOTH_IDLE, idleTimeout)
+    session.getConfig.setIdleTime(IdleStatus.BOTH_IDLE, idleTimeout)
   }
 
   KestrelStats.sessions.incr
@@ -73,7 +72,7 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
 
         case MinaMessage.ExceptionCaught(cause) => {
           cause.getCause match {
-            case _: ProtocolException => writeResponse("CLIENT_ERROR\r\n")
+            case _: ProtocolError => writeResponse("CLIENT_ERROR\r\n")
             case _ =>
               log.error(cause, "Exception caught on session %d: %s", sessionID, cause.getMessage)
               writeResponse("ERROR\r\n")
@@ -96,12 +95,12 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
 
   private def writeResponse(out: String) = {
     val bytes = out.getBytes
-    session.write(new memcache.Response(ByteBuffer.wrap(bytes)))
+    session.write(new memcache.Response(IoBuffer.wrap(bytes)))
   }
 
   private def writeResponse(out: String, data: Array[Byte]) = {
     val bytes = out.getBytes
-    val buffer = ByteBuffer.allocate(bytes.length + data.length + 7)
+    val buffer = IoBuffer.allocate(bytes.length + data.length + 7)
     buffer.put(bytes)
     buffer.put(data)
     buffer.put("\r\nEND\r\n".getBytes)
@@ -118,7 +117,7 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
           set(request.line(1), request.line(2).toInt, request.line(3).toInt, request.data.get)
         } catch {
           case e: NumberFormatException =>
-            throw new memcache.ProtocolException("bad request: " + request)
+            throw new ProtocolError("bad request: " + request)
         }
       case "STATS" => stats
       case "SHUTDOWN" => shutdown
