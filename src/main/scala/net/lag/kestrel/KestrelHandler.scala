@@ -144,18 +144,17 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
         if (opt == "open") opening = true
       }
     }
-    log.debug("get q=%s t=%d open=%s close=%s", key, timeout, opening, closing)
+    log.debug("get -> q=%s t=%d open=%s close=%s", key, timeout, opening, closing)
 
     try {
       if (closing) {
         if (!closeTransaction(key)) {
           log.warning("Attempt to close a non-existent transaction on '%s' (sid %d, %s:%d)",
                       key, sessionID, remoteAddress.getHostName, remoteAddress.getPort)
-          writeResponse("ERROR\r\n")
-          session.close
-        } else if (!opening) {
-          writeResponse("END\r\n")
+          // let the client continue. it may be optimistically closing previous transactions as
+          // it randomly jumps servers.
         }
+        if (!opening) writeResponse("END\r\n")
       }
       if (opening || !closing) {
         if (pendingTransaction.isDefined) {
@@ -171,9 +170,9 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
           case None =>
             writeResponse("END\r\n")
           case Some(item) =>
-            log.debug("get %s", item)
+            log.debug("get <- %s", item)
             if (opening) pendingTransaction = Some((key, item.xid))
-            writeResponse("VALUE " + key + " 0 " + item.data.length + "\r\n", item.data)
+            writeResponse("VALUE %s 0 %d\r\n".format(name, item.data.length), item.data)
         }
       }
     } catch {
