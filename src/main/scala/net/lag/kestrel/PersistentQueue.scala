@@ -76,6 +76,12 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   // maximum expiration time for this queue (seconds).
   var maxAge = 0
 
+  // maximum journal size before the journal should be rotated.
+  var maxJournalSize: Long = PersistentQueue.maxJournalSize
+
+  // maximum size of a queue before it drops into read-behind mode.
+  var maxMemorySize: Long = PersistentQueue.maxMemorySize
+
   // clients waiting on an item in this queue
   private val waiters = new mutable.ArrayBuffer[Waiter]
 
@@ -108,6 +114,8 @@ class PersistentQueue(private val persistencePath: String, val name: String,
     for (config <- c) {
       maxItems = config("max_items", Math.MAX_INT)
       maxAge = config("max_age", 0)
+      maxJournalSize = config("max_journal_size", PersistentQueue.maxJournalSize.toInt)
+      maxMemorySize = config("max_memory_size", PersistentQueue.maxMemorySize.toInt)
     }
   }
 
@@ -131,7 +139,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
       } else {
         val now = Time.now
         val item = QItem(now, adjustExpiry(now, expiry), value, 0)
-        if (!journal.inReadBehind && queueSize >= PersistentQueue.maxMemorySize) {
+        if (!journal.inReadBehind && queueSize >= maxMemorySize) {
           log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
           journal.startReadBehind
         }
@@ -164,7 +172,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
         val item = _remove(transaction)
         if (transaction) journal.removeTentative() else journal.remove()
 
-        if ((queueLength == 0) && (journal.size >= PersistentQueue.maxJournalSize) &&
+        if ((queueLength == 0) && (journal.size >= maxJournalSize) &&
             (openTransactions.size == 0)) {
           log.info("Rolling journal file for '%s'", name)
           journal.roll
@@ -257,7 +265,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   private final def fillReadBehind(): Unit = {
     // if we're in read-behind mode, scan forward in the journal to keep memory as full as
     // possible. this amortizes the disk overhead across all reads.
-    while (journal.inReadBehind && _memoryBytes < PersistentQueue.maxMemorySize) {
+    while (journal.inReadBehind && _memoryBytes < maxMemorySize) {
       journal.fillReadBehind { item =>
         queue += item
         _memoryBytes += item.data.length
@@ -276,7 +284,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
       case JournalItem.Add(item) =>
         _add(item)
         // when processing the journal, this has to happen after:
-        if (!journal.inReadBehind && queueSize >= PersistentQueue.maxMemorySize) {
+        if (!journal.inReadBehind && queueSize >= maxMemorySize) {
           log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
           journal.startReadBehind
         }

@@ -84,7 +84,7 @@ object PersistentQueueSpec extends Specification with TestHelper {
       withTempFolder {
         val q = new PersistentQueue(folderName, "rolling", Config.fromMap(Map.empty))
         q.setup
-        PersistentQueue.maxJournalSize = 64
+        q.maxJournalSize = 64
 
         q.add(new Array[Byte](32))
         q.add(new Array[Byte](64))
@@ -108,8 +108,6 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q.bytes mustEqual 0
         q.journalSize mustEqual 5   // saved xid.
         new File(folderName, "rolling").length mustEqual 5
-
-        PersistentQueue.maxJournalSize = 16 * 1024 * 1024
       }
     }
 
@@ -163,6 +161,19 @@ object PersistentQueueSpec extends Specification with TestHelper {
         config("max_age") = 1
         Time.advance(1000)
         q.remove mustEqual None
+      }
+    }
+
+    "allow max_journal_size and max_memory_size to be overridden per queue" in {
+      withTempFolder {
+        val config1 = Config.fromMap(Map("max_memory_size" -> "123"))
+        val config2 = Config.fromMap(Map("max_journal_size" -> "123"))
+        val q1 = new PersistentQueue(folderName, "test1", config1)
+        q1.maxJournalSize mustEqual PersistentQueue.maxJournalSize
+        q1.maxMemorySize mustEqual 123
+        val q2 = new PersistentQueue(folderName, "test2", config2)
+        q2.maxJournalSize mustEqual 123
+        q2.maxMemorySize mustEqual PersistentQueue.maxMemorySize
       }
     }
 
