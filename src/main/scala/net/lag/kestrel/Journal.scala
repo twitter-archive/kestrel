@@ -224,71 +224,53 @@ class Journal(queuePath: String) {
     } else {
       buffer(0) match {
         case CMD_ADD =>
-          readBlock(in) match {
-            case None => JournalItem.EndOfFile
-            case Some(data) =>
-              if (replaying) size += 5 + data.length
-              JournalItem.Add(unpackOldAdd(data))
-          }
+          val data = readBlock(in)
+          if (replaying) size += 5 + data.length
+          JournalItem.Add(unpackOldAdd(data))
         case CMD_REMOVE =>
           if (replaying) size += 1
           JournalItem.Remove
         case CMD_ADDX =>
-          readBlock(in) match {
-            case None => JournalItem.EndOfFile
-            case Some(data) =>
-              if (replaying) size += 5 + data.length
-              JournalItem.Add(unpack(data))
-          }
+          val data = readBlock(in)
+          if (replaying) size += 5 + data.length
+          JournalItem.Add(unpack(data))
         case CMD_REMOVE_TENTATIVE =>
           if (replaying) size += 1
           JournalItem.RemoveTentative
         case CMD_SAVE_XID =>
-          readInt(in) match {
-            case None => JournalItem.EndOfFile
-            case Some(xid) =>
-              if (replaying) size += 5
-              JournalItem.SavedXid(xid)
-          }
+          val xid = readInt(in)
+          if (replaying) size += 5
+          JournalItem.SavedXid(xid)
         case CMD_UNREMOVE =>
-          readInt(in) match {
-            case None => JournalItem.EndOfFile
-            case Some(xid) =>
-              if (replaying) size += 5
-              JournalItem.Unremove(xid)
-          }
+          val xid = readInt(in)
+          if (replaying) size += 5
+          JournalItem.Unremove(xid)
         case CMD_CONFIRM_REMOVE =>
-          readInt(in) match {
-            case None => JournalItem.EndOfFile
-            case Some(xid) =>
-              if (replaying) size += 5
-              JournalItem.ConfirmRemove(xid)
-          }
+          val xid = readInt(in)
+          if (replaying) size += 5
+          JournalItem.ConfirmRemove(xid)
         case n =>
           throw new IOException("invalid opcode in journal: " + n.toInt)
       }
     }
   }
 
-  private def readBlock(in: FileChannel): Option[Array[Byte]] = {
-    readInt(in) match {
-      case None => None
-      case Some(size) =>
-        val data = new Array[Byte](size)
-        val dataBuffer = ByteBuffer.wrap(data)
-        var x: Int = 0
-        do {
-          x = in.read(dataBuffer)
-        } while (dataBuffer.position < dataBuffer.limit && x >= 0)
-        if (x < 0) {
-          None
-        } else {
-          Some(data)
-        }
+  private def readBlock(in: FileChannel): Array[Byte] = {
+    val size = readInt(in)
+    val data = new Array[Byte](size)
+    val dataBuffer = ByteBuffer.wrap(data)
+    var x: Int = 0
+    do {
+      x = in.read(dataBuffer)
+    } while (dataBuffer.position < dataBuffer.limit && x >= 0)
+    if (x < 0) {
+      // we never expect EOF when reading a block.
+      throw new IOException("Unexpected EOF")
     }
+    data
   }
 
-  private def readInt(in: FileChannel): Option[Int] = {
+  private def readInt(in: FileChannel): Int = {
     byteBuffer.rewind
     byteBuffer.limit(4)
     var x: Int = 0
@@ -296,11 +278,11 @@ class Journal(queuePath: String) {
       x = in.read(byteBuffer)
     } while (byteBuffer.position < byteBuffer.limit && x >= 0)
     if (x < 0) {
-      None
-    } else {
-      byteBuffer.rewind
-      Some(byteBuffer.getInt())
+      // we never expect EOF when reading an int.
+      throw new IOException("Unexpected EOF")
     }
+    byteBuffer.rewind
+    byteBuffer.getInt()
   }
 
   private def pack(item: QItem): Array[Byte] = {
