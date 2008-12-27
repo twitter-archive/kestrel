@@ -82,6 +82,9 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   // maximum size of a queue before it drops into read-behind mode.
   var maxMemorySize: Long = PersistentQueue.maxMemorySize
 
+  // maximum overflow (multiplier) of a journal file before we re-create it.
+  var maxJournalOverflow: Int = PersistentQueue.maxJournalOverflow
+
   // clients waiting on an item in this queue
   private val waiters = new mutable.ArrayBuffer[Waiter]
 
@@ -114,8 +117,10 @@ class PersistentQueue(private val persistencePath: String, val name: String,
     for (config <- c) {
       maxItems = config("max_items", Math.MAX_INT)
       maxAge = config("max_age", 0)
+      // FIXME: i think if the root values are changed, these wont be updated.
       maxJournalSize = config("max_journal_size", PersistentQueue.maxJournalSize.toInt)
       maxMemorySize = config("max_memory_size", PersistentQueue.maxMemorySize.toInt)
+      maxJournalOverflow = config("max_journal_overflow", PersistentQueue.maxJournalOverflow)
     }
   }
 
@@ -139,9 +144,14 @@ class PersistentQueue(private val persistencePath: String, val name: String,
       } else {
         val now = Time.now
         val item = QItem(now, adjustExpiry(now, expiry), value, 0)
-        if (!journal.inReadBehind && queueSize >= maxMemorySize) {
-          log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
-          journal.startReadBehind
+        if (!journal.inReadBehind) {
+          if (journal.size > maxJournalSize * maxJournalOverflow) {
+            // FIXME: force re-creation of journal.
+          }
+          if (queueSize >= maxMemorySize) {
+            log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
+            journal.startReadBehind
+          }
         }
         _add(item)
         journal.add(item)
@@ -363,4 +373,5 @@ class PersistentQueue(private val persistencePath: String, val name: String,
 object PersistentQueue {
   @volatile var maxJournalSize: Long = 16 * 1024 * 1024
   @volatile var maxMemorySize: Long = 128 * 1024 * 1024
+  @volatile var maxJournalOverflow: Int = 10
 }

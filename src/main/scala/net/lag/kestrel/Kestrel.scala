@@ -84,6 +84,7 @@ object Kestrel {
     for (config <- c) {
       PersistentQueue.maxJournalSize = config.getInt("max_journal_size", 16 * 1024 * 1024)
       PersistentQueue.maxMemorySize = config.getInt("max_memory_size", 128 * 1024 * 1024)
+      PersistentQueue.maxJournalOverflow = config.getInt("max_journal_overflow", 10)
     }
   }
 
