@@ -146,6 +146,12 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
     }
     log.debug("get -> q=%s t=%d open=%s close=%s", key, timeout, opening, closing)
 
+    if (key.length == 0) {
+      writeResponse("CLIENT_ERROR\r\n")
+      session.close
+      return
+    }
+
     try {
       if (closing) {
         if (!closeTransaction(key)) {
