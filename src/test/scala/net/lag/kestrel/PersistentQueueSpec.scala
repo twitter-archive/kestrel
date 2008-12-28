@@ -148,18 +148,18 @@ object PersistentQueueSpec extends Specification with TestHelper {
 
     "honor max_age" in {
       withTempFolder {
-        val config = Config.fromMap(Map("max_age" -> "1"))
+        val config = Config.fromMap(Map("max_age" -> "3"))
         val q = new PersistentQueue(folderName, "weather_updates", config)
         q.setup
         q.add("sunny".getBytes) mustEqual true
         q.length mustEqual 1
-        Time.advance(1000)
+        Time.advance(3000)
         q.remove mustEqual None
 
         config("max_age") = 60
         q.add("rainy".getBytes) mustEqual true
         config("max_age") = 1
-        Time.advance(1000)
+        Time.advance(5000)
         q.remove mustEqual None
       }
     }
