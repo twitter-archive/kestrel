@@ -84,7 +84,7 @@ object PersistentQueueSpec extends Specification with TestHelper {
       withTempFolder {
         val q = new PersistentQueue(folderName, "rolling", Config.fromMap(Map.empty))
         q.setup
-        q.maxJournalSize = 64
+        q._maxJournalSize = Some(64)
 
         q.add(new Array[Byte](32))
         q.add(new Array[Byte](64))
@@ -417,6 +417,41 @@ object PersistentQueueSpec extends Specification with TestHelper {
         new String(q2.remove.get.data) mustEqual "three"
         new String(q2.remove.get.data) mustEqual "five"
         q2.length mustEqual 0
+      }
+    }
+
+    "recreate the journal file when it gets too big" in {
+      withTempFolder {
+        val config = Config.fromMap(Map("max_journal_size" -> "1024",
+                                        "max_journal_overflow" -> "3"))
+        val q = new PersistentQueue(folderName, "things", config)
+        q.setup
+        q.add(new Array[Byte](512))
+        // can't roll the journal normally, cuz there's always one item left.
+        for (i <- 0 until 5) {
+          q.add(new Array[Byte](512))
+          // last remove will be an incomplete transaction:
+          q.remove(i == 4) must beSome[QItem].which { item => item.data.size == 512 }
+        }
+        q.length mustEqual 1
+        q.journalSize mustEqual (512 * 6) + (6 * 21) + 5
+
+        // next add should force a recreate.
+        q.add(new Array[Byte](512))
+        q.length mustEqual 2
+        q.journalSize mustEqual ((512 + 16) * 3) + 9 + 1 + 5 + (5 * 2)
+
+        // journal should contain exactly: one unfinished transaction, 2 items.
+        q.close
+        var jlist: List[JournalItem] = Nil
+        val j = new Journal(new File(folderName, "things").getCanonicalPath)
+        j.replay("things") { j => jlist = jlist ++ List(j) }
+        jlist(0).asInstanceOf[JournalItem.Add].item.xid mustEqual 1
+        jlist(0).asInstanceOf[JournalItem.Add].item.data.size mustEqual 512
+        jlist(1) mustBe JournalItem.RemoveTentative
+        jlist(2).asInstanceOf[JournalItem.SavedXid].xid mustEqual 1
+        jlist(3).asInstanceOf[JournalItem.Add].item.data.size mustEqual 512
+        jlist(4).asInstanceOf[JournalItem.Add].item.data.size mustEqual 512
       }
     }
   }

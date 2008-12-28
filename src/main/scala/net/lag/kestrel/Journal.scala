@@ -80,7 +80,7 @@ class Journal(queuePath: String) {
     writer = new FileOutputStream(queuePath, true).getChannel
   }
 
-  def roll(xid: Int, openItems: List[QItem], queue: List[QItem]): Unit = {
+  def roll(xid: Int, openItems: List[QItem], queue: Iterable[QItem]): Unit = {
     writer.close
     val backupFile = new File(queuePath + "." + Time.now)
     new File(queuePath).renameTo(backupFile)

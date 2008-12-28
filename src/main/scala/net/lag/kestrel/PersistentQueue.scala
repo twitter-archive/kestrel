@@ -95,6 +95,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   private var xidCounter: Int = 0
   private val openTransactions = new mutable.HashMap[Int, QItem]
   def openTransactionCount = openTransactions.size
+  def openTransactionIds = openTransactions.keys.toList.sort(_ - _ > 0)
 
   def length: Long = synchronized { queueLength }
 
@@ -149,7 +150,8 @@ class PersistentQueue(private val persistencePath: String, val name: String,
         val item = QItem(now, adjustExpiry(now, expiry), value, 0)
         if (!journal.inReadBehind) {
           if (journal.size > maxJournalSize * maxJournalOverflow) {
-            // FIXME: force re-creation of journal.
+            // force re-creation of the journal.
+            journal.roll(xidCounter, openTransactionIds map { openTransactions(_) }, queue)
           }
           if (queueSize >= maxMemorySize) {
             log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
@@ -188,7 +190,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
         if ((queueLength == 0) && (journal.size >= maxJournalSize) &&
             (openTransactions.size == 0)) {
           log.info("Rolling journal file for '%s'", name)
-          journal.roll(xidCounter)
+          journal.roll(xidCounter, Nil, Nil)
         }
         item
       }
@@ -313,7 +315,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
     journal.open
 
     // now, any unfinished transactions must be backed out.
-    for (xid <- openTransactions.keys.toList.sort(_ - _ > 0)) {
+    for (xid <- openTransactionIds) {
       journal.unremove(xid)
       _unremove(xid)
     }
