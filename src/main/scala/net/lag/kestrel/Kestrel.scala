@@ -28,11 +28,13 @@ import java.util.concurrent.{CountDownLatch, Executors, ExecutorService, TimeUni
 import scala.actors.{Actor, Scheduler}
 import scala.actors.Actor._
 import scala.collection.mutable
-import org.apache.mina.common._
+import org.apache.mina.core.session.IoSession
 import org.apache.mina.filter.codec.ProtocolCodecFilter
-import org.apache.mina.transport.socket.nio.{SocketAcceptor, SocketAcceptorConfig, SocketSessionConfig}
+import org.apache.mina.transport.socket.SocketAcceptor
+import org.apache.mina.transport.socket.nio.{NioProcessor, NioSocketAcceptor}
 import net.lag.configgy.{Config, ConfigMap, Configgy, RuntimeEnvironment}
 import net.lag.logging.Logger
+import net.lag.naggati.IoHandlerActorAdapter
 
 
 class Counter {
@@ -67,11 +69,8 @@ object Kestrel {
   private val _expiryStats = new mutable.HashMap[String, Int]
   private val _startTime = Time.now
 
-  ByteBuffer.setUseDirectBuffers(false)
-  ByteBuffer.setAllocator(new SimpleByteBufferAllocator())
-
   var acceptorExecutor: ExecutorService = null
-  var acceptor: IoAcceptor = null
+  var acceptor: SocketAcceptor = null
 
   private val deathSwitch = new CountDownLatch(1)
 
@@ -84,6 +83,8 @@ object Kestrel {
   def configure(c: Option[ConfigMap]) = {
     for (config <- c) {
       PersistentQueue.maxJournalSize = config.getInt("max_journal_size", 16 * 1024 * 1024)
+      PersistentQueue.maxMemorySize = config.getInt("max_memory_size", 128 * 1024 * 1024)
+      PersistentQueue.maxJournalOverflow = config.getInt("max_journal_overflow", 10)
     }
   }
 
@@ -95,16 +96,16 @@ object Kestrel {
     config.subscribe(configure _)
 
     acceptorExecutor = Executors.newCachedThreadPool()
-    acceptor = new SocketAcceptor(Runtime.getRuntime().availableProcessors() + 1, acceptorExecutor)
+    acceptor = new NioSocketAcceptor(acceptorExecutor, new NioProcessor(acceptorExecutor))
 
     // mina garbage:
-    acceptor.getDefaultConfig.setThreadModel(ThreadModel.MANUAL)
-    val saConfig = new SocketAcceptorConfig
-    saConfig.setReuseAddress(true)
-    saConfig.setBacklog(1000)
-    saConfig.getSessionConfig.setTcpNoDelay(true)
-    saConfig.getFilterChain.addLast("codec", new ProtocolCodecFilter(new memcache.Encoder, new memcache.Decoder))
-    acceptor.bind(new InetSocketAddress(listenAddress, listenPort), new IoHandlerActorAdapter((session: IoSession) => new KestrelHandler(session, config)), saConfig)
+    acceptor.setBacklog(1000)
+    acceptor.setReuseAddress(true)
+    acceptor.getSessionConfig.setTcpNoDelay(true)
+    acceptor.getFilterChain.addLast("codec", new ProtocolCodecFilter(memcache.Codec.encoder,
+      memcache.Codec.decoder))
+    acceptor.setHandler(new IoHandlerActorAdapter((session: IoSession) => new KestrelHandler(session, config)))
+    acceptor.bind(new InetSocketAddress(listenAddress, listenPort))
 
     log.info("Kestrel started.")
 
@@ -117,7 +118,8 @@ object Kestrel {
   def shutdown = {
     log.info("Shutting down!")
     queues.shutdown
-    acceptor.unbindAll
+    acceptor.unbind
+    acceptor.dispose
     Scheduler.shutdown
     acceptorExecutor.shutdown
     // the line below causes a 1s pause in unit tests. :(

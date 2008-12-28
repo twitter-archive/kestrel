@@ -84,7 +84,7 @@ object PersistentQueueSpec extends Specification with TestHelper {
       withTempFolder {
         val q = new PersistentQueue(folderName, "rolling", Config.fromMap(Map.empty))
         q.setup
-        PersistentQueue.maxJournalSize = 64
+        q.maxJournalSize = 64
 
         q.add(new Array[Byte](32))
         q.add(new Array[Byte](64))
@@ -108,8 +108,6 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q.bytes mustEqual 0
         q.journalSize mustEqual 5   // saved xid.
         new File(folderName, "rolling").length mustEqual 5
-
-        PersistentQueue.maxJournalSize = 16 * 1024 * 1024
       }
     }
 
@@ -163,6 +161,19 @@ object PersistentQueueSpec extends Specification with TestHelper {
         config("max_age") = 1
         Time.advance(1000)
         q.remove mustEqual None
+      }
+    }
+
+    "allow max_journal_size and max_memory_size to be overridden per queue" in {
+      withTempFolder {
+        val config1 = Config.fromMap(Map("max_memory_size" -> "123"))
+        val config2 = Config.fromMap(Map("max_journal_size" -> "123"))
+        val q1 = new PersistentQueue(folderName, "test1", config1)
+        q1.maxJournalSize mustEqual PersistentQueue.maxJournalSize
+        q1.maxMemorySize mustEqual 123
+        val q2 = new PersistentQueue(folderName, "test2", config2)
+        q2.maxJournalSize mustEqual 123
+        q2.maxMemorySize mustEqual PersistentQueue.maxMemorySize
       }
     }
 
@@ -371,6 +382,41 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q2.setup
         q2.length mustEqual 0
         q2.bytes mustEqual 0
+      }
+    }
+
+    "recover a journal with open transactions" in {
+      withTempFolder {
+        val q = new PersistentQueue(folderName, "things", Config.fromMap(Map.empty))
+        q.setup
+        q.add("one".getBytes)
+        q.add("two".getBytes)
+        q.add("three".getBytes)
+        q.add("four".getBytes)
+        q.add("five".getBytes)
+
+        val item1 = q.remove(true)
+        item1 must beSome[QItem].which { item => new String(item.data) == "one" }
+        new String(item1.get.data) mustEqual "one"
+        val item2 = q.remove(true)
+        new String(item2.get.data) mustEqual "two"
+        val item3 = q.remove(true)
+        new String(item3.get.data) mustEqual "three"
+        val item4 = q.remove(true)
+        new String(item4.get.data) mustEqual "four"
+
+        q.confirmRemove(item2.get.xid)
+        q.confirmRemove(item4.get.xid)
+        q.close
+
+        val q2 = new PersistentQueue(folderName, "things", Config.fromMap(Map.empty))
+        q2.setup
+        q2.length mustEqual 3
+        q2.openTransactionCount mustEqual 0
+        new String(q2.remove.get.data) mustEqual "one"
+        new String(q2.remove.get.data) mustEqual "three"
+        new String(q2.remove.get.data) mustEqual "five"
+        q2.length mustEqual 0
       }
     }
   }

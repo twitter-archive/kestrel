@@ -92,7 +92,7 @@ object ManyClients {
   def getStuff(socket: SocketChannel, queueName: String) = {
     val req = ByteBuffer.wrap(("get " + queueName + "/t=1000\r\n").getBytes)
     val expectEnd = ByteBuffer.wrap("END\r\n".getBytes)
-    val expectLyric = ByteBuffer.wrap(("VALUE " + queueName + " 0 " + LYRIC.length + "\r\n" + LYRIC + "\r\n").getBytes)
+    val expectLyric = ByteBuffer.wrap(("VALUE " + queueName + " 0 " + LYRIC.length + "\r\n" + LYRIC + "\r\nEND\r\n").getBytes)
     val buffer = ByteBuffer.allocate(expectLyric.capacity)
     expectLyric.rewind
 
@@ -109,6 +109,7 @@ object ManyClients {
       buffer.flip
       expectEnd.rewind
       if (buffer == expectEnd) {
+        println("oh sad. thr=" + Thread.currentThread)
         // ok. :(
       } else {
         buffer.position(oldpos)
@@ -119,7 +120,9 @@ object ManyClients {
         buffer.rewind
         expectLyric.rewind
         if (buffer != expectLyric) {
-          throw new Exception("Unexpected response!")
+          val bad = new Array[Byte](buffer.capacity)
+          buffer.get(bad)
+          throw new Exception("Unexpected response! thr=" + Thread.currentThread + " -> " + new String(bad))
         }
         println("" + got.incrementAndGet)
       }
