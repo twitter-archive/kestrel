@@ -91,6 +91,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   // track tentative removals
   private var xidCounter: Int = 0
   private val openTransactions = new mutable.HashMap[Int, QItem]
+  def openTransactionCount = openTransactions.size
 
   def length: Long = synchronized { queueLength }
 
@@ -305,9 +306,16 @@ class PersistentQueue(private val persistencePath: String, val name: String,
       case JournalItem.ConfirmRemove(xid) => openTransactions.removeKey(xid)
       case x => log.error("Unexpected item in journal: %s", x)
     }
+
     log.info("Finished transaction journal for '%s' (%d items, %d bytes)", name, queueLength,
              journal.size)
     journal.open
+
+    // now, any unfinished transactions must be backed out.
+    for (xid <- openTransactions.keys.toList.sort(_ - _ > 0)) {
+      journal.unremove(xid)
+      _unremove(xid)
+    }
   }
 
 

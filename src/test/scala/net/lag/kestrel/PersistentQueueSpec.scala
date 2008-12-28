@@ -384,5 +384,40 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q2.bytes mustEqual 0
       }
     }
+
+    "recover a journal with open transactions" in {
+      withTempFolder {
+        val q = new PersistentQueue(folderName, "things", Config.fromMap(Map.empty))
+        q.setup
+        q.add("one".getBytes)
+        q.add("two".getBytes)
+        q.add("three".getBytes)
+        q.add("four".getBytes)
+        q.add("five".getBytes)
+
+        val item1 = q.remove(true)
+        item1 must beSome[QItem].which { item => new String(item.data) == "one" }
+        new String(item1.get.data) mustEqual "one"
+        val item2 = q.remove(true)
+        new String(item2.get.data) mustEqual "two"
+        val item3 = q.remove(true)
+        new String(item3.get.data) mustEqual "three"
+        val item4 = q.remove(true)
+        new String(item4.get.data) mustEqual "four"
+
+        q.confirmRemove(item2.get.xid)
+        q.confirmRemove(item4.get.xid)
+        q.close
+
+        val q2 = new PersistentQueue(folderName, "things", Config.fromMap(Map.empty))
+        q2.setup
+        q2.length mustEqual 3
+        q2.openTransactionCount mustEqual 0
+        new String(q2.remove.get.data) mustEqual "one"
+        new String(q2.remove.get.data) mustEqual "three"
+        new String(q2.remove.get.data) mustEqual "five"
+        q2.length mustEqual 0
+      }
+    }
   }
 }
