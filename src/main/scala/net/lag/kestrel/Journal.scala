@@ -79,12 +79,13 @@ class Journal(queuePath: String) {
     writer = new FileOutputStream(queuePath, true).getChannel
   }
 
-  def roll(): Unit = {
+  def roll(xid: Int): Unit = {
     writer.close
     val backupFile = new File(queuePath + "." + Time.now)
     new File(queuePath).renameTo(backupFile)
     open
     size = 0
+    saveXid(xid)
     backupFile.delete
   }
 
@@ -131,7 +132,7 @@ class Journal(queuePath: String) {
     size += 1
   }
 
-  def saveXid(xid: Int) = {
+  private def saveXid(xid: Int) = {
     byteBuffer.clear
     byteBuffer.put(CMD_SAVE_XID.toByte)
     byteBuffer.putInt(xid)

@@ -77,13 +77,16 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   var maxAge = 0
 
   // maximum journal size before the journal should be rotated.
-  var maxJournalSize: Long = PersistentQueue.maxJournalSize
+  var _maxJournalSize: Option[Long] = None
+  def maxJournalSize = _maxJournalSize.getOrElse(PersistentQueue.maxJournalSize)
 
   // maximum size of a queue before it drops into read-behind mode.
-  var maxMemorySize: Long = PersistentQueue.maxMemorySize
+  var _maxMemorySize: Option[Long] = None
+  def maxMemorySize = _maxMemorySize.getOrElse(PersistentQueue.maxMemorySize)
 
   // maximum overflow (multiplier) of a journal file before we re-create it.
-  var maxJournalOverflow: Int = PersistentQueue.maxJournalOverflow
+  var _maxJournalOverflow: Option[Int] = None
+  def maxJournalOverflow = _maxJournalOverflow.getOrElse(PersistentQueue.maxJournalOverflow)
 
   // clients waiting on an item in this queue
   private val waiters = new mutable.ArrayBuffer[Waiter]
@@ -118,10 +121,9 @@ class PersistentQueue(private val persistencePath: String, val name: String,
     for (config <- c) {
       maxItems = config("max_items", Math.MAX_INT)
       maxAge = config("max_age", 0)
-      // FIXME: i think if the root values are changed, these wont be updated.
-      maxJournalSize = config("max_journal_size", PersistentQueue.maxJournalSize.toInt)
-      maxMemorySize = config("max_memory_size", PersistentQueue.maxMemorySize.toInt)
-      maxJournalOverflow = config("max_journal_overflow", PersistentQueue.maxJournalOverflow)
+      _maxJournalSize = config.getLong("max_journal_size")
+      _maxMemorySize = config.getLong("max_memory_size")
+      _maxJournalOverflow = config.getInt("max_journal_overflow")
     }
   }
 
@@ -186,8 +188,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
         if ((queueLength == 0) && (journal.size >= maxJournalSize) &&
             (openTransactions.size == 0)) {
           log.info("Rolling journal file for '%s'", name)
-          journal.roll
-          journal.saveXid(xidCounter)
+          journal.roll(xidCounter)
         }
         item
       }
