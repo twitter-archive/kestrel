@@ -73,7 +73,7 @@ object Codec {
         throw new ProtocolError("Malformed request line")
       }
       val dataBytes = segments(4).toInt
-      readBytes(dataBytes + 2) { () =>
+      readBytes(dataBytes + 2) {
         // final 2 bytes are just "\r\n" mandated by protocol.
         val bytes = new Array[Byte](dataBytes)
         state.buffer.get(bytes)
