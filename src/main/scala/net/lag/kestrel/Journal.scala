@@ -73,19 +73,27 @@ class Journal(queuePath: String) {
   private val CMD_SAVE_XID = 4
   private val CMD_UNREMOVE = 5
   private val CMD_CONFIRM_REMOVE = 6
+  private val CMD_ADD_XID = 7
 
 
   def open(): Unit = {
     writer = new FileOutputStream(queuePath, true).getChannel
   }
 
-  def roll(xid: Int): Unit = {
+  def roll(xid: Int, openItems: List[QItem], queue: List[QItem]): Unit = {
     writer.close
     val backupFile = new File(queuePath + "." + Time.now)
     new File(queuePath).renameTo(backupFile)
     open
     size = 0
+    for (item <- openItems) {
+      addWithXid(item)
+      removeTentative()
+    }
     saveXid(xid)
+    for (item <- queue) {
+      add(item)
+    }
     backupFile.delete
   }
 
@@ -99,70 +107,41 @@ class Journal(queuePath: String) {
 
   def add(item: QItem) = {
     val blob = ByteBuffer.wrap(pack(item))
-    byteBuffer.clear
-    byteBuffer.put(CMD_ADDX.toByte)
-    byteBuffer.putInt(blob.limit)
-    byteBuffer.flip
-    do {
-      writer.write(byteBuffer)
-    } while (byteBuffer.position < byteBuffer.limit)
+    size += write(CMD_ADDX.toByte, blob.limit)
     do {
       writer.write(blob)
     } while (blob.position < blob.limit)
-    size += (5 + blob.limit)
+    size += blob.limit
+  }
+
+  // used only to list pending transactions when recreating the journal.
+  private def addWithXid(item: QItem) = {
+    val blob = ByteBuffer.wrap(pack(item))
+    size += write(CMD_ADD_XID.toByte, item.xid, blob.limit)
+    do {
+      writer.write(blob)
+    } while (blob.position < blob.limit)
+    size += blob.limit
   }
 
   def remove() = {
-    byteBuffer.clear
-    byteBuffer.put(CMD_REMOVE.toByte)
-    byteBuffer.flip
-    while (byteBuffer.position < byteBuffer.limit) {
-      writer.write(byteBuffer)
-    }
-    size += 1
+    size += write(CMD_REMOVE.toByte)
   }
 
   def removeTentative() = {
-    byteBuffer.clear
-    byteBuffer.put(CMD_REMOVE_TENTATIVE.toByte)
-    byteBuffer.flip
-    while (byteBuffer.position < byteBuffer.limit) {
-      writer.write(byteBuffer)
-    }
-    size += 1
+    size += write(CMD_REMOVE_TENTATIVE.toByte)
   }
 
   private def saveXid(xid: Int) = {
-    byteBuffer.clear
-    byteBuffer.put(CMD_SAVE_XID.toByte)
-    byteBuffer.putInt(xid)
-    byteBuffer.flip
-    while (byteBuffer.position < byteBuffer.limit) {
-      writer.write(byteBuffer)
-    }
-    size += 5
+    size += write(CMD_SAVE_XID.toByte, xid)
   }
 
   def unremove(xid: Int) = {
-    byteBuffer.clear
-    byteBuffer.put(CMD_UNREMOVE.toByte)
-    byteBuffer.putInt(xid)
-    byteBuffer.flip
-    while (byteBuffer.position < byteBuffer.limit) {
-      writer.write(byteBuffer)
-    }
-    size += 5
+    size += write(CMD_UNREMOVE.toByte, xid)
   }
 
   def confirmRemove(xid: Int) = {
-    byteBuffer.clear
-    byteBuffer.put(CMD_CONFIRM_REMOVE.toByte)
-    byteBuffer.putInt(xid)
-    byteBuffer.flip
-    while (byteBuffer.position < byteBuffer.limit) {
-      writer.write(byteBuffer)
-    }
-    size += 5
+    size += write(CMD_CONFIRM_REMOVE.toByte, xid)
   }
 
   def startReadBehind(): Unit = {
@@ -250,6 +229,13 @@ class Journal(queuePath: String) {
           val xid = readInt(in)
           if (replaying) size += 5
           JournalItem.ConfirmRemove(xid)
+        case CMD_ADD_XID =>
+          val xid = readInt(in)
+          val data = readBlock(in)
+          val item = unpack(data)
+          item.xid = xid
+          if (replaying) size += 9 + data.length
+          JournalItem.Add(item)
         case n =>
           throw new IOException("invalid opcode in journal: " + n.toInt)
       }
@@ -284,6 +270,19 @@ class Journal(queuePath: String) {
     }
     byteBuffer.rewind
     byteBuffer.getInt()
+  }
+
+  private def write(items: Any*): Int = {
+    byteBuffer.clear
+    for (item <- items) item match {
+      case b: Byte => byteBuffer.put(b)
+      case i: Int => byteBuffer.putInt(i)
+    }
+    byteBuffer.flip
+    while (byteBuffer.position < byteBuffer.limit) {
+      writer.write(byteBuffer)
+    }
+    byteBuffer.limit
   }
 
   private def pack(item: QItem): Array[Byte] = {
