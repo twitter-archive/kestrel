@@ -103,5 +103,4 @@ class FilterableSpecsFileRunner(path: String) extends SpecsFileRunner(path, ".*"
     }
     specList.toList
   }
-
 }
