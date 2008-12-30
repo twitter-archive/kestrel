@@ -32,12 +32,13 @@ import org.specs._
 
 object ServerSpec extends Specification with TestHelper {
 
+  val PORT = 22199
   var config: Config = null
 
   def makeServer = {
     config = new Config
     config("host") = "localhost"
-    config("port") = 22122
+    config("port") = PORT
     config("queue_path") = canonicalFolderName
     config("max_journal_size") = 16 * 1024
     config("log.console") = true
@@ -73,7 +74,7 @@ object ServerSpec extends Specification with TestHelper {
       withTempFolder {
         makeServer
         val v = (Math.random * 0x7fffffff).toInt
-        val client = new TestClient("localhost", 22122)
+        val client = new TestClient("localhost", PORT)
         client.get("test_one_entry") mustEqual ""
         client.set("test_one_entry", v.toString) mustEqual "STORED"
         client.get("test_one_entry") mustEqual v.toString
@@ -85,7 +86,7 @@ object ServerSpec extends Specification with TestHelper {
       withTempFolder {
         makeServer
         val v = (Math.random * 0x7fffffff).toInt
-        val client = new TestClient("localhost", 22122)
+        val client = new TestClient("localhost", PORT)
         client.get("test_set_with_expiry") mustEqual ""
         client.set("test_set_with_expiry", (v + 2).toString, (Time.now / 1000).toInt) mustEqual "STORED"
         client.set("test_set_with_expiry", v.toString) mustEqual "STORED"
@@ -98,11 +99,11 @@ object ServerSpec extends Specification with TestHelper {
       withTempFolder {
         makeServer
         val v = (Math.random * 0x7fffffff).toInt
-        val client = new TestClient("localhost", 22122)
+        val client = new TestClient("localhost", PORT)
         client.set("commit", v.toString) mustEqual "STORED"
 
-        val client2 = new TestClient("localhost", 22122)
-        val client3 = new TestClient("localhost", 22122)
+        val client2 = new TestClient("localhost", PORT)
+        val client3 = new TestClient("localhost", PORT)
         var stats = client3.stats
         stats("queue_commit_items") mustEqual "1"
         stats("queue_commit_total_items") mustEqual "1"
@@ -133,12 +134,12 @@ object ServerSpec extends Specification with TestHelper {
       withTempFolder {
         makeServer
         val v = (Math.random * 0x7fffffff).toInt
-        val client = new TestClient("localhost", 22122)
+        val client = new TestClient("localhost", PORT)
         client.set("auto-rollback", v.toString) mustEqual "STORED"
 
-        val client2 = new TestClient("localhost", 22122)
+        val client2 = new TestClient("localhost", PORT)
         client2.get("auto-rollback/open") mustEqual v.toString
-        val client3 = new TestClient("localhost", 22122)
+        val client3 = new TestClient("localhost", PORT)
         client3.get("auto-rollback") mustEqual ""
         var stats = client3.stats
         stats("queue_auto-rollback_items") mustEqual "0"
@@ -166,19 +167,19 @@ object ServerSpec extends Specification with TestHelper {
       withTempFolder {
         makeServer
         val v = (Math.random * 0x7fffffff).toInt
-        val client = new TestClient("localhost", 22122)
+        val client = new TestClient("localhost", PORT)
         client.set("auto-commit", v.toString) mustEqual "STORED"
         client.set("auto-commit", (v + 1).toString) mustEqual "STORED"
         client.set("auto-commit", (v + 2).toString) mustEqual "STORED"
 
-        val client2 = new TestClient("localhost", 22122)
+        val client2 = new TestClient("localhost", PORT)
         client2.get("auto-commit/open") mustEqual v.toString
         client2.get("auto-commit/close/open") mustEqual (v + 1).toString
         client2.get("auto-commit/close/open") mustEqual (v + 2).toString
         client2.disconnect
         Thread.sleep(10)
 
-        val client3 = new TestClient("localhost", 22122)
+        val client3 = new TestClient("localhost", PORT)
         client3.get("auto-commit") mustEqual (v + 2).toString
 
         var stats = client3.stats
@@ -191,7 +192,7 @@ object ServerSpec extends Specification with TestHelper {
     "age" in {
       withTempFolder {
         makeServer
-        val client = new TestClient("localhost", 22122)
+        val client = new TestClient("localhost", PORT)
         client.set("test_age", "nibbler") mustEqual "STORED"
         Time.advance(1000)
         client.get("test_age") mustEqual "nibbler"
@@ -206,7 +207,7 @@ object ServerSpec extends Specification with TestHelper {
         var v = "x"
         for (val i <- 1.to(13)) { v = v + v }    // 8192
 
-        val client = new TestClient("localhost", 22122)
+        val client = new TestClient("localhost", PORT)
 
         client.set("test_log_rotation", v) mustEqual "STORED"
         new File(folderName + "/test_log_rotation").length mustEqual 8192 + 16 + 5
@@ -227,7 +228,7 @@ object ServerSpec extends Specification with TestHelper {
     "collect stats" in {
       withTempFolder {
         makeServer
-        val client = new TestClient("localhost", 22122)
+        val client = new TestClient("localhost", PORT)
         val stats = client.stats
         val basicStats = Array("bytes", "time", "limit_maxbytes", "cmd_get", "version",
                                "bytes_written", "cmd_set", "get_misses", "total_connections",
@@ -240,7 +241,7 @@ object ServerSpec extends Specification with TestHelper {
     "return a valid response for an unknown command" in {
       withTempFolder {
         makeServer
-        new TestClient("localhost", 22122).add("cheese", "swiss") mustEqual "CLIENT_ERROR"
+        new TestClient("localhost", PORT).add("cheese", "swiss") mustEqual "CLIENT_ERROR"
       }
     }
 
@@ -248,7 +249,7 @@ object ServerSpec extends Specification with TestHelper {
       withTempFolder {
         makeServer
         val v = (Math.random * 0x7fffffff).toInt
-        val client = new TestClient("localhost", 22122)
+        val client = new TestClient("localhost", PORT)
         client.set("disconnecting", v.toString)
         client.disconnect
         client.connect
