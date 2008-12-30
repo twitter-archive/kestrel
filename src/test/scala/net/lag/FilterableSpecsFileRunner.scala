@@ -24,7 +24,7 @@ package net.lag
 
 import org.specs.Specification
 import org.specs.runner.SpecsFileRunner
-import org.specs.specification.Sut
+import org.specs.specification.Sus
 import scala.collection.mutable
 import java.util.regex.Pattern
 
@@ -43,14 +43,32 @@ import java.util.regex.Pattern
  * substring with no special regex characters) should do what you expect.
  */
 class FilterableSpecsFileRunner(path: String) extends SpecsFileRunner(path, ".*") {
-  var specList = new mutable.ListBuffer[Specification]
+  override lazy val specs = loadSpecs
+
+  def findSpecNames(path: String, pattern: String): List[String] = {
+    val result = new mutable.ListBuffer[String]
+    val p = Pattern.compile("\\s*object\\s*(" + pattern + ")\\s*extends\\s*.*Spec.*\\s*\\{")
+    for (filePath <- filePaths(path); if filePath.endsWith(".scala")) {
+      val m = p.matcher(readFile(filePath))
+      while (m.find) {
+        result += ((packageName(filePath).map(_ + ".").getOrElse("") + m.group(1).trim) + "$")
+      }
+    }
+    result.toList
+  }
 
   // load the specs from class files in the given path.
   private def loadSpecs = {
-    for (className <- specificationNames(path, ".*")) {
-      createSpecification(className) match {
-        case Some(s) => specList += s
-        case None => //println("Could not load " + className)
+    var specList = new mutable.ListBuffer[Specification]
+
+    for (className <- findSpecNames(path, ".*")) {
+      try {
+        getClass.getClassLoader.loadClass(className).newInstance match {
+          case spec: Specification => specList += spec
+          case _ =>
+        }
+      } catch {
+        case _ => // ignore and skip
       }
     }
 
@@ -60,7 +78,7 @@ class FilterableSpecsFileRunner(path: String) extends SpecsFileRunner(path, ".*"
       case filterString =>
         val re = Pattern.compile(filterString)
         for (spec <- specList) {
-          spec.suts = spec.suts filter { sut => re.matcher(sut.description).find }
+          spec.systems = spec.systems filter { s => re.matcher(s.description).find }
         }
     }
 
@@ -69,29 +87,20 @@ class FilterableSpecsFileRunner(path: String) extends SpecsFileRunner(path, ".*"
       case null =>
       case filterString =>
         val re = Pattern.compile(filterString)
-        for (spec <- specList; sut <- spec.suts) {
-          val examples = sut.examples filter { example => re.matcher(example.description).find }
-          sut.examples.clear
-          sut.examples ++= examples
+        for (spec <- specList; system <- spec.systems) {
+          val examples = system.examples filter { example => re.matcher(example.description).find }
+          system.examples.clear
+          system.examples ++= examples
         }
     }
 
     // remove any now-empty specs so we don't clutter the output.
     for (spec <- specList) {
-      spec.suts = spec.suts filter { sut => sut.examples.length > 0 }
+      spec.systems = spec.systems filter { s => s.examples.length > 0 }
     }
-    for (empty <- specList filter { spec => spec.suts.length == 0 }) {
+    for (empty <- specList filter { spec => spec.systems.length == 0 }) {
       specList -= empty
     }
-  }
-
-  override def reportSpecs = {
-    loadSpecs
-
-    // this specification is added for better reporting
-    object totalSpecification extends Specification {
-      new java.io.File(path).getAbsolutePath isSpecifiedBy(specList: _*)
-    }
-    super.report(List(totalSpecification))
+    specList.toList
   }
 }
