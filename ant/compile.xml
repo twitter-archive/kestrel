@@ -17,6 +17,8 @@
         skipemptyfilesets="true" verbose="true">
         <arg value="--gen" />
         <arg value="java" />
+        <arg value="--gen" />
+        <arg value="rb" />
         <arg value="-o" />
         <arg value="${target.dir}" />
         <arg value="" />
@@ -92,7 +94,25 @@
 
   <!-- create properties file with build info -->
 
-  <target name="write-build-info" depends="init" if="ivy.extra.buildpackage">
+  <target name="find-git-revision" unless="no.git">
+    <!-- ask git for the current "head" commit-id, for memoizing inside the built jar -->
+    <exec outputproperty="revision" executable="git-rev-parse" failifexecutionfails="false">
+      <arg value="head" />
+    </exec>
+    <exec executable="git-rev-parse" failifexecutionfails="false">
+      <arg value="head" />
+      <redirector outputproperty="revision-short">
+        <outputfilterchain>
+          <tokenfilter>
+            <filetokenizer />
+            <replaceregex pattern="(.{8}).*" replace="\1"/>
+          </tokenfilter>
+        </outputfilterchain>
+      </redirector>
+    </exec>
+  </target>
+
+  <target name="write-build-info" depends="init, find-git-revision" if="ivy.extra.buildpackage">
     <tstamp>
       <format property="build.timestamp" pattern="yyyyMMdd-HHmmss" />
     </tstamp>
@@ -104,6 +124,7 @@
       <entry key="name" value="${ivy.module}" />
       <entry key="version" value="${ivy.revision}" />
       <entry key="build_name" value="${build.timestamp}" />
+      <entry key="build_revision" value="${revision}" />
     </propertyfile>
   </target>
 
@@ -114,17 +135,10 @@
     <copy todir="${dist.dir}/libs" flatten="true">
       <path refid="deps.path" />
     </copy>
-    <pathconvert refid="deps.path" pathsep=" " property="deps.path.jar-format">
-      <chainedmapper>
-        <flattenmapper />
-        <globmapper from="*" to="libs/*" />
-      </chainedmapper>
-    </pathconvert>
-
-    <copy todir="${target.dir}/test-classes/resources" failonerror="false">
+    <copy todir="${target.dir}/test-classes/" failonerror="false">
       <fileset dir="${test.source.dir}/resources" />
     </copy>
-    <copy todir="${dist.dir}/resources" overwrite="true" failonerror="false">
+    <copy todir="${target.dir}/classes/" overwrite="true" failonerror="false">
       <fileset dir="${source.dir}/resources" />
     </copy>
   </target>
