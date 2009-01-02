@@ -6,13 +6,17 @@
     <pathconvert property="doc.sources" pathsep=" ">
       <fileset dir="${source.dir}" includes="**/*.scala" />
     </pathconvert>
+    <path id="docs.path">
+      <path refid="bootstrap.path" />
+      <pathelement location="${target.dir}/classes" />
+    </path>
     <echo message="Building vscaladoc..." />
     <java classname="org.scala_tools.vscaladoc.Main" fork="true" failonerror="true">
       <classpath>
         <path refid="bootstrap.path" />
       </classpath>
       <arg value="-classpath" />
-      <arg pathref="bootstrap.path" />
+      <arg pathref="docs.path" />
       <arg value="-d" />
       <arg value="${docs.target.dir}/scaladoc" />
       <arg value="-sourcepath" />
