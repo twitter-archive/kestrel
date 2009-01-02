@@ -255,6 +255,10 @@ class PersistentQueue(private val persistencePath: String, val name: String,
     }
   }
 
+  def flush(): Unit = {
+    while (remove(false).isDefined) { }
+  }
+
   /**
    * Close the queue's journal file. Not safe to call on an active queue.
    */

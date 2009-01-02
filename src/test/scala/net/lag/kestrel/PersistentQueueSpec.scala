@@ -80,6 +80,39 @@ object PersistentQueueSpec extends Specification with TestHelper {
       }
     }
 
+    "flush all items" in {
+      withTempFolder {
+        val q = new PersistentQueue(folderName, "work", Config.fromMap(Map.empty))
+        q.setup
+
+        q.length mustEqual 0
+        q.totalItems mustEqual 0
+        q.bytes mustEqual 0
+        q.journalSize mustEqual 0
+
+        q.add("alpha".getBytes)
+        q.add("beta".getBytes)
+        q.add("gamma".getBytes)
+        q.length mustEqual 3
+
+        q.flush
+        q.length mustEqual 0
+
+        // journal should contain exactly: one unfinished transaction, 2 items.
+        q.close
+        var jlist: List[JournalItem] = Nil
+        val j = new Journal(new File(folderName, "work").getCanonicalPath)
+        j.replay("things") { j => jlist = jlist ++ List(j) }
+        jlist.size mustEqual 6
+        jlist(0).asInstanceOf[JournalItem.Add].item.data.size mustEqual 5
+        jlist(1).asInstanceOf[JournalItem.Add].item.data.size mustEqual 4
+        jlist(2).asInstanceOf[JournalItem.Add].item.data.size mustEqual 5
+        jlist(3) mustEqual JournalItem.Remove
+        jlist(4) mustEqual JournalItem.Remove
+        jlist(5) mustEqual JournalItem.Remove
+      }
+    }
+
     "rotate journals" in {
       withTempFolder {
         val q = new PersistentQueue(folderName, "rolling", Config.fromMap(Map.empty))

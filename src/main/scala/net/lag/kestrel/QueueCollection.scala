@@ -205,6 +205,12 @@ class QueueCollection(private val queueFolder: String, private var queueConfigs:
     }
   }
 
+  def flush(key: String): Unit = {
+    for (q <- queue(key)) {
+      q.flush
+    }
+  }
+
   case class Stats(items: Long, bytes: Long, totalItems: Long, journalSize: Long,
                    totalExpired: Long, currentAge: Long, memoryItems: Long, memoryBytes: Long)
 

@@ -124,6 +124,8 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
       case "RELOAD" =>
         Configgy.reload
         session.write("Reloaded config.\r\n")
+      case "FLUSH" =>
+        flush(request.line(1))
     }
   }
 
@@ -222,6 +224,12 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
     } else {
       writeResponse("NOT_STORED\r\n")
     }
+  }
+
+  private def flush(name: String) = {
+    log.debug("flush -> q=%s", name)
+    Kestrel.queues.flush(name)
+    writeResponse("END\r\n")
   }
 
   private def stats = {
