@@ -23,6 +23,7 @@
 package net.lag.kestrel.memcache
 
 import org.apache.mina.core.buffer.IoBuffer
+import org.apache.mina.core.filterchain.IoFilter
 import org.apache.mina.core.session.{DummySession, IoSession}
 import org.apache.mina.filter.codec._
 import org.specs._
@@ -33,7 +34,7 @@ object MemCacheCodecSpec extends Specification {
   private val fakeSession = new DummySession
 
   private val fakeDecoderOutput = new ProtocolDecoderOutput {
-    override def flush = {}
+    override def flush(nextFilter: IoFilter.NextFilter, s: IoSession) = {}
     override def write(obj: AnyRef) = {
       written = obj :: written
     }
