@@ -18,8 +18,8 @@
 package net.lag.kestrel
 
 import java.net.InetSocketAddress
-import java.util.Properties
 import java.util.concurrent.{CountDownLatch, Executors, ExecutorService, TimeUnit}
+import java.util.concurrent.atomic.AtomicLong
 import scala.actors.{Actor, Scheduler}
 import scala.actors.Actor._
 import scala.collection.mutable
@@ -33,14 +33,14 @@ import net.lag.naggati.IoHandlerActorAdapter
 
 
 class Counter {
-  private var value: Long = 0
+  private var value = new AtomicLong(0)
 
-  def get = synchronized { value }
-  def set(n: Int) = synchronized { value = n }
-  def incr = synchronized { value += 1; value }
-  def incr(n: Int) = synchronized { value += n; value }
-  def decr = synchronized { value -= 1; value }
-  override def toString = synchronized { value.toString }
+  def get() = value.get
+  def set(n: Int) = value.set(n)
+  def incr = value.addAndGet(1)
+  def incr(n: Int) = value.addAndGet(n)
+  def decr = value.addAndGet(-1)
+  override def toString = value.get.toString
 }
 
 
@@ -69,13 +69,15 @@ object Kestrel {
 
   private val deathSwitch = new CountDownLatch(1)
 
+  val DEFAULT_PORT = 22133
+
 
   def main(args: Array[String]): Unit = {
     runtime.load(args)
     startup(Configgy.config)
   }
 
-  def configure(c: Option[ConfigMap]) = {
+  def configure(c: Option[ConfigMap]): Unit = {
     for (config <- c) {
       PersistentQueue.maxJournalSize = config.getInt("max_journal_size", 16 * 1024 * 1024)
       PersistentQueue.maxMemorySize = config.getInt("max_memory_size", 128 * 1024 * 1024)
@@ -83,9 +85,9 @@ object Kestrel {
     }
   }
 
-  def startup(config: Config) = {
+  def startup(config: Config): Unit = {
     val listenAddress = config.getString("host", "0.0.0.0")
-    val listenPort = config.getInt("port", 22122)
+    val listenPort = config.getInt("port", DEFAULT_PORT)
     queues = new QueueCollection(config.getString("queue_path", "/tmp"), config.configMap("queues"))
     configure(Some(config))
     config.subscribe(configure _)
@@ -104,23 +106,23 @@ object Kestrel {
 
     log.info("Kestrel started.")
 
-    // make sure there's always one actor running so scala 272rc6 doesn't kill off the actors library.
+    // make sure there's always one actor running so scala 2.7.2 doesn't kill off the actors library.
     actor {
       deathSwitch.await
     }
   }
 
-  def shutdown = {
+  def shutdown(): Unit = {
     log.info("Shutting down!")
     queues.shutdown
     acceptor.unbind
     acceptor.dispose
     Scheduler.shutdown
     acceptorExecutor.shutdown
-    // the line below causes a 1s pause in unit tests. :(
-    acceptorExecutor.awaitTermination(5, TimeUnit.SECONDS)
+    // the line below causes a 1 second pause in unit tests. :(
+    //acceptorExecutor.awaitTermination(5, TimeUnit.SECONDS)
     deathSwitch.countDown
   }
 
-  def uptime = (Time.now - _startTime) / 1000
+  def uptime() = (Time.now - _startTime) / 1000
 }
