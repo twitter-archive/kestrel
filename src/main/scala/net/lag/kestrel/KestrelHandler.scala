@@ -243,7 +243,6 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
     report += (("get_misses", Kestrel.queues.queueMisses.toString))
     report += (("bytes_read", KestrelStats.bytesRead.toString))
     report += (("bytes_written", KestrelStats.bytesWritten.toString))
-    report += (("limit_maxbytes", "0"))                         // ???
 
     for (qName <- Kestrel.queues.queueNames) {
       val s = Kestrel.queues.stats(qName)

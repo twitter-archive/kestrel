@@ -225,7 +225,7 @@ object ServerSpec extends Specification with TestHelper {
         makeServer
         val client = new TestClient("localhost", PORT)
         val stats = client.stats
-        val basicStats = Array("bytes", "time", "limit_maxbytes", "cmd_get", "version",
+        val basicStats = Array("bytes", "time", "cmd_get", "version",
                                "bytes_written", "cmd_set", "get_misses", "total_connections",
                                "curr_connections", "curr_items", "uptime", "get_hits", "total_items",
                                "bytes_read")
