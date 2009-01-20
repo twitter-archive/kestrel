@@ -32,11 +32,11 @@ class QueueCollection(private val queueFolder: String, private var queueConfigs:
 
   private val path = new File(queueFolder)
 
-  /**
-   * TODO: Use File.mkdirs if possible.
-   */
+  if (! path.isDirectory) {
+    path.mkdirs()
+  }
   if (! path.isDirectory || ! path.canWrite) {
-      throw new InaccessibleQueuePath
+    throw new InaccessibleQueuePath
   }
 
   private val queues = new mutable.HashMap[String, PersistentQueue]
