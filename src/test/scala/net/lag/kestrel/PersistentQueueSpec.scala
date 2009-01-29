@@ -483,4 +483,31 @@ object PersistentQueueSpec extends Specification with TestHelper {
       }
     }
   }
+
+  "PersistentQueue with no journal" should {
+
+    "create no journal" in {
+      withTempFolder {
+        val q = new PersistentQueue(folderName, "mem", Config.fromMap(Map("journal" -> "off")))
+        q.setup
+
+        q.add("coffee".getBytes)
+        new File(folderName, "mem").exists mustBe false
+        q.remove must beSome[QItem].which { item => new String(item.data) == "coffee" }
+      }
+    }
+
+    "lose all data after being destroyed" in {
+      withTempFolder {
+        val q = new PersistentQueue(folderName, "mem", Config.fromMap(Map("journal" -> "off")))
+        q.setup
+        q.add("coffee".getBytes)
+        q.close
+
+        val q2 = new PersistentQueue(folderName, "mem", Config.fromMap(Map("journal" -> "off")))
+        q2.setup
+        q2.remove mustEqual None
+      }
+    }
+  }
 }
