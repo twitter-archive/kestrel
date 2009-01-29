@@ -83,6 +83,8 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   var _maxJournalOverflow: Option[Int] = None
   def maxJournalOverflow = _maxJournalOverflow.getOrElse(PersistentQueue.maxJournalOverflow)
 
+  var keepJournal = true
+
   // clients waiting on an item in this queue
   private val waiters = new mutable.ArrayBuffer[Waiter]
 
@@ -110,7 +112,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   def inReadBehind = synchronized { journal.inReadBehind }
 
 
-  config.subscribe(configure _)
+  config.subscribe(c => configure(c))
   configure(Some(config))
 
   def configure(c: Option[ConfigMap]) = synchronized {
@@ -120,6 +122,8 @@ class PersistentQueue(private val persistencePath: String, val name: String,
       _maxJournalSize = config.getLong("max_journal_size")
       _maxMemorySize = config.getLong("max_memory_size")
       _maxJournalOverflow = config.getInt("max_journal_overflow")
+      keepJournal = config.getBool("journal", true)
+	  if (!keepJournal) journal.erase()
     }
   }
 
@@ -143,7 +147,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
       } else {
         val now = Time.now
         val item = QItem(now, adjustExpiry(now, expiry), value, 0)
-        if (!journal.inReadBehind) {
+        if (keepJournal && !journal.inReadBehind) {
           if (journal.size > maxJournalSize * maxJournalOverflow) {
             // force re-creation of the journal.
             journal.roll(xidCounter, openTransactionIds map { openTransactions(_) }, queue)
@@ -154,7 +158,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
           }
         }
         _add(item)
-        journal.add(item)
+        if (keepJournal) journal.add(item)
         if (waiters.size > 0) {
           waiters.remove(0).actor ! ItemArrived
         }
@@ -180,12 +184,14 @@ class PersistentQueue(private val persistencePath: String, val name: String,
         None
       } else {
         val item = _remove(transaction)
-        if (transaction) journal.removeTentative() else journal.remove()
+        if (keepJournal) {
+          if (transaction) journal.removeTentative() else journal.remove()
 
-        if ((queueLength == 0) && (journal.size >= maxJournalSize) &&
-            (openTransactions.size == 0)) {
-          log.info("Rolling journal file for '%s'", name)
-          journal.roll(xidCounter, Nil, Nil)
+          if ((queueLength == 0) && (journal.size >= maxJournalSize) &&
+              (openTransactions.size == 0)) {
+            log.info("Rolling journal file for '%s'", name)
+            journal.roll(xidCounter, Nil, Nil)
+          }
         }
         item
       }
@@ -231,7 +237,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
     initialized.await
     synchronized {
       if (!closed) {
-        journal.unremove(xid)
+        if (keepJournal) journal.unremove(xid)
         _unremove(xid)
         if (waiters.size > 0) {
           waiters.remove(0).actor ! ItemArrived
@@ -244,7 +250,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
     initialized.await
     synchronized {
       if (!closed) {
-        journal.confirmRemove(xid)
+        if (keepJournal) journal.confirmRemove(xid)
         openTransactions.removeKey(xid)
       }
     }
@@ -278,7 +284,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   private final def fillReadBehind(): Unit = {
     // if we're in read-behind mode, scan forward in the journal to keep memory as full as
     // possible. this amortizes the disk overhead across all reads.
-    while (journal.inReadBehind && _memoryBytes < maxMemorySize) {
+    while (keepJournal && journal.inReadBehind && _memoryBytes < maxMemorySize) {
       journal.fillReadBehind { item =>
         queue += item
         _memoryBytes += item.data.length
@@ -290,6 +296,8 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   }
 
   def replayJournal(): Unit = {
+    if (!keepJournal) return
+
     log.info("Replaying transaction journal for '%s'", name)
     xidCounter = 0
 
