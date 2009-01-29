@@ -98,6 +98,15 @@ class Journal(queuePath: String) {
     reader = None
   }
 
+  def erase(): Unit = {
+    try {
+      close()
+      new File(queuePath).delete
+    } catch {
+      case _ =>
+    }
+  }
+
   def inReadBehind(): Boolean = reader.isDefined
 
   def add(item: QItem) = {
