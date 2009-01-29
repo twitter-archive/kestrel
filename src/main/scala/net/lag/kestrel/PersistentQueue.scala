@@ -265,7 +265,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
    */
   def close = synchronized {
     closed = true
-    journal.close()
+    if (keepJournal) journal.close()
   }
 
   def setup(): Unit = synchronized {
