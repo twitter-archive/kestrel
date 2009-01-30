@@ -22,6 +22,7 @@ import java.util.concurrent.CountDownLatch
 import scala.actors.Actor.actor
 import net.lag.configgy.Config
 import org.specs._
+import org.specs.matcher.Matcher
 
 
 object PersistentQueueSpec extends Specification with TestHelper {
@@ -37,6 +38,18 @@ object PersistentQueueSpec extends Specification with TestHelper {
       case JournalItem.Unremove(xid) => "unremove(%d)".format(xid)
       case JournalItem.ConfirmRemove(xid) => "confirm-remove(%d)".format(xid)
     } mkString ", "
+  }
+
+  // convenience
+  def makeQueue(name: String, options: (String, String)*) = {
+    new PersistentQueue(folderName, name, Config.fromMap(Map(options: _*)))
+  }
+
+  def beSomeQItem(s: String) = new Matcher[Option[QItem]] {
+    def apply(qitemEval: => Option[QItem]) = {
+      val qitem = qitemEval
+      (qitem.isDefined && (new String(qitem.get.data) == s), "ok", "wrong or missing queue item")
+    }
   }
 
 
@@ -161,16 +174,6 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q3.setup
         q3.journalSize mustEqual 5 + 6 + 16 + 16 + 5 + 5 + 1 + 1
         q3.length mustEqual 0
-      }
-    }
-
-    "honor max_items" in {
-      withTempFolder {
-        val q = new PersistentQueue(folderName, "weather_updates", Config.fromMap(Map("max_items" -> "1")))
-        q.setup
-        q.add("sunny".getBytes) mustEqual true
-        q.add("rainy".getBytes) mustEqual false
-        q.length mustEqual 1
       }
     }
 
@@ -484,8 +487,8 @@ object PersistentQueueSpec extends Specification with TestHelper {
     }
   }
 
-  "PersistentQueue with no journal" should {
 
+  "PersistentQueue with no journal" should {
     "create no journal" in {
       withTempFolder {
         val q = new PersistentQueue(folderName, "mem", Config.fromMap(Map("journal" -> "off")))
@@ -507,6 +510,33 @@ object PersistentQueueSpec extends Specification with TestHelper {
         val q2 = new PersistentQueue(folderName, "mem", Config.fromMap(Map("journal" -> "off")))
         q2.setup
         q2.remove mustEqual None
+      }
+    }
+  }
+
+
+  "PersistentQueue with item/size limit" should {
+    "honor max_items" in {
+      withTempFolder {
+        val q = makeQueue("weather_updates", "max_items" -> "1")
+        q.setup
+        q.add("sunny".getBytes) mustEqual true
+        q.add("rainy".getBytes) mustEqual false
+        q.length mustEqual 1
+        q.remove must beSomeQItem("sunny")
+      }
+    }
+
+    "drop older items when discard_old_when_full is set" in {
+      withTempFolder {
+        val q = makeQueue("weather_updates", "max_items" -> "3", "discard_old_when_full" -> "true")
+        q.setup
+        q.add("sunny".getBytes) mustEqual true
+        q.add("rainy".getBytes) mustEqual true
+        q.add("cloudy".getBytes) mustEqual true
+        q.add("snowy".getBytes) mustEqual true
+        q.length mustEqual 3
+        q.remove must beSomeQItem("rainy")
       }
     }
   }

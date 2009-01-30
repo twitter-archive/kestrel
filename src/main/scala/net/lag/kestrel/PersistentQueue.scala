@@ -84,6 +84,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   def maxJournalOverflow = _maxJournalOverflow.getOrElse(PersistentQueue.maxJournalOverflow)
 
   var keepJournal = true
+  var discardOldWhenFull = false
 
   // clients waiting on an item in this queue
   private val waiters = new mutable.ArrayBuffer[Waiter]
@@ -123,7 +124,8 @@ class PersistentQueue(private val persistencePath: String, val name: String,
       _maxMemorySize = config.getLong("max_memory_size")
       _maxJournalOverflow = config.getInt("max_journal_overflow")
       keepJournal = config.getBool("journal", true)
-	  if (!keepJournal) journal.erase()
+      discardOldWhenFull = config.getBool("discard_old_when_full", false)
+      if (!keepJournal) journal.erase()
     }
   }
 
@@ -142,28 +144,31 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   def add(value: Array[Byte], expiry: Long): Boolean = {
     initialized.await
     synchronized {
-      if (closed || queueLength >= maxItems) {
-        false
-      } else {
-        val now = Time.now
-        val item = QItem(now, adjustExpiry(now, expiry), value, 0)
-        if (keepJournal && !journal.inReadBehind) {
-          if (journal.size > maxJournalSize * maxJournalOverflow) {
-            // force re-creation of the journal.
-            journal.roll(xidCounter, openTransactionIds map { openTransactions(_) }, queue)
-          }
-          if (queueSize >= maxMemorySize) {
-            log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
-            journal.startReadBehind
-          }
-        }
-        _add(item)
-        if (keepJournal) journal.add(item)
-        if (waiters.size > 0) {
-          waiters.remove(0).actor ! ItemArrived
-        }
-        true
+      if (closed) return false
+      while (queueLength >= maxItems) {
+        if (!discardOldWhenFull) return false
+        _remove(false)
+        if (keepJournal) journal.remove()
       }
+
+      val now = Time.now
+      val item = QItem(now, adjustExpiry(now, expiry), value, 0)
+      if (keepJournal && !journal.inReadBehind) {
+        if (journal.size > maxJournalSize * maxJournalOverflow) {
+          // force re-creation of the journal.
+          journal.roll(xidCounter, openTransactionIds map { openTransactions(_) }, queue)
+        }
+        if (queueSize >= maxMemorySize) {
+          log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
+          journal.startReadBehind
+        }
+      }
+      _add(item)
+      if (keepJournal) journal.add(item)
+      if (waiters.size > 0) {
+        waiters.remove(0).actor ! ItemArrived
+      }
+      true
     }
   }
 
