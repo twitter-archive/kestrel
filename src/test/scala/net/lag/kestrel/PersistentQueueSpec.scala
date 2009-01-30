@@ -20,6 +20,7 @@ package net.lag.kestrel
 import java.io.{File, FileInputStream}
 import java.util.concurrent.CountDownLatch
 import scala.actors.Actor.actor
+import scala.collection.mutable
 import net.lag.configgy.Config
 import org.specs._
 import org.specs.matcher.Matcher
@@ -27,11 +28,11 @@ import org.specs.matcher.Matcher
 
 object PersistentQueueSpec extends Specification with TestHelper {
 
-  def dumpJournal(folderName: String, qname: String): String = {
-    var rv = List[JournalItem]()
-    new Journal(new File(folderName, qname).getCanonicalPath).replay(qname) { item => rv = item :: rv }
-    rv.reverse map {
-      case JournalItem.Add(item) => "add(%s)".format(new String(item.data))
+  def dumpJournal(qname: String): String = {
+    var rv = new mutable.ListBuffer[JournalItem]
+    new Journal(new File(folderName, qname).getCanonicalPath).replay(qname) { item => rv += item }
+    rv map {
+      case JournalItem.Add(item) => "add(%d:%d)".format(item.data.size, item.xid)
       case JournalItem.Remove => "remove"
       case JournalItem.RemoveTentative => "remove-tentative"
       case JournalItem.SavedXid(xid) => "xid(%d)".format(xid)
@@ -49,6 +50,13 @@ object PersistentQueueSpec extends Specification with TestHelper {
     def apply(qitemEval: => Option[QItem]) = {
       val qitem = qitemEval
       (qitem.isDefined && (new String(qitem.get.data) == s), "ok", "wrong or missing queue item")
+    }
+  }
+
+  def beSomeQItem(len: Int) = new Matcher[Option[QItem]] {
+    def apply(qitemEval: => Option[QItem]) = {
+      val qitem = qitemEval
+      (qitem.isDefined && (qitem.get.data.size == len), "ok", "wrong or missing queue item")
     }
   }
 
@@ -405,8 +413,8 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q.bytes mustEqual 0
 
         q.close
-        dumpJournal(folderName, "things") mustEqual
-          "add(house), add(cat), remove-tentative, remove-tentative, unremove(1), confirm-remove(2), remove"
+        dumpJournal("things") mustEqual
+          "add(5:0), add(3:0), remove-tentative, remove-tentative, unremove(1), confirm-remove(2), remove"
 
         // and journal is replayed correctly.
         val q2 = new PersistentQueue(folderName, "things", Config.fromMap(Map.empty))
@@ -453,16 +461,14 @@ object PersistentQueueSpec extends Specification with TestHelper {
 
     "recreate the journal file when it gets too big" in {
       withTempFolder {
-        val config = Config.fromMap(Map("max_journal_size" -> "1024",
-                                        "max_journal_overflow" -> "3"))
-        val q = new PersistentQueue(folderName, "things", config)
+        val q = makeQueue("things", "max_journal_size" -> "1024", "max_journal_overflow" -> "3")
         q.setup
         q.add(new Array[Byte](512))
         // can't roll the journal normally, cuz there's always one item left.
         for (i <- 0 until 5) {
           q.add(new Array[Byte](512))
           // last remove will be an incomplete transaction:
-          q.remove(i == 4) must beSome[QItem].which { item => item.data.size == 512 }
+          q.remove(i == 4) must beSomeQItem(512)
         }
         q.length mustEqual 1
         q.journalSize mustEqual (512 * 6) + (6 * 21) + 5
@@ -474,15 +480,15 @@ object PersistentQueueSpec extends Specification with TestHelper {
 
         // journal should contain exactly: one unfinished transaction, 2 items.
         q.close
-        var jlist: List[JournalItem] = Nil
-        val j = new Journal(new File(folderName, "things").getCanonicalPath)
-        j.replay("things") { j => jlist = jlist ++ List(j) }
-        jlist(0).asInstanceOf[JournalItem.Add].item.xid mustEqual 1
-        jlist(0).asInstanceOf[JournalItem.Add].item.data.size mustEqual 512
-        jlist(1) mustBe JournalItem.RemoveTentative
-        jlist(2).asInstanceOf[JournalItem.SavedXid].xid mustEqual 1
-        jlist(3).asInstanceOf[JournalItem.Add].item.data.size mustEqual 512
-        jlist(4).asInstanceOf[JournalItem.Add].item.data.size mustEqual 512
+        dumpJournal("things") mustEqual "add(512:1), remove-tentative, xid(1), add(512:0), add(512:0)"
+
+//        j.replay("things") { j => jlist = jlist ++ List(j) }
+//        jlist(0).asInstanceOf[JournalItem.Add].item.xid mustEqual 1
+//        jlist(0).asInstanceOf[JournalItem.Add].item.data.size mustEqual 512
+//        jlist(1) mustBe JournalItem.RemoveTentative
+//        jlist(2).asInstanceOf[JournalItem.SavedXid].xid mustEqual 1
+//        jlist(3).asInstanceOf[JournalItem.Add].item.data.size mustEqual 512
+//        jlist(4).asInstanceOf[JournalItem.Add].item.data.size mustEqual 512
       }
     }
   }
@@ -491,23 +497,23 @@ object PersistentQueueSpec extends Specification with TestHelper {
   "PersistentQueue with no journal" should {
     "create no journal" in {
       withTempFolder {
-        val q = new PersistentQueue(folderName, "mem", Config.fromMap(Map("journal" -> "off")))
+        val q = makeQueue("mem", "journal" -> "off")
         q.setup
 
         q.add("coffee".getBytes)
         new File(folderName, "mem").exists mustBe false
-        q.remove must beSome[QItem].which { item => new String(item.data) == "coffee" }
+        q.remove must beSomeQItem("coffee")
       }
     }
 
     "lose all data after being destroyed" in {
       withTempFolder {
-        val q = new PersistentQueue(folderName, "mem", Config.fromMap(Map("journal" -> "off")))
+        val q = makeQueue("mem", "journal" -> "off")
         q.setup
         q.add("coffee".getBytes)
         q.close
 
-        val q2 = new PersistentQueue(folderName, "mem", Config.fromMap(Map("journal" -> "off")))
+        val q2 = makeQueue("mem", "journal" -> "off")
         q2.setup
         q2.remove mustEqual None
       }
