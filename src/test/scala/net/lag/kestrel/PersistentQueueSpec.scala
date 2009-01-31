@@ -470,14 +470,6 @@ object PersistentQueueSpec extends Specification with TestHelper {
         // journal should contain exactly: one unfinished transaction, 2 items.
         q.close
         dumpJournal("things") mustEqual "add(512:1), remove-tentative, xid(1), add(512:0), add(512:0)"
-
-//        j.replay("things") { j => jlist = jlist ++ List(j) }
-//        jlist(0).asInstanceOf[JournalItem.Add].item.xid mustEqual 1
-//        jlist(0).asInstanceOf[JournalItem.Add].item.data.size mustEqual 512
-//        jlist(1) mustBe JournalItem.RemoveTentative
-//        jlist(2).asInstanceOf[JournalItem.SavedXid].xid mustEqual 1
-//        jlist(3).asInstanceOf[JournalItem.Add].item.data.size mustEqual 512
-//        jlist(4).asInstanceOf[JournalItem.Add].item.data.size mustEqual 512
       }
     }
   }
