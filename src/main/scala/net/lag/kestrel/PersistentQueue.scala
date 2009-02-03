@@ -205,12 +205,12 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   def remove(): Option[QItem] = remove(false)
 
   def remove(timeoutAbsolute: Long, transaction: Boolean)(f: Option[QItem] => Unit): Unit = {
-    synchronized {
+    val callback = synchronized {
       val item = remove(transaction)
       if (item.isDefined) {
-        f(item)
+        Some(item)
       } else if (timeoutAbsolute == 0) {
-        f(None)
+        Some(None)
       } else {
         val w = Waiter(Actor.self)
         waiters += w
@@ -225,8 +225,11 @@ class PersistentQueue(private val persistencePath: String, val name: String,
             }
           }
         }
+        None
       }
     }
+    // make this callback happen outside the lock.
+    callback map { f(_) }
   }
 
   /**
