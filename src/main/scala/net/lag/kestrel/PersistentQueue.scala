@@ -30,6 +30,16 @@ import net.lag.logging.Logger
 case class QItem(addTime: Long, expiry: Long, data: Array[Byte], var xid: Int)
 
 
+// a config value that's backed by a global setting but may be locally overridden
+class OverlaySetting[T](base: => T) {
+  var local: Option[T] = None
+
+  def set(value: Option[T]) = local = value
+
+  def get = local.getOrElse(base)
+}
+
+
 class PersistentQueue(private val persistencePath: String, val name: String,
                       val config: ConfigMap) {
 
@@ -71,17 +81,16 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   // maximum expiration time for this queue (seconds).
   var maxAge = 0
 
+  def overlay[T](base: => T) = new OverlaySetting(base)
+
   // maximum journal size before the journal should be rotated.
-  var _maxJournalSize: Option[Long] = None
-  def maxJournalSize = _maxJournalSize.getOrElse(PersistentQueue.maxJournalSize)
+  val maxJournalSize = overlay(PersistentQueue.maxJournalSize)
 
   // maximum size of a queue before it drops into read-behind mode.
-  var _maxMemorySize: Option[Long] = None
-  def maxMemorySize = _maxMemorySize.getOrElse(PersistentQueue.maxMemorySize)
+  val maxMemorySize = overlay(PersistentQueue.maxMemorySize)
 
   // maximum overflow (multiplier) of a journal file before we re-create it.
-  var _maxJournalOverflow: Option[Int] = None
-  def maxJournalOverflow = _maxJournalOverflow.getOrElse(PersistentQueue.maxJournalOverflow)
+  val maxJournalOverflow = overlay(PersistentQueue.maxJournalOverflow)
 
   var keepJournal = true
   var discardOldWhenFull = false
@@ -120,9 +129,9 @@ class PersistentQueue(private val persistencePath: String, val name: String,
     for (config <- c) {
       maxItems = config("max_items", Math.MAX_INT)
       maxAge = config("max_age", 0)
-      _maxJournalSize = config.getLong("max_journal_size")
-      _maxMemorySize = config.getLong("max_memory_size")
-      _maxJournalOverflow = config.getInt("max_journal_overflow")
+      maxJournalSize.set(config.getLong("max_journal_size"))
+      maxMemorySize.set(config.getLong("max_memory_size"))
+      maxJournalOverflow.set(config.getInt("max_journal_overflow"))
       keepJournal = config.getBool("journal", true)
       discardOldWhenFull = config.getBool("discard_old_when_full", false)
       if (!keepJournal) journal.erase()
@@ -154,11 +163,11 @@ class PersistentQueue(private val persistencePath: String, val name: String,
       val now = Time.now
       val item = QItem(now, adjustExpiry(now, expiry), value, 0)
       if (keepJournal && !journal.inReadBehind) {
-        if (journal.size > maxJournalSize * maxJournalOverflow) {
+        if (journal.size > maxJournalSize.get * maxJournalOverflow.get) {
           // force re-creation of the journal.
           journal.roll(xidCounter, openTransactionIds map { openTransactions(_) }, queue)
         }
-        if (queueSize >= maxMemorySize) {
+        if (queueSize >= maxMemorySize.get) {
           log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
           journal.startReadBehind
         }
@@ -192,7 +201,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
         if (keepJournal) {
           if (transaction) journal.removeTentative() else journal.remove()
 
-          if ((queueLength == 0) && (journal.size >= maxJournalSize) &&
+          if ((queueLength == 0) && (journal.size >= maxJournalSize.get) &&
               (openTransactions.size == 0)) {
             log.info("Rolling journal file for '%s'", name)
             journal.roll(xidCounter, Nil, Nil)
@@ -289,7 +298,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   private final def fillReadBehind(): Unit = {
     // if we're in read-behind mode, scan forward in the journal to keep memory as full as
     // possible. this amortizes the disk overhead across all reads.
-    while (keepJournal && journal.inReadBehind && _memoryBytes < maxMemorySize) {
+    while (keepJournal && journal.inReadBehind && _memoryBytes < maxMemorySize.get) {
       journal.fillReadBehind { item =>
         queue += item
         _memoryBytes += item.data.length
@@ -310,7 +319,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
       case JournalItem.Add(item) =>
         _add(item)
         // when processing the journal, this has to happen after:
-        if (!journal.inReadBehind && queueSize >= maxMemorySize) {
+        if (!journal.inReadBehind && queueSize >= maxMemorySize.get) {
           log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
           journal.startReadBehind
         }
