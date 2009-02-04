@@ -125,7 +125,7 @@ object PersistentQueueSpec extends Specification with TestHelper {
       withTempFolder {
         val q = makeQueue("rolling")
         q.setup
-        q.maxJournalSize.set(Some(64))
+        q.maxJournalSize set Some(64)
 
         q.add(new Array[Byte](32))
         q.add(new Array[Byte](64))
@@ -197,11 +197,11 @@ object PersistentQueueSpec extends Specification with TestHelper {
     "allow max_journal_size and max_memory_size to be overridden per queue" in {
       withTempFolder {
         val q1 = makeQueue("test1", "max_memory_size" -> "123")
-        q1.maxJournalSize.get mustEqual PersistentQueue.maxJournalSize
-        q1.maxMemorySize.get mustEqual 123
+        q1.maxJournalSize() mustEqual PersistentQueue.maxJournalSize
+        q1.maxMemorySize() mustEqual 123
         val q2 = makeQueue("test2", "max_journal_size" -> "123")
-        q2.maxJournalSize.get mustEqual 123
-        q2.maxMemorySize.get mustEqual PersistentQueue.maxMemorySize
+        q2.maxJournalSize() mustEqual 123
+        q2.maxMemorySize() mustEqual PersistentQueue.maxMemorySize
       }
     }
 
