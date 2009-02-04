@@ -543,6 +543,19 @@ object PersistentQueueSpec extends Specification with TestHelper {
       }
     }
 
+    "honor max_size" in {
+      withTempFolder {
+        val q = makeQueue("weather_updates", "max_size" -> "510")
+        q.setup
+        q.add(("a" * 256).getBytes) mustEqual true
+        q.add(("b" * 256).getBytes) mustEqual true
+        q.add("television".getBytes) mustEqual false
+        q.length mustEqual 2
+        q.bytes mustEqual 512
+        q.remove must beSomeQItem("a" * 256)
+      }
+    }
+
     "drop older items when discard_old_when_full is set" in {
       withTempFolder {
         val q = makeQueue("weather_updates", "max_items" -> "3", "discard_old_when_full" -> "true")

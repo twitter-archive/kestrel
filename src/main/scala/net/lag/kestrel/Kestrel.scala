@@ -79,11 +79,12 @@ object Kestrel {
 
   def configure(config: ConfigMap): Unit = {
     // fill in defaults for all queues
+    PersistentQueue.maxItems = config.getInt("max_items", Math.MAX_INT)
+    PersistentQueue.maxSize = config.getLong("max_size", Math.MAX_LONG)
+    PersistentQueue.maxAge = config.getInt("max_age", 0)
     PersistentQueue.maxJournalSize = config.getInt("max_journal_size", 16 * 1024 * 1024)
     PersistentQueue.maxMemorySize = config.getInt("max_memory_size", 128 * 1024 * 1024)
     PersistentQueue.maxJournalOverflow = config.getInt("max_journal_overflow", 10)
-    PersistentQueue.maxItems = config.getInt("max_items", Math.MAX_INT)
-    PersistentQueue.maxAge = config.getInt("max_age", 0)
     PersistentQueue.discardOldWhenFull = config.getBool("discard_old_when_full", false)
   }
 

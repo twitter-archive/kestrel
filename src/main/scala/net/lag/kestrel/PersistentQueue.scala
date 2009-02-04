@@ -61,6 +61,9 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   // age (in milliseconds) of the last item read from the queue:
   private var _currentAge: Long = 0
 
+  // # of items thot were discarded because the queue was full:
+  private var _totalDiscarded: Long = 0
+
   // # of items in the queue (including those not in memory)
   private var queueLength: Long = 0
 
@@ -77,8 +80,11 @@ class PersistentQueue(private val persistencePath: String, val name: String,
 
   def overlay[T](base: => T) = new OverlaySetting(base)
 
-  // attempting to add an item after the queue reaches this size will fail.
+  // attempting to add an item after the queue reaches this size (in items) will fail.
   var maxItems = overlay(PersistentQueue.maxItems)
+
+  // attempting to add an item after the queue reaches this size (in bytes) will fail.
+  var maxSize = overlay(PersistentQueue.maxSize)
 
   // maximum expiration time for this queue (seconds).
   var maxAge = overlay(PersistentQueue.maxAge)
@@ -113,6 +119,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   def journalSize: Long = synchronized { journal.size }
   def totalExpired: Long = synchronized { _totalExpired }
   def currentAge: Long = synchronized { _currentAge }
+  def totalDiscarded: Long = synchronized { _totalDiscarded }
 
   // mostly for unit tests.
   def memoryLength: Long = synchronized { queue.size }
@@ -125,6 +132,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
 
   def configure(config: ConfigMap) = synchronized {
     maxItems set config.getInt("max_items")
+    maxSize set config.getLong("max_size")
     maxAge set config.getInt("max_age")
     maxJournalSize set config.getLong("max_journal_size")
     maxMemorySize set config.getLong("max_memory_size")
@@ -151,17 +159,19 @@ class PersistentQueue(private val persistencePath: String, val name: String,
     initialized.await
     synchronized {
       if (closed) return false
-      while (queueLength >= maxItems()) {
+      while (queueLength >= maxItems() || queueSize >= maxSize()) {
         if (!discardOldWhenFull()) return false
         _remove(false)
+        _totalDiscarded += 1
         if (keepJournal) journal.remove()
       }
 
       val now = Time.now
       val item = QItem(now, adjustExpiry(now, expiry), value, 0)
       if (keepJournal && !journal.inReadBehind) {
-        if (journal.size > maxJournalSize() * maxJournalOverflow()) {
+        if (journal.size > maxJournalSize() * maxJournalOverflow() && queueSize < maxJournalSize()) {
           // force re-creation of the journal.
+          log.info("Rolling journal file for '%s' (qsize=%d)", name, queueSize)
           journal.roll(xidCounter, openTransactionIds map { openTransactions(_) }, queue)
         }
         if (queueSize >= maxMemorySize()) {
@@ -400,10 +410,11 @@ class PersistentQueue(private val persistencePath: String, val name: String,
 
 
 object PersistentQueue {
+  @volatile var maxItems: Int = Math.MAX_INT
+  @volatile var maxSize: Long = Math.MAX_LONG
+  @volatile var maxAge: Int = 0
   @volatile var maxJournalSize: Long = 16 * 1024 * 1024
   @volatile var maxMemorySize: Long = 128 * 1024 * 1024
   @volatile var maxJournalOverflow: Int = 10
-  @volatile var maxItems: Int = Math.MAX_INT
-  @volatile var maxAge: Int = 0
   @volatile var discardOldWhenFull: Boolean = false
 }
