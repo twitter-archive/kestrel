@@ -65,6 +65,16 @@ object PersistentQueueSpec extends Specification with TestHelper {
     }
   }
 
+  def withMaxMemorySize(newLimit: Long)(f: => Unit) = {
+    val oldLimit = PersistentQueue.maxMemorySize
+    PersistentQueue.maxMemorySize = newLimit
+    try {
+      f
+    } finally {
+      PersistentQueue.maxMemorySize = oldLimit
+    }
+  }
+
 
   "PersistentQueue" should {
     "add and remove one item" in {
@@ -207,209 +217,214 @@ object PersistentQueueSpec extends Specification with TestHelper {
 
     "drop into read-behind mode" in {
       withTempFolder {
-        PersistentQueue.maxMemorySize = 1024
-        val q = makeQueue("things")
-        q.setup
-        for (i <- 0 until 10) {
-          val data = new Array[Byte](128)
-          data(0) = i.toByte
-          q.add(data)
-          q.inReadBehind mustEqual (i >= 8)
-        }
-        q.inReadBehind mustBe true
-        q.length mustEqual 10
-        q.bytes mustEqual 1280
-        q.memoryLength mustEqual 8
-        q.memoryBytes mustEqual 1024
+        withMaxMemorySize(1024) {
+          val q = makeQueue("things")
+          q.setup
+          for (i <- 0 until 10) {
+            val data = new Array[Byte](128)
+            data(0) = i.toByte
+            q.add(data)
+            q.inReadBehind mustEqual (i >= 8)
+          }
+          q.inReadBehind mustBe true
+          q.length mustEqual 10
+          q.bytes mustEqual 1280
+          q.memoryLength mustEqual 8
+          q.memoryBytes mustEqual 1024
 
-        // read 1 item. queue should pro-actively read the next item in from disk.
-        val d0 = q.remove.get.data
-        d0(0) mustEqual 0
-        q.inReadBehind mustBe true
-        q.length mustEqual 9
-        q.bytes mustEqual 1152
-        q.memoryLength mustEqual 8
-        q.memoryBytes mustEqual 1024
+          // read 1 item. queue should pro-actively read the next item in from disk.
+          val d0 = q.remove.get.data
+          d0(0) mustEqual 0
+          q.inReadBehind mustBe true
+          q.length mustEqual 9
+          q.bytes mustEqual 1152
+          q.memoryLength mustEqual 8
+          q.memoryBytes mustEqual 1024
 
-        // adding a new item should be ok
-        val w10 = new Array[Byte](128)
-        w10(0) = 10.toByte
-        q.add(w10)
-        q.inReadBehind mustBe true
-        q.length mustEqual 10
-        q.bytes mustEqual 1280
-        q.memoryLength mustEqual 8
-        q.memoryBytes mustEqual 1024
+          // adding a new item should be ok
+          val w10 = new Array[Byte](128)
+          w10(0) = 10.toByte
+          q.add(w10)
+          q.inReadBehind mustBe true
+          q.length mustEqual 10
+          q.bytes mustEqual 1280
+          q.memoryLength mustEqual 8
+          q.memoryBytes mustEqual 1024
 
-        // read again.
-        val d1 = q.remove.get.data
-        d1(0) mustEqual 1
-        q.inReadBehind mustBe true
-        q.length mustEqual 9
-        q.bytes mustEqual 1152
-        q.memoryLength mustEqual 8
-        q.memoryBytes mustEqual 1024
+          // read again.
+          val d1 = q.remove.get.data
+          d1(0) mustEqual 1
+          q.inReadBehind mustBe true
+          q.length mustEqual 9
+          q.bytes mustEqual 1152
+          q.memoryLength mustEqual 8
+          q.memoryBytes mustEqual 1024
 
-        // and again.
-        val d2 = q.remove.get.data
-        d2(0) mustEqual 2
-        q.inReadBehind mustBe true
-        q.length mustEqual 8
-        q.bytes mustEqual 1024
-        q.memoryLength mustEqual 8
-        q.memoryBytes mustEqual 1024
+          // and again.
+          val d2 = q.remove.get.data
+          d2(0) mustEqual 2
+          q.inReadBehind mustBe true
+          q.length mustEqual 8
+          q.bytes mustEqual 1024
+          q.memoryLength mustEqual 8
+          q.memoryBytes mustEqual 1024
 
-        for (i <- 3 until 11) {
-          val d = q.remove.get.data
-          d(0) mustEqual i
-          q.inReadBehind mustBe false
-          q.length mustEqual 10 - i
-          q.bytes mustEqual 128 * (10 - i)
-          q.memoryLength mustEqual 10 - i
-          q.memoryBytes mustEqual 128 * (10 - i)
+          for (i <- 3 until 11) {
+            val d = q.remove.get.data
+            d(0) mustEqual i
+            q.inReadBehind mustBe false
+            q.length mustEqual 10 - i
+            q.bytes mustEqual 128 * (10 - i)
+            q.memoryLength mustEqual 10 - i
+            q.memoryBytes mustEqual 128 * (10 - i)
+          }
         }
       }
     }
 
     "drop into read-behind mode on startup" in {
       withTempFolder {
-        PersistentQueue.maxMemorySize = 1024
-        val q = makeQueue("things")
-        q.setup
-        for (i <- 0 until 10) {
-          val data = new Array[Byte](128)
-          data(0) = i.toByte
-          q.add(data)
-          q.inReadBehind mustEqual (i >= 8)
-        }
-        q.inReadBehind mustBe true
-        q.length mustEqual 10
-        q.bytes mustEqual 1280
-        q.memoryLength mustEqual 8
-        q.memoryBytes mustEqual 1024
-        q.close
+        withMaxMemorySize(1024) {
+          val q = makeQueue("things")
+          q.setup
+          for (i <- 0 until 10) {
+            val data = new Array[Byte](128)
+            data(0) = i.toByte
+            q.add(data)
+            q.inReadBehind mustEqual (i >= 8)
+          }
+          q.inReadBehind mustBe true
+          q.length mustEqual 10
+          q.bytes mustEqual 1280
+          q.memoryLength mustEqual 8
+          q.memoryBytes mustEqual 1024
+          q.close
 
-        val q2 = makeQueue("things")
-        q2.setup
+          val q2 = makeQueue("things")
+          q2.setup
 
-        q2.inReadBehind mustBe true
-        q2.length mustEqual 10
-        q2.bytes mustEqual 1280
-        q2.memoryLength mustEqual 8
-        q2.memoryBytes mustEqual 1024
+          q2.inReadBehind mustBe true
+          q2.length mustEqual 10
+          q2.bytes mustEqual 1280
+          q2.memoryLength mustEqual 8
+          q2.memoryBytes mustEqual 1024
 
-        for (i <- 0 until 10) {
-          val d = q2.remove.get.data
-          d(0) mustEqual i
-          q2.inReadBehind mustEqual (i < 2)
-          q2.length mustEqual 9 - i
-          q2.bytes mustEqual 128 * (9 - i)
-          q2.memoryLength mustEqual (if (i < 2) 8 else 9 - i)
-          q2.memoryBytes mustEqual (if (i < 2) 1024 else 128 * (9 - i))
+          for (i <- 0 until 10) {
+            val d = q2.remove.get.data
+            d(0) mustEqual i
+            q2.inReadBehind mustEqual (i < 2)
+            q2.length mustEqual 9 - i
+            q2.bytes mustEqual 128 * (9 - i)
+            q2.memoryLength mustEqual (if (i < 2) 8 else 9 - i)
+            q2.memoryBytes mustEqual (if (i < 2) 1024 else 128 * (9 - i))
+          }
         }
       }
     }
 
     "drop into read-behind mode during journal processing, then return to ordinary times" in {
       withTempFolder {
-        PersistentQueue.maxMemorySize = 1024
-        val q = makeQueue("things")
-        q.setup
-        for (i <- 0 until 10) {
-          val data = new Array[Byte](128)
-          data(0) = i.toByte
-          q.add(data)
-          q.inReadBehind mustEqual (i >= 8)
-        }
-        q.inReadBehind mustBe true
-        q.length mustEqual 10
-        q.bytes mustEqual 1280
-        q.memoryLength mustEqual 8
-        q.memoryBytes mustEqual 1024
-        for (i <- 0 until 10) {
-          q.remove
-        }
-        q.inReadBehind mustBe false
-        q.length mustEqual 0
-        q.bytes mustEqual 0
-        q.memoryLength mustEqual 0
-        q.memoryBytes mustEqual 0
-        q.close
+        withMaxMemorySize(1024) {
+          val q = makeQueue("things")
+          q.setup
+          for (i <- 0 until 10) {
+            val data = new Array[Byte](128)
+            data(0) = i.toByte
+            q.add(data)
+            q.inReadBehind mustEqual (i >= 8)
+          }
+          q.inReadBehind mustBe true
+          q.length mustEqual 10
+          q.bytes mustEqual 1280
+          q.memoryLength mustEqual 8
+          q.memoryBytes mustEqual 1024
+          for (i <- 0 until 10) {
+            q.remove
+          }
+          q.inReadBehind mustBe false
+          q.length mustEqual 0
+          q.bytes mustEqual 0
+          q.memoryLength mustEqual 0
+          q.memoryBytes mustEqual 0
+          q.close
 
-        val q2 = makeQueue("things")
-        q2.setup
-        q2.inReadBehind mustBe false
-        q2.length mustEqual 0
-        q2.bytes mustEqual 0
-        q2.memoryLength mustEqual 0
-        q2.memoryBytes mustEqual 0
+          val q2 = makeQueue("things")
+          q2.setup
+          q2.inReadBehind mustBe false
+          q2.length mustEqual 0
+          q2.bytes mustEqual 0
+          q2.memoryLength mustEqual 0
+          q2.memoryBytes mustEqual 0
+        }
       }
     }
 
     "handle timeout reads" in {
       withTempFolder {
-        PersistentQueue.maxMemorySize = 1024
-        val q = makeQueue("things")
-        q.setup
+        withMaxMemorySize(1024) {
+          val q = makeQueue("things")
+          q.setup
 
-        actor {
-          Thread.sleep(100)
-          q.add("hello".getBytes)
-        }
-
-        var rv: String = null
-        val latch = new CountDownLatch(1)
-        actor {
-          q.remove(Time.now + 250, false) { item =>
-            rv = new String(item.get.data)
-            latch.countDown
+          actor {
+            Thread.sleep(100)
+            q.add("hello".getBytes)
           }
+
+          var rv: String = null
+          val latch = new CountDownLatch(1)
+          actor {
+            q.remove(Time.now + 250, false) { item =>
+              rv = new String(item.get.data)
+              latch.countDown
+            }
+          }
+          latch.await
+          rv mustEqual "hello"
         }
-        latch.await
-        rv mustEqual "hello"
       }
     }
 
     "correctly interleave transactions in the journal" in {
       withTempFolder {
-        PersistentQueue.maxMemorySize = 1024
-        val q = makeQueue("things")
-        q.setup
-        q.add("house".getBytes)
-        q.add("cat".getBytes)
-        q.journalSize mustEqual 2 * 21 + 8
+        withMaxMemorySize(1024) {
+          val q = makeQueue("things")
+          q.setup
+          q.add("house".getBytes)
+          q.add("cat".getBytes)
+          q.journalSize mustEqual 2 * 21 + 8
 
-        val house = q.remove(true).get
-        new String(house.data) mustEqual "house"
-        house.xid mustEqual 1
-        q.journalSize mustEqual 2 * 21 + 8 + 1
+          val house = q.remove(true).get
+          new String(house.data) mustEqual "house"
+          house.xid mustEqual 1
+          q.journalSize mustEqual 2 * 21 + 8 + 1
 
-        val cat = q.remove(true).get
-        new String(cat.data) mustEqual "cat"
-        cat.xid mustEqual 2
-        q.journalSize mustEqual 2 * 21 + 8 + 1 + 1
+          val cat = q.remove(true).get
+          new String(cat.data) mustEqual "cat"
+          cat.xid mustEqual 2
+          q.journalSize mustEqual 2 * 21 + 8 + 1 + 1
 
-        q.unremove(house.xid)
-        q.journalSize mustEqual 2 * 21 + 8 + 1 + 1 + 5
+          q.unremove(house.xid)
+          q.journalSize mustEqual 2 * 21 + 8 + 1 + 1 + 5
 
-        q.confirmRemove(cat.xid)
-        q.journalSize mustEqual 2 * 21 + 8 + 1 + 1 + 5 + 5
-        q.length mustEqual 1
-        q.bytes mustEqual 5
+          q.confirmRemove(cat.xid)
+          q.journalSize mustEqual 2 * 21 + 8 + 1 + 1 + 5 + 5
+          q.length mustEqual 1
+          q.bytes mustEqual 5
 
-        new String(q.remove.get.data) mustEqual "house"
-        q.length mustEqual 0
-        q.bytes mustEqual 0
+          new String(q.remove.get.data) mustEqual "house"
+          q.length mustEqual 0
+          q.bytes mustEqual 0
 
-        q.close
-        dumpJournal("things") mustEqual
-          "add(5:0:house), add(3:0:cat), remove-tentative, remove-tentative, unremove(1), confirm-remove(2), remove"
+          q.close
+          dumpJournal("things") mustEqual
+            "add(5:0:house), add(3:0:cat), remove-tentative, remove-tentative, unremove(1), confirm-remove(2), remove"
 
-        // and journal is replayed correctly.
-        val q2 = makeQueue("things")
-        q2.setup
-        q2.length mustEqual 0
-        q2.bytes mustEqual 0
+          // and journal is replayed correctly.
+          val q2 = makeQueue("things")
+          q2.setup
+          q2.length mustEqual 0
+          q2.bytes mustEqual 0
+        }
       }
     }
 
@@ -470,6 +485,20 @@ object PersistentQueueSpec extends Specification with TestHelper {
         // journal should contain exactly: one unfinished transaction, 2 items.
         q.close
         dumpJournal("things") mustEqual "add(512:1), remove-tentative, xid(1), add(512:0), add(512:0)"
+      }
+    }
+
+    "don't recreate the journal file if the queue itself is still huge" in {
+      withTempFolder {
+        val q = makeQueue("things", "max_journal_size" -> "1024", "max_journal_overflow" -> "3")
+        q.setup
+        for (i <- 0 until 8) {
+          q.add(new Array[Byte](512))
+        }
+        q.length mustEqual 8
+        q.bytes mustEqual 4096
+        dumpJournal("things").contains("xid") mustBe false
+        q.journalSize mustEqual (512 + 21) * 8
       }
     }
   }
