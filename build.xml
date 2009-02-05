@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project name="kestrel" default="package">
   <description> Kestrel: simple queue server. </description>
+  <property name="skip.docs" value="true" />
   <import file="ant/bootstrap.xml" />
 </project>
