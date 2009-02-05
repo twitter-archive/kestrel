@@ -56,12 +56,12 @@ object ServerSpec extends Specification with TestHelper {
     "configure per-queue" in {
       withTempFolder {
         makeServer
-        Kestrel.queues.queue("starship").map(_.maxItems) mustEqual Some(Math.MAX_INT)
-        Kestrel.queues.queue("starship").map(_.maxAge) mustEqual Some(0)
-        Kestrel.queues.queue("weather_updates").map(_.maxItems) mustEqual Some(1500000)
-        Kestrel.queues.queue("weather_updates").map(_.maxAge) mustEqual Some(1800)
+        Kestrel.queues.queue("starship").map(_.maxItems()) mustEqual Some(Math.MAX_INT)
+        Kestrel.queues.queue("starship").map(_.maxAge()) mustEqual Some(0)
+        Kestrel.queues.queue("weather_updates").map(_.maxItems()) mustEqual Some(1500000)
+        Kestrel.queues.queue("weather_updates").map(_.maxAge()) mustEqual Some(1800)
         config("queues.starship.max_items") = 9999
-        Kestrel.queues.queue("starship").map(_.maxItems) mustEqual Some(9999)
+        Kestrel.queues.queue("starship").map(_.maxItems()) mustEqual Some(9999)
       }
     }
 

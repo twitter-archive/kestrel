@@ -77,20 +77,23 @@ object Kestrel {
     startup(Configgy.config)
   }
 
-  def configure(c: Option[ConfigMap]): Unit = {
-    for (config <- c) {
-      PersistentQueue.maxJournalSize = config.getInt("max_journal_size", 16 * 1024 * 1024)
-      PersistentQueue.maxMemorySize = config.getInt("max_memory_size", 128 * 1024 * 1024)
-      PersistentQueue.maxJournalOverflow = config.getInt("max_journal_overflow", 10)
-    }
+  def configure(config: ConfigMap): Unit = {
+    // fill in defaults for all queues
+    PersistentQueue.maxItems = config.getInt("max_items", Math.MAX_INT)
+    PersistentQueue.maxSize = config.getLong("max_size", Math.MAX_LONG)
+    PersistentQueue.maxAge = config.getInt("max_age", 0)
+    PersistentQueue.maxJournalSize = config.getInt("max_journal_size", 16 * 1024 * 1024)
+    PersistentQueue.maxMemorySize = config.getInt("max_memory_size", 128 * 1024 * 1024)
+    PersistentQueue.maxJournalOverflow = config.getInt("max_journal_overflow", 10)
+    PersistentQueue.discardOldWhenFull = config.getBool("discard_old_when_full", false)
   }
 
   def startup(config: Config): Unit = {
     val listenAddress = config.getString("host", "0.0.0.0")
     val listenPort = config.getInt("port", DEFAULT_PORT)
     queues = new QueueCollection(config.getString("queue_path", "/tmp"), config.configMap("queues"))
-    configure(Some(config))
-    config.subscribe(configure _)
+    configure(config)
+    config.subscribe { c => configure(c.getOrElse(new Config)) }
 
     acceptorExecutor = Executors.newCachedThreadPool()
     acceptor = new NioSocketAcceptor(acceptorExecutor, new NioProcessor(acceptorExecutor))
