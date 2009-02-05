@@ -17,6 +17,7 @@
 
 package net.lag.kestrel
 
+import java.io.IOException
 import java.net.InetSocketAddress
 import java.nio.ByteOrder
 import scala.actors.Actor
@@ -68,6 +69,8 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
         case MinaMessage.ExceptionCaught(cause) => {
           cause.getCause match {
             case _: ProtocolError => writeResponse("CLIENT_ERROR\r\n")
+            case _: IOException =>
+              log.debug("I/O Exception on session %d: %s", sessionID, cause.getMessage)
             case _ =>
               log.error(cause, "Exception caught on session %d: %s", sessionID, cause.getMessage)
               writeResponse("ERROR\r\n")
