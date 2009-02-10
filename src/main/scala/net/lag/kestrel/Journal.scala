@@ -24,7 +24,7 @@ import java.nio.channels.FileChannel
 
 
 // returned from journal replay
-abstract case class JournalItem
+abstract case class JournalItem()
 object JournalItem {
   case class Add(item: QItem) extends JournalItem
   case object Remove extends JournalItem
