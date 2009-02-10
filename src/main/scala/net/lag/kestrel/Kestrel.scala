@@ -86,6 +86,7 @@ object Kestrel {
     PersistentQueue.maxMemorySize = config.getInt("max_memory_size", 128 * 1024 * 1024)
     PersistentQueue.maxJournalOverflow = config.getInt("max_journal_overflow", 10)
     PersistentQueue.discardOldWhenFull = config.getBool("discard_old_when_full", false)
+    PersistentQueue.keepJournal = config.getBool("journal", true)
   }
 
   def startup(config: Config): Unit = {

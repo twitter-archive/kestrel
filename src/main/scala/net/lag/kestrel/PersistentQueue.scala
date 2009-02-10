@@ -102,7 +102,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   var discardOldWhenFull = overlay(PersistentQueue.discardOldWhenFull)
 
   // whether to keep a journal file at all
-  var keepJournal = true
+  var keepJournal = overlay(PersistentQueue.keepJournal)
 
   // clients waiting on an item in this queue
   private val waiters = new mutable.ArrayBuffer[Waiter]
@@ -138,9 +138,8 @@ class PersistentQueue(private val persistencePath: String, val name: String,
     maxMemorySize set config.getLong("max_memory_size")
     maxJournalOverflow set config.getInt("max_journal_overflow")
     discardOldWhenFull set config.getBool("discard_old_when_full")
-
-    keepJournal = config.getBool("journal", true)
-    if (!keepJournal) journal.erase()
+    keepJournal set config.getBool("journal")
+    if (!keepJournal()) journal.erase()
   }
 
   private final def adjustExpiry(startingTime: Long, expiry: Long): Long = {
@@ -163,12 +162,12 @@ class PersistentQueue(private val persistencePath: String, val name: String,
         if (!discardOldWhenFull()) return false
         _remove(false)
         _totalDiscarded += 1
-        if (keepJournal) journal.remove()
+        if (keepJournal()) journal.remove()
       }
 
       val now = Time.now
       val item = QItem(now, adjustExpiry(now, expiry), value, 0)
-      if (keepJournal && !journal.inReadBehind) {
+      if (keepJournal() && !journal.inReadBehind) {
         if (journal.size > maxJournalSize() * maxJournalOverflow() && queueSize < maxJournalSize()) {
           // force re-creation of the journal.
           log.info("Rolling journal file for '%s' (qsize=%d)", name, queueSize)
@@ -180,7 +179,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
         }
       }
       _add(item)
-      if (keepJournal) journal.add(item)
+      if (keepJournal()) journal.add(item)
       if (waiters.size > 0) {
         waiters.remove(0).actor ! ItemArrived
       }
@@ -205,7 +204,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
         None
       } else {
         val item = _remove(transaction)
-        if (keepJournal) {
+        if (keepJournal()) {
           if (transaction) journal.removeTentative() else journal.remove()
 
           if ((queueLength == 0) && (journal.size >= maxJournalSize()) &&
@@ -261,7 +260,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
     initialized.await
     synchronized {
       if (!closed) {
-        if (keepJournal) journal.unremove(xid)
+        if (keepJournal()) journal.unremove(xid)
         _unremove(xid)
         if (waiters.size > 0) {
           waiters.remove(0).actor ! ItemArrived
@@ -274,7 +273,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
     initialized.await
     synchronized {
       if (!closed) {
-        if (keepJournal) journal.confirmRemove(xid)
+        if (keepJournal()) journal.confirmRemove(xid)
         openTransactions.removeKey(xid)
       }
     }
@@ -289,7 +288,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
    */
   def close = synchronized {
     closed = true
-    if (keepJournal) journal.close()
+    if (keepJournal()) journal.close()
   }
 
   def setup(): Unit = synchronized {
@@ -308,7 +307,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   private final def fillReadBehind(): Unit = {
     // if we're in read-behind mode, scan forward in the journal to keep memory as full as
     // possible. this amortizes the disk overhead across all reads.
-    while (keepJournal && journal.inReadBehind && _memoryBytes < maxMemorySize()) {
+    while (keepJournal() && journal.inReadBehind && _memoryBytes < maxMemorySize()) {
       journal.fillReadBehind { item =>
         queue += item
         _memoryBytes += item.data.length
@@ -320,7 +319,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   }
 
   def replayJournal(): Unit = {
-    if (!keepJournal) return
+    if (!keepJournal()) return
 
     log.info("Replaying transaction journal for '%s'", name)
     xidCounter = 0
@@ -420,4 +419,5 @@ object PersistentQueue {
   @volatile var maxMemorySize: Long = 128 * 1024 * 1024
   @volatile var maxJournalOverflow: Int = 10
   @volatile var discardOldWhenFull: Boolean = false
+  @volatile var keepJournal: Boolean = true
 }
