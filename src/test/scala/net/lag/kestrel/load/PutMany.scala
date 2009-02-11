@@ -20,6 +20,7 @@ package net.lag.kestrel.load
 import java.net._
 import java.nio._
 import java.nio.channels._
+import scala.collection.mutable
 import net.lag.extensions._
 
 
@@ -55,10 +56,12 @@ object PutMany {
 
   private val EXPECT = ByteBuffer.wrap("STORED\r\n".getBytes)
 
-  def put(socket: SocketChannel, queueName: String, n: Int) = {
+  def put(socket: SocketChannel, queueName: String, n: Int, globalTimings: mutable.ListBuffer[Long]) = {
     val spam = ByteBuffer.wrap(("set " + queueName + " 0 0 " + LYRIC.length + "\r\n" + LYRIC + "\r\n").getBytes)
     val buffer = ByteBuffer.allocate(8)
+    val timings = new Array[Long](n)
     for (i <- 0 until n) {
+      val startTime = System.nanoTime
       spam.rewind
       while (spam.position < spam.limit) {
         socket.write(spam)
@@ -69,9 +72,17 @@ object PutMany {
       }
       buffer.rewind
       EXPECT.rewind
+      timings(i) = System.nanoTime - startTime
       if (buffer != EXPECT) {
         // the "!" is important.
         throw new Exception("Unexpected response at " + i + "!")
+      }
+    }
+
+    // coalesce timings
+    globalTimings.synchronized {
+      if (globalTimings.size < 100000) {
+        globalTimings ++= timings.toList
       }
     }
   }
@@ -88,12 +99,13 @@ object PutMany {
 
     var threadList: List[Thread] = Nil
     val startTime = System.currentTimeMillis
+    val timings = new mutable.ListBuffer[Long]
 
     for (i <- 0 until clientCount) {
       val t = new Thread {
         override def run = {
           val socket = SocketChannel.open(new InetSocketAddress("localhost", 22133))
-          put(socket, "spam", 10000 / clientCount)
+          put(socket, "spam", 10000 / clientCount, timings)
         }
       }
       threadList = t :: threadList
@@ -104,6 +116,15 @@ object PutMany {
     }
 
     val duration = System.currentTimeMillis - startTime
-    Console.println("Finished in %d msec (%.1f usec/put).".format(duration, duration * 1000.0 / totalCount))
+    Console.println("Finished in %d msec (%.1f usec/put throughput).".format(duration, duration * 1000.0 / totalCount))
+
+    val sortedTimings = timings.toList.sort { (a, b) => a < b }
+    val average = sortedTimings.foldLeft(0L) { _ + _ } / sortedTimings.size.toDouble / 1000.0
+    val min = sortedTimings(0) / 1000.0
+    val max = sortedTimings(sortedTimings.size - 1) / 1000.0
+    val median = (sortedTimings(sortedTimings.size / 2 - 1) + sortedTimings(sortedTimings.size / 2)) / 2000.0
+
+    println("Transactions: min=%.2f; max=%.2f; median=%.2f average=%.2f usec".format(min, max, median, average))
+    // sort timings, print min/max/avg, median, quartiles.
   }
 }
