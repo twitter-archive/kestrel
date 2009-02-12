@@ -2,7 +2,7 @@
   <info
     organisation="net.lag"
     module="kestrel"
-    revision="0.8"
+    revision="1.0"
     e:testclass="net.lag.TestRunner"
     e:jarclassname="net.lag.kestrel.Kestrel"
     e:buildpackage="net.lag.kestrel"
