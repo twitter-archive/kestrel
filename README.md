@@ -188,5 +188,15 @@ large numbers of clients.
           100                100        1.6s
     =========  =================  ==========
 
+A single-threaded set of 5 million puts gives a fair idea of throughput
+distribution, this time on a 2.5GHz 2008-model macbook pro:
+
+    $ ant -f tests.xml put-many-1 -Ditems=5000000
+    [java] Finished in 1137250 msec (227.5 usec/put throughput).
+    [java] Transactions: min=106.00; max=108581.00 91335.00 60721.00; median=153.00; average=201.14 usec
+    [java] Transactions distribution: 5.00%=129.00 10.00%=134.00 25.00%=140.00 50.00%=153.00 75.00%=177.00 90.00%=251.00 95.00%=345.00 99.00%=586.00 99.90%=5541.00 99.99%=26910.00
+
+This works out to about 3.23MB/sec (over loopback) and about 4400 puts/sec.
+
 
 Robey Pointer <<robeypointer@gmail.com>>
