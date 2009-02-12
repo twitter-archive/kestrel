@@ -124,7 +124,10 @@ object PutMany {
     val max = sortedTimings(sortedTimings.size - 1) / 1000.0
     val median = (sortedTimings(sortedTimings.size / 2 - 1) + sortedTimings(sortedTimings.size / 2)) / 2000.0
 
-    println("Transactions: min=%.2f; max=%.2f; median=%.2f average=%.2f usec".format(min, max, median, average))
-    // sort timings, print min/max/avg, median, quartiles.
+    println("Transactions: min=%.2f; max=%.2f; median=%.2f; average=%.2f usec".format(min, max, median, average))
+    var dist = Array(0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99) map { r =>
+      "%d%%=%.2f".format((r * 100).toInt, sortedTimings((sortedTimings.size * r).toInt) / 1000.0)
+    }
+    println("Transactions distribution: " + dist.mkString(" "))
   }
 }
