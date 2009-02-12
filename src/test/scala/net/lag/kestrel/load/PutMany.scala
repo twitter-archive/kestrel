@@ -59,7 +59,7 @@ object PutMany {
   def put(socket: SocketChannel, queueName: String, n: Int, globalTimings: mutable.ListBuffer[Long]) = {
     val spam = ByteBuffer.wrap(("set " + queueName + " 0 0 " + LYRIC.length + "\r\n" + LYRIC + "\r\n").getBytes)
     val buffer = ByteBuffer.allocate(8)
-    val timings = new Array[Long](n)
+    val timings = new Array[Long](n min 100000)
     for (i <- 0 until n) {
       val startTime = System.nanoTime
       spam.rewind
@@ -72,7 +72,9 @@ object PutMany {
       }
       buffer.rewind
       EXPECT.rewind
-      timings(i) = System.nanoTime - startTime
+      if (i < 100000) {
+        timings(i) = System.nanoTime - startTime
+      }
       if (buffer != EXPECT) {
         // the "!" is important.
         throw new Exception("Unexpected response at " + i + "!")
@@ -88,14 +90,15 @@ object PutMany {
   }
 
   def main(args: Array[String]) = {
-    if (args.length < 1) {
-      Console.println("usage: put-many <N>")
-      Console.println("    spin up N clients and put 10k items spread across N queues")
+    if (args.length < 2) {
+      Console.println("usage: put-many <clients> <count>")
+      Console.println("    spin up N clients and put <count> items spread across N queues")
       System.exit(1)
     }
 
     val clientCount = args(0).toInt
-    val totalCount = 10000 / clientCount * clientCount
+    val totalItems = args(1).toInt
+    val totalCount = totalItems / clientCount * clientCount
 
     var threadList: List[Thread] = Nil
     val startTime = System.currentTimeMillis
@@ -105,7 +108,7 @@ object PutMany {
       val t = new Thread {
         override def run = {
           val socket = SocketChannel.open(new InetSocketAddress("localhost", 22133))
-          put(socket, "spam", 10000 / clientCount, timings)
+          put(socket, "spam", totalItems / clientCount, timings)
         }
       }
       threadList = t :: threadList
@@ -122,11 +125,13 @@ object PutMany {
     val average = sortedTimings.foldLeft(0L) { _ + _ } / sortedTimings.size.toDouble / 1000.0
     val min = sortedTimings(0) / 1000.0
     val max = sortedTimings(sortedTimings.size - 1) / 1000.0
+    val maxless = sortedTimings(sortedTimings.size - 2) / 1000.0
+    val maxlesser = sortedTimings(sortedTimings.size - 3) / 1000.0
     val median = (sortedTimings(sortedTimings.size / 2 - 1) + sortedTimings(sortedTimings.size / 2)) / 2000.0
 
-    println("Transactions: min=%.2f; max=%.2f; median=%.2f; average=%.2f usec".format(min, max, median, average))
-    var dist = Array(0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99) map { r =>
-      "%d%%=%.2f".format((r * 100).toInt, sortedTimings((sortedTimings.size * r).toInt) / 1000.0)
+    println("Transactions: min=%.2f; max=%.2f %.2f %.2f; median=%.2f; average=%.2f usec".format(min, max, maxless, maxlesser, median, average))
+    var dist = Array(0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.999, 0.9999) map { r =>
+      "%.2f%%=%.2f".format(r * 100, sortedTimings((sortedTimings.size * r).toInt) / 1000.0)
     }
     println("Transactions distribution: " + dist.mkString(" "))
   }

@@ -2,6 +2,8 @@
 <project name="kestrel-tests" default="default" basedir=".">
   <description> Kestrel load tests </description>
   <import file="ant/bootstrap.xml" />
+  <!-- can be overridden -->
+  <property name="items" value="10000" />
 
   <target name="put-many-1" depends="prepare">
     <java classname="net.lag.kestrel.load.PutMany" fork="true" failonerror="true">
@@ -11,6 +13,7 @@
         <pathelement location="${target.dir}/test-classes" />
       </classpath>
       <arg value="1" />
+      <arg value="${items}" />
     </java>
   </target>
 
@@ -22,6 +25,7 @@
         <pathelement location="${target.dir}/test-classes" />
       </classpath>
       <arg value="10" />
+      <arg value="${items}" />
     </java>
   </target>
 
@@ -33,6 +37,7 @@
         <pathelement location="${target.dir}/test-classes" />
       </classpath>
       <arg value="100" />
+      <arg value="${items}" />
     </java>
   </target>
 
@@ -44,6 +49,7 @@
         <pathelement location="${target.dir}/test-classes" />
       </classpath>
       <arg value="1000" />
+      <arg value="${items}" />
     </java>
   </target>
 
@@ -55,6 +61,7 @@
         <pathelement location="${target.dir}/test-classes" />
       </classpath>
       <arg value="2000" />
+      <arg value="${items}" />
     </java>
   </target>
 
