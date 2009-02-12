@@ -142,6 +142,19 @@ class PersistentQueue(private val persistencePath: String, val name: String,
     if (!keepJournal()) journal.erase()
   }
 
+  def dumpConfig(): Array[String] = synchronized {
+    Array(
+      "max_items=" + maxItems(),
+      "max_size=" + maxSize(),
+      "max_age=" + maxAge(),
+      "max_journal_size=" + maxJournalSize(),
+      "max_memory_size=" + maxMemorySize(),
+      "max_journal_overflow=" + maxJournalOverflow(),
+      "discard_old_when_full=" + discardOldWhenFull(),
+      "journal=" + keepJournal()
+    )
+  }
+
   private final def adjustExpiry(startingTime: Long, expiry: Long): Long = {
     if (maxAge() > 0) {
       val maxExpiry = startingTime + maxAge()

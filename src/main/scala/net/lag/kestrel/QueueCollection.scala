@@ -219,6 +219,13 @@ class QueueCollection(private val queueFolder: String, private var queueConfigs:
     }
   }
 
+  def dumpConfig(key: String): Array[String] = {
+    queue(key) match {
+      case None => Array()
+      case Some(q) => q.dumpConfig()
+    }
+  }
+
   /**
    * Shutdown this queue collection. All actors are asked to exit, and
    * any future queue requests will fail.

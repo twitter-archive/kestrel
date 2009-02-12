@@ -124,6 +124,8 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
         session.write("Reloaded config.\r\n")
       case "FLUSH" =>
         flush(request.line(1))
+      case "DUMP_CONFIG" =>
+        dumpConfig()
     }
   }
 
@@ -230,7 +232,7 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
     writeResponse("END\r\n")
   }
 
-  private def stats = {
+  private def stats() = {
     var report = new mutable.ArrayBuffer[(String, String)]
     report += (("uptime", Kestrel.uptime.toString))
     report += (("time", (Time.now / 1000).toString))
@@ -266,7 +268,17 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
     writeResponse(summary)
   }
 
-  private def shutdown = {
+  private def dumpConfig() = {
+    val dump = new mutable.ListBuffer[String]
+    for (qName <- Kestrel.queues.queueNames) {
+      dump += "queue '" + qName + "' {"
+      dump += Kestrel.queues.dumpConfig(qName).mkString("  ", "\r\n  ", "")
+      dump += "}"
+    }
+    writeResponse(dump.mkString("", "\r\n", "\r\nEND\r\n"))
+  }
+
+  private def shutdown() = {
     Kestrel.shutdown
   }
 }
