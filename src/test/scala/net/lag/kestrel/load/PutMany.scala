@@ -52,12 +52,12 @@ object PutMany {
 "come clean, but everything's wrong\n" +
 "sustained, but barely holding on\n" +
 "run down, with no one to find you\n" +
-"we're survivors, here til the end"
+"we're survivors, here til the end\n"
 
   private val EXPECT = ByteBuffer.wrap("STORED\r\n".getBytes)
 
-  def put(socket: SocketChannel, queueName: String, n: Int, globalTimings: mutable.ListBuffer[Long]) = {
-    val spam = ByteBuffer.wrap(("set " + queueName + " 0 0 " + LYRIC.length + "\r\n" + LYRIC + "\r\n").getBytes)
+  def put(socket: SocketChannel, queueName: String, n: Int, globalTimings: mutable.ListBuffer[Long], data: String) = {
+    val spam = ByteBuffer.wrap(("set " + queueName + " 0 0 " + data.length + "\r\n" + data + "\r\n").getBytes)
     val buffer = ByteBuffer.allocate(8)
     val timings = new Array[Long](n min 100000)
     for (i <- 0 until n) {
@@ -90,15 +90,26 @@ object PutMany {
   }
 
   def main(args: Array[String]) = {
-    if (args.length < 2) {
-      Console.println("usage: put-many <clients> <count>")
-      Console.println("    spin up N clients and put <count> items spread across N queues")
+    if (args.length < 3) {
+      Console.println("usage: put-many <clients> <count> <bytes>")
+      Console.println("    spin up <clients> and put <count> items of <bytes> size into kestrel")
       System.exit(1)
     }
 
     val clientCount = args(0).toInt
     val totalItems = args(1).toInt
+    val bytes = args(2).toInt
     val totalCount = totalItems / clientCount * clientCount
+
+    val rawData = new StringBuilder
+    while (rawData.size < bytes) {
+      val remaining = bytes - rawData.size
+      if (remaining > LYRIC.size) {
+        rawData append LYRIC
+      } else {
+        rawData append LYRIC.substring(0, remaining)
+      }
+    }
 
     var threadList: List[Thread] = Nil
     val startTime = System.currentTimeMillis
@@ -108,7 +119,7 @@ object PutMany {
       val t = new Thread {
         override def run = {
           val socket = SocketChannel.open(new InetSocketAddress("localhost", 22133))
-          put(socket, "spam", totalItems / clientCount, timings)
+          put(socket, "spam", totalItems / clientCount, timings, rawData.toString)
         }
       }
       threadList = t :: threadList
