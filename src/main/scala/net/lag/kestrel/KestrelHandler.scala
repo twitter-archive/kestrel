@@ -25,7 +25,7 @@ import scala.actors.Actor._
 import scala.collection.mutable
 import net.lag.configgy.{Config, Configgy, RuntimeEnvironment}
 import net.lag.logging.Logger
-import net.lag.naggati.{MinaMessage, ProtocolError}
+import net.lag.naggati.{IoHandlerActorAdapter, MinaMessage, ProtocolError}
 import org.apache.mina.core.buffer.IoBuffer
 import org.apache.mina.core.session.{IdleStatus, IoSession}
 import org.apache.mina.transport.socket.SocketSessionConfig
@@ -45,6 +45,8 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
 
 
   session.getConfig.setReadBufferSize(2048)
+  IoHandlerActorAdapter.filter(session) -= MinaMessage.SessionOpened
+  IoHandlerActorAdapter.filter(session) -= classOf[MinaMessage.MessageSent]
 
   // config can be null in unit tests
   val idleTimeout = if (config == null) IDLE_TIMEOUT else config.getInt("timeout", IDLE_TIMEOUT)
@@ -60,11 +62,8 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
   def act = {
     loop {
       react {
-        case MinaMessage.SessionOpened =>
-
-        case MinaMessage.MessageReceived(msg) => handle(msg.asInstanceOf[memcache.Request])
-
-        case MinaMessage.MessageSent(msg) =>
+        case MinaMessage.MessageReceived(msg) =>
+          handle(msg.asInstanceOf[memcache.Request])
 
         case MinaMessage.ExceptionCaught(cause) => {
           cause.getCause match {

@@ -21,7 +21,7 @@
     <dependency org="org.specs" name="specs" rev="1.4.1" />
     <dependency org="junit" name="junit" rev="4.4" />
     <dependency org="net.lag" name="configgy" rev="1.2.1a" />
-    <dependency org="net.lag" name="naggati" rev="0.5.1" />
+    <dependency org="net.lag" name="naggati" rev="0.6" />
     <dependency org="org.apache.mina" name="mina-core" rev="2.0.0-M4" />
     <dependency org="org.slf4j" name="slf4j-jdk14" rev="1.5.2" />
   </dependencies>
