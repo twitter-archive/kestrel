@@ -1,6 +1,6 @@
 /*
  * Copyright 2009 Twitter, Inc.
- * Copyright 2009 Robey Pointer <robeypointer@lag.net>
+ * Copyright 2009 Robey Pointer <robeypointer@gmail.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License. You may obtain
@@ -105,7 +105,7 @@ object Kestrel {
     acceptor.getSessionConfig.setTcpNoDelay(true)
     acceptor.getFilterChain.addLast("codec", new ProtocolCodecFilter(memcache.Codec.encoder,
       memcache.Codec.decoder))
-    acceptor.setHandler(new IoHandlerActorAdapter((session: IoSession) => new KestrelHandler(session, config)))
+    acceptor.setHandler(new IoHandlerActorAdapter(session => new KestrelHandler(session, config)))
     acceptor.bind(new InetSocketAddress(listenAddress, listenPort))
 
     log.info("Kestrel started.")
