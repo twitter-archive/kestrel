@@ -39,7 +39,7 @@ case class Response(data: IoBuffer)
 
 
 object Codec {
-  private val KNOWN_COMMANDS = List("GET", "SET", "STATS", "SHUTDOWN", "RELOAD", "FLUSH", "DUMP_CONFIG")
+  private val KNOWN_COMMANDS = List("GET", "SET", "STATS", "SHUTDOWN", "RELOAD", "FLUSH", "FLUSH_ALL", "DUMP_CONFIG")
   private val DATA_COMMANDS = List("SET")
 
   val encoder = new ProtocolEncoder {

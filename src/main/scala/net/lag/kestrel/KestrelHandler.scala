@@ -120,9 +120,14 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
       case "SHUTDOWN" => shutdown
       case "RELOAD" =>
         Configgy.reload
-        session.write("Reloaded config.\r\n")
+        writeResponse("Reloaded config.\r\n")
       case "FLUSH" =>
         flush(request.line(1))
+      case "FLUSH_ALL" =>
+        for (qName <- Kestrel.queues.queueNames) {
+          Kestrel.queues.flush(qName)
+        }
+        writeResponse("Flushed all queues.\r\n")
       case "DUMP_CONFIG" =>
         dumpConfig()
     }
