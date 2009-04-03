@@ -99,7 +99,7 @@ object Kestrel {
     acceptorExecutor = Executors.newCachedThreadPool()
     acceptor = new NioSocketAcceptor(acceptorExecutor, new NioProcessor(acceptorExecutor))
 
-    // mina garbage:
+    // mina setup:
     acceptor.setBacklog(1000)
     acceptor.setReuseAddress(true)
     acceptor.getSessionConfig.setTcpNoDelay(true)
@@ -107,6 +107,9 @@ object Kestrel {
       memcache.Codec.decoder))
     acceptor.setHandler(new IoHandlerActorAdapter(session => new KestrelHandler(session, config)))
     acceptor.bind(new InetSocketAddress(listenAddress, listenPort))
+
+    // expose config thru JMX.
+    config.registerWithJmx("net.lag.kestrel")
 
     log.info("Kestrel started.")
 

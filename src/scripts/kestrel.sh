@@ -11,7 +11,8 @@ DAEMON="/usr/local/bin/daemon"
 
 daemon_args="--name kestrel --pidfile /var/run/kestrel.pid"
 HEAP_OPTS="-Xmx2048m -Xms1024m -XX:NewSize=256m"
-# -Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.port=9999 -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false 
+JMX_OPTS="-Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.port=22134 -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false"
+# add JMX_OPTS below if you want jmx support.
 JAVA_OPTS="-server -verbosegc -XX:+PrintGCDetails -XX:+UseConcMarkSweepGC -XX:+UseParNewGC $HEAP_OPTS"
 
 
