@@ -100,6 +100,7 @@ object PutMany {
     val totalItems = args(1).toInt
     val bytes = args(2).toInt
     val totalCount = totalItems / clientCount * clientCount
+    val totalQueues = System.getProperty("queues", "1").toInt
 
     val rawData = new StringBuilder
     while (rawData.size < bytes) {
@@ -119,7 +120,8 @@ object PutMany {
       val t = new Thread {
         override def run = {
           val socket = SocketChannel.open(new InetSocketAddress("localhost", 22133))
-          put(socket, "spam", totalItems / clientCount, timings, rawData.toString)
+          val qName = "spam" + (i % totalQueues)
+          put(socket, qName, totalItems / clientCount, timings, rawData.toString)
         }
       }
       threadList = t :: threadList

@@ -40,6 +40,9 @@
         <pathelement location="${target.dir}/classes" />
         <pathelement location="${target.dir}/test-classes" />
       </classpath>
+      <syspropertyset>
+        <propertyref builtin="commandline" />
+      </syspropertyset>
       <arg value="100" />
       <arg value="${items}" />
       <arg value="${bytes}" />
