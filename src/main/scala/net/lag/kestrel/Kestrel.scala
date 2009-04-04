@@ -90,6 +90,11 @@ object Kestrel {
   }
 
   def startup(config: Config): Unit = {
+    // this one is used by the actor initialization, so can only be set at startup.
+    val maxThreads = config.getInt("max_threads", Runtime.getRuntime().availableProcessors * 2)
+    System.setProperty("actors.maxPoolSize", maxThreads.toString)
+    log.debug("max_threads=%d", maxThreads)
+
     val listenAddress = config.getString("host", "0.0.0.0")
     val listenPort = config.getInt("port", DEFAULT_PORT)
     queues = new QueueCollection(config.getString("queue_path", "/tmp"), config.configMap("queues"))
