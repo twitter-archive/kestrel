@@ -6,7 +6,7 @@
 QUEUE_PATH="/var/spool/kestrel"
 KESTREL_HOME="/usr/local/kestrel"
 AS_USER="daemon"
-VERSION="1.0"
+VERSION="1.1"
 DAEMON="/usr/local/bin/daemon"
 
 daemon_args="--name kestrel --pidfile /var/run/kestrel.pid"
