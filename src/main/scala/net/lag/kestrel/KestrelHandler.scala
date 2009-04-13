@@ -184,7 +184,7 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
           case Some(item) =>
             log.debug("get <- %s", item)
             if (opening) pendingTransaction = Some((key, item.xid))
-            writeResponse("VALUE %s 0 %d\r\n".format(name, item.data.length), item.data)
+            writeResponse("VALUE %s 0 %d\r\n".format(key, item.data.length), item.data)
         }
       }
     } catch {
