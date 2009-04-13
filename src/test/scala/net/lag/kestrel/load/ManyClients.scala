@@ -30,8 +30,8 @@ import net.lag.extensions._
  * some typical production environments.
  */
 object ManyClients {
-  private val SLEEP = 100
-  private val COUNT = 100
+  private val SLEEP = System.getProperty("sleep", "100").toInt
+  private val COUNT = System.getProperty("count", "100").toInt
 
   private val LYRIC =
 "crossed off, but never forgotten\n" +
@@ -80,7 +80,7 @@ object ManyClients {
         // the "!" is important.
         throw new Exception("Unexpected response at " + i + "!")
       }
-      Thread.sleep(SLEEP)
+      if (SLEEP > 0) Thread.sleep(SLEEP)
     }
   }
 
@@ -104,8 +104,7 @@ object ManyClients {
       buffer.flip
       expectEnd.rewind
       if (buffer == expectEnd) {
-        println("oh sad. thr=" + Thread.currentThread)
-        // ok. :(
+        // i am not the winner. poop. :(
       } else {
         buffer.position(oldpos)
         buffer.limit(buffer.capacity)
