@@ -67,11 +67,18 @@ class TestClient(host: String, port: Int) {
     readline
   }
 
-  def get(key: String): String = {
+  def setData(key: String, value: Array[Byte]) = {
+    out.write(("set " + key + " 0 0 " + value.size + "\r\n").getBytes)
+    out.write(value)
+    out.write("\r\n".getBytes)
+    readline
+  }
+
+  def getData(key: String): Array[Byte] = {
     out.write(("get " + key + "\r\n").getBytes)
     val line = readline
     if (line == "END") {
-      return ""
+      return new Array[Byte](0)
     }
     // VALUE <name> <flags> <length>
     val len = line.split(" ")(3).toInt
@@ -79,7 +86,11 @@ class TestClient(host: String, port: Int) {
     in.readFully(buffer)
     readline
     readline // "END"
-    new String(buffer)
+    buffer
+  }
+
+  def get(key: String): String = {
+    new String(getData(key))
   }
 
   def add(key: String, value: String) = {
