@@ -76,6 +76,8 @@ Kestrel is not:
 Use
 ---
 
+Kestrel requires java 6 (for JMX support) and ant 1.7.
+
 Building from source is easy:
 
     $ ant
