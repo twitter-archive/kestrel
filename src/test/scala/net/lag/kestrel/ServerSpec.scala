@@ -17,7 +17,7 @@
 
 package net.lag.kestrel
 
-import java.io.File
+import java.io._
 import java.net.Socket
 import scala.collection.Map
 import net.lag.configgy.Config
@@ -87,6 +87,21 @@ object ServerSpec extends Specification with TestHelper {
         client.set("test_set_with_expiry", v.toString) mustEqual "STORED"
         Time.advance(1000)
         client.get("test_set_with_expiry") mustEqual v.toString
+      }
+    }
+
+    "set and get binary data" in {
+      withTempFolder {
+        makeServer
+        val client = new TestClient("localhost", PORT)
+        for (encodedObject <- List(5, "scrooge mcduck", new java.util.Date())) {
+          val buffer = new ByteArrayOutputStream()
+          new ObjectOutputStream(buffer).writeObject(encodedObject)
+          client.getData("binary").size mustEqual 0
+          client.setData("binary", buffer.toByteArray) mustEqual "STORED"
+          val newBuffer = client.getData("binary")
+          new ObjectInputStream(new ByteArrayInputStream(newBuffer)).readObject() mustEqual encodedObject
+        }
       }
     }
 
