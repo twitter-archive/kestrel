@@ -118,20 +118,20 @@ object ManyClients {
           buffer.get(bad)
           throw new Exception("Unexpected response! thr=" + Thread.currentThread + " -> " + new String(bad))
         }
-        println("" + got.incrementAndGet)
+        got.incrementAndGet
       }
     }
   }
 
   def main(args: Array[String]) = {
-    if (args.length < 1) {
-      Console.println("usage: many-clients <N>")
+    if (args.length > 0) {
+      Console.println("usage: many-clients")
       Console.println("    spin up N clients and have them do timeout reads on a queue while a")
       Console.println("    single producer trickles out.")
       System.exit(1)
     }
 
-    val clientCount = args(0).toInt
+    val clientCount = System.getProperty("clients", "100").toInt
 
     var threadList: List[Thread] = Nil
     val startTime = System.currentTimeMillis
