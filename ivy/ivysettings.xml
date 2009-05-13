@@ -2,6 +2,9 @@
   <settings defaultResolver="chain-repos" />
   <resolvers>
     <chain name="chain-repos">
+      <filesystem name="local" m2compatible="true" transactional="false" local="true" checkmodified="true">
+        <artifact pattern="${basedir}/../repo/local/[organisation]/[module]/[revision]/[artifact]-[revision].[ext]" />
+      </filesystem>
       <url name="scala-tools.org" m2compatible="true">
         <artifact pattern="http://scala-tools.org/repo-releases/[organisation]/[module]/[revision]/[artifact]-[revision].[ext]" />
       </url>
@@ -17,4 +20,6 @@
       <artifact pattern="${basedir}/dist/repo/[organisation]/[module]/[revision]/[artifact]-[revision].[ext]" />
     </filesystem>
   </resolvers>
+
+  <caches useOrigin="true"/>
 </ivysettings>
