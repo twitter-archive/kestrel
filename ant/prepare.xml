@@ -16,7 +16,7 @@
   </target>
 
   <target name="resolve" depends="init">
-    <ivy:retrieve log="download-only" conf="bootstrap,default,test" pattern="${target.dir}/libs/[conf]/[artifact]-[revision].[ext]" />
+    <ivy:retrieve log="download-only" conf="bootstrap,default,test" pattern="${target.dir}/libs/[conf]/[artifact]-[type].[ext]" />
     <ivy:cachepath pathid="bootstrap.path" conf="bootstrap" />
     <ivy:cachepath pathid="deps.path" conf="default" />
     <ivy:cachepath pathid="test.path" conf="test" />
@@ -28,6 +28,9 @@
     </pathconvert>
     <pathconvert property="build.scala" setonempty="false">
       <fileset dir="${source.dir}" includes="scala/**/*.scala" />
+    </pathconvert>
+    <pathconvert property="build.thrift" setonempty="false">
+      <fileset dir="${source.dir}" includes="thrift/**/*.thrift" />
     </pathconvert>
     <pathconvert property="build.jni" setonempty="false">
       <fileset dir="${source.dir}" includes="jni/build.xml" />

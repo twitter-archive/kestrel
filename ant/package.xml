@@ -64,12 +64,13 @@
     generate-scripts, docs" description="build complete jar(s) and docs">
     <ivy:makepom ivyfile="${basedir}/ivy/ivy.xml" pomfile="${dist.dir}/${dist.name}.pom" />
     <ivy:deliver conf="*(public)" />
-    <condition property="dist.zip.name" value="namesearch-${revision-short}.zip">
-      <isset property="dist_use_build_number" />
+    <condition property="dist.zip.name"
+               value="${dist.name}-${revision-short}.zip"
+               else="${dist.name}.zip">
+      <isset property="dist.build_name" />
     </condition>
-    <property name="dist.zip.name" value="${dist.name}.zip" />
     <zip destfile="${basedir}/dist/${dist.zip.name}"
-      basedir="${basedir}/dist">
+         basedir="${basedir}/dist">
       <include name="${dist.name}/${jar.name}.jar" />
       <include name="${dist.name}/*.so" />
       <include name="${dist.name}/*.jnilib" />
@@ -101,5 +102,16 @@
       basedir="${basedir}/dist"
       includes="${ivy.module}-${ivy.revision}/**"
       excludes="${ivy.module}-${ivy.revision}/libs/** ${ivy.module}-${ivy.revision}/*.jar" />
+  </target>
+
+  <target name="push" depends="package" description="push built jar(s) to the repository">
+    <condition property="pubrevision"
+               value="${ivy.revision}-${build.timestamp.date}-${revision-short}"
+               else="${ivy.revision}">
+      <isset property="push.build_name" />
+    </condition>
+    <ivy:publish resolver="push" overwrite="true" pubrevision="${pubrevision}" update="true">
+      <artifacts pattern="${dist.dir}/[artifact]-${ivy.revision}.[ext]" />
+    </ivy:publish>
   </target>
 </project>

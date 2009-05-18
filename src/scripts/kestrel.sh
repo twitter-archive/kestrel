@@ -2,19 +2,25 @@
 #
 # kestrel init.d script.
 #
+# All java services require the same directory structure:
+#   /opt/local/$APP_NAME-$VERSION
+#   /var/log/$APP_NAME (chown daemon, chmod 775)
 
-QUEUE_PATH="/var/spool/kestrel"
-KESTREL_HOME="/usr/local/kestrel"
-AS_USER="daemon"
+APP_NAME="kestrel"
 VERSION="1.1.1"
+APP_HOME="/opt/local/$APP_NAME/current"
+AS_USER="daemon"
 DAEMON="/usr/local/bin/daemon"
+QUEUE_PATH="/var/spool/kestrel"
 
-daemon_args="--name kestrel --pidfile /var/run/kestrel.pid"
 HEAP_OPTS="-Xmx2048m -Xms1024m -XX:NewSize=256m"
 JMX_OPTS="-Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.port=22134 -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false"
 # add JMX_OPTS below if you want jmx support.
 JAVA_OPTS="-server -verbosegc -XX:+PrintGCDetails -XX:+UseConcMarkSweepGC -XX:+UseParNewGC $HEAP_OPTS"
 
+pidfile="/var/run/$APP_NAME.pid"
+daemon_args="--name $APP_NAME --pidfile $pidfile"
+daemon_start_args="--user $AS_USER --stdout=/var/log/$APP_NAME/stdout --stderr=/var/log/$APP_NAME/error"
 
 function running() {
   $DAEMON $daemon_args --running
@@ -35,7 +41,7 @@ function find_java() {
 
 
 # dirs under /var/run can go away between reboots.
-for p in /var/run/kestrel /var/log/kestrel $QUEUE_PATH; do
+for p in /var/run/$APP_NAME /var/log/$APP_NAME $QUEUE_PATH; do
   if [ ! -d $p ]; then
     mkdir -p $p
     chmod 775 $p
@@ -48,11 +54,11 @@ find_java
 
 case "$1" in
   start)
-    echo -n "Starting kestrel... "
+    echo -n "Starting $APP_NAME... "
 
-    if [ ! -r $KESTREL_HOME/kestrel-$VERSION.jar ]; then
+    if [ ! -r $APP_HOME/$APP_NAME-$VERSION.jar ]; then
       echo "FAIL"
-      echo "*** kestrel jar missing - not starting"
+      echo "*** $APP_NAME jar missing: $APP_HOME/$APP_NAME-$VERSION.jar - not starting"
       exit 1
     fi
     if [ ! -x $JAVA_HOME/bin/java ]; then
@@ -66,7 +72,7 @@ case "$1" in
     fi
     
     ulimit -n 8192 || echo -n " (no ulimit)"
-    $DAEMON $daemon_args --user $AS_USER --stdout=/var/log/kestrel/stdout --stderr=/var/log/kestrel/error -- ${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar ${KESTREL_HOME}/kestrel-${VERSION}.jar
+    $DAEMON $daemon_args $daemon_start_args -- ${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar ${APP_HOME}/${APP_NAME}-${VERSION}.jar
     tries=0
     while ! running; do
       tries=$((tries + 1))
@@ -80,7 +86,7 @@ case "$1" in
   ;;
 
   stop)
-    echo -n "Stopping kestrel... "
+    echo -n "Stopping $APP_NAME... "
     if ! running; then
       echo "wasn't running."
       exit 0
@@ -101,9 +107,9 @@ case "$1" in
   
   status)
     if running; then
-      echo "kestrel is running."
+      echo "$APP_NAME is running."
     else
-      echo "kestrel is NOT running."
+      echo "$APP_NAME is NOT running."
     fi
   ;;
 
@@ -114,7 +120,7 @@ case "$1" in
   ;;
 
   *)
-    echo "Usage: /etc/init.d/kestrel {start|stop|restart|status}"
+    echo "Usage: /etc/init.d/${APP_NAME}.sh {start|stop|restart|status}"
     exit 1
   ;;
 esac

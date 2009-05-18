@@ -7,7 +7,7 @@
 
   <property environment="env" />
 
-  <property name="ivy.install.version" value="2.0.0-rc1" />
+  <property name="ivy.install.version" value="2.1.0-rc1" />
   <property name="ivy.jar.dir" value="${user.home}/.ivy2" />
   <property name="ivy.jar.file" value="${ivy.jar.dir}/ivy-${ivy.install.version}.jar" />
   <property name="jsch.install.version" value="0.1.29" />
@@ -39,7 +39,7 @@
   <!-- import ivy's ant tasks -->
   <target name="install-ivy" depends="download-ivy">
     <path id="ivy.lib.path">
-      <fileset dir="${ivy.jar.dir}" includes="ivy-${ivy.install.version}.jar"/>
+      <fileset dir="${ivy.jar.dir}" includes="ivy-${ivy.install.version}.jar jsch-${jsch.install.version}.jar"/>
     </path>
     <taskdef resource="org/apache/ivy/ant/antlib.xml" uri="antlib:org.apache.ivy.ant" classpathref="ivy.lib.path" />
   </target>

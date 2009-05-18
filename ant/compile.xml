@@ -13,7 +13,8 @@
         <unpackagemapper from="${basedir}/*" to="${thrift.target.dir}/*" />
       </pathconvert>
       <mkdir dir="${thrift.target.dir}" />
-      <apply executable="thrift" dest="${thrift.gen.path}" failonerror="true"
+      <property name="thrift.bin" value="thrift" />
+      <apply executable="${thrift.bin}" dest="${thrift.gen.path}" failonerror="true"
         skipemptyfilesets="true" verbose="true">
         <arg value="--gen" />
         <arg value="java" />
@@ -39,7 +40,7 @@
     </sequential>
   </macrodef>
 
-  <target name="compile-thrift" if="ivy.extra.thriftpackage">
+  <target name="compile-thrift" if="build.thrift">
     <generate-thrift />
     <compile-generated-thrift />
   </target>
@@ -61,12 +62,14 @@
 
   <target name="compile-jni" depends="check-jni-source" if="build.jni.ok">
     <ant dir="src/main/jni" target="compile" inheritAll="false" />
+  </target>
+
+  <target name="install-jni" depends="compile-jni" if="build.jni">
     <copy todir="${dist.dir}" flatten="true">
       <fileset dir="src/main/jni" includes="**/target/*.${os.jni.ext}" />
       <fileset dir="src/main/jni" includes="**/target/*.jar" />
     </copy>
   </target>
-
 
   <!-- compile old-skool java -->
 
@@ -97,10 +100,10 @@
   <target name="find-git-revision" unless="no.git">
     <!-- ask git for the current "head" commit-id, for memoizing inside the built jar -->
     <exec outputproperty="revision" executable="git-rev-parse" failifexecutionfails="false">
-      <arg value="head" />
+      <arg value="HEAD" />
     </exec>
     <exec executable="git-rev-parse" failifexecutionfails="false">
-      <arg value="head" />
+      <arg value="HEAD" />
       <redirector outputproperty="revision-short">
         <outputfilterchain>
           <tokenfilter>
@@ -114,7 +117,8 @@
 
   <target name="write-build-info" depends="init, find-git-revision" if="ivy.extra.buildpackage">
     <tstamp>
-      <format property="build.timestamp" pattern="yyyyMMdd-HHmmss" />
+      <format property="build.timestamp.time" pattern="yyyyMMdd-HHmmss" />
+      <format property="build.timestamp.date" pattern="yyyyMMdd" />
     </tstamp>
     <pathconvert property="build.properties.path">
       <path location="${ivy.extra.buildpackage}" />
@@ -123,7 +127,7 @@
     <propertyfile file="${build.properties.path}/build.properties">
       <entry key="name" value="${ivy.module}" />
       <entry key="version" value="${ivy.revision}" />
-      <entry key="build_name" value="${build.timestamp}" />
+      <entry key="build_name" value="${build.timestamp.time}" />
       <entry key="build_revision" value="${revision}" />
     </propertyfile>
   </target>
@@ -171,7 +175,7 @@
 
 
   <target name="compile" depends="prepare, find-source, compile-thrift, check-jni-source, compile-jni,
-    compile-java, compile-scala, write-build-info, copy-extra"
+    install-jni, compile-java, compile-scala, write-build-info, copy-extra"
     description="compile java and scala code" />
 
 </project>
