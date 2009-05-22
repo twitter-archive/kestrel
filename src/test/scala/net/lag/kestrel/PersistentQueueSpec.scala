@@ -373,7 +373,7 @@ object PersistentQueueSpec extends Specification with TestHelper {
           var rv: String = null
           val latch = new CountDownLatch(1)
           actor {
-            q.remove(Time.now + 250, false) { item =>
+            q.removeReact(Time.now + 250, false) { item =>
               rv = new String(item.get.data)
               latch.countDown
             }

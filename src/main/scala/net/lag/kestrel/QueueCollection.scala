@@ -153,7 +153,7 @@ class QueueCollection(private val queueFolder: String, private var queueConfigs:
         synchronized { _queueMisses += 1 }
         f(None)
       case Some(q) =>
-        q.remove(if (timeout == 0) timeout else Time.now + timeout, transaction) {
+        q.removeReact(if (timeout == 0) timeout else Time.now + timeout, transaction) {
           case None =>
             synchronized { _queueMisses += 1 }
             f(None)

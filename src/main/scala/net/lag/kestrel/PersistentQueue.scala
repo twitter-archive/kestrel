@@ -241,18 +241,13 @@ class PersistentQueue(private val persistencePath: String, val name: String,
    */
   def remove(): Option[QItem] = remove(false)
 
-  def remove(timeoutAbsolute: Long, transaction: Boolean)(f: Option[QItem] => Unit): Unit = {
-    val callback = synchronized {
-      val item = remove(transaction)
-      if (item.isDefined) {
-        Some(item)
-      } else if (timeoutAbsolute == 0) {
-        Some(None)
-      } else {
-        val w = Waiter(Actor.self)
-        waiters += w
+  def removeReact(timeoutAbsolute: Long, transaction: Boolean)(f: Option[QItem] => Unit): Unit = {
+    removeOrWait(timeoutAbsolute, transaction) match {
+      case (item, None) =>
+        f(item)
+      case (None, Some(w)) =>
         Actor.self.reactWithin((timeoutAbsolute - Time.now) max 0) {
-          case ItemArrived => remove(timeoutAbsolute, transaction)(f)
+          case ItemArrived => removeReact(timeoutAbsolute, transaction)(f)
           case TIMEOUT => synchronized {
             waiters -= w
             // race: someone could have done an add() between the timeout and grabbing the lock.
@@ -262,11 +257,43 @@ class PersistentQueue(private val persistencePath: String, val name: String,
             }
           }
         }
-        None
-      }
     }
-    // make this callback happen outside the lock.
-    callback map { f(_) }
+  }
+
+  def removeReceive(timeoutAbsolute: Long, transaction: Boolean): Option[QItem] = {
+    removeOrWait(timeoutAbsolute, transaction) match {
+      case (item, None) =>
+        item
+      case (None, Some(w)) =>
+        Actor.self.receiveWithin((timeoutAbsolute - Time.now) max 0) {
+          case ItemArrived => removeReceive(timeoutAbsolute, transaction)
+          case TIMEOUT => synchronized {
+            waiters -= w
+            // race: someone could have done an add() between the timeout and grabbing the lock.
+            Actor.self.receiveWithin(0) {
+              case ItemArrived => remove(transaction)
+              case TIMEOUT => remove(transaction)
+            }
+          }
+        }
+    }
+  }
+
+  /**
+   * Remove the next item from the queue, if there is one.
+   * If the queue is closed, returns immediately. Otherwise, if a timeout is passed in, the
+   * current actor is added to the wait-list, and will receive `ItemArrived` when an item is
+   * available (or the queue is closed).
+   */
+  private def removeOrWait(timeoutAbsolute: Long, transaction: Boolean): (Option[QItem], Option[Waiter]) = synchronized {
+    val item = remove(transaction)
+    if (!item.isDefined && !closed && timeoutAbsolute > 0) {
+      val w = Waiter(Actor.self)
+      waiters += w
+      (None, Some(w))
+    } else {
+      (item, None)
+    }
   }
 
   /**
@@ -303,9 +330,13 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   /**
    * Close the queue's journal file. Not safe to call on an active queue.
    */
-  def close = synchronized {
+  def close() = synchronized {
     closed = true
     if (keepJournal()) journal.close()
+    for (w <- waiters) {
+      w.actor ! ItemArrived
+    }
+    waiters.clear()
   }
 
   def setup(): Unit = synchronized {
