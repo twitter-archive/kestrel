@@ -139,6 +139,41 @@ object ServerSpec extends Specification with TestHelper {
         stats("queue_commit_bytes") mustEqual "0"
       }
     }
+    
+    "abort a transactional get" in {
+      withTempFolder {
+        makeServer
+        val v = (Math.random * 0x7fffffff).toInt
+        val client = new TestClient("localhost", PORT)
+        client.set("abort", v.toString) mustEqual "STORED"
+
+        val client2 = new TestClient("localhost", PORT)
+        val client3 = new TestClient("localhost", PORT)
+        var stats = client3.stats
+        stats("queue_abort_items") mustEqual "1"
+        stats("queue_abort_total_items") mustEqual "1"
+        stats("queue_abort_bytes") mustEqual v.toString.length.toString
+
+        client2.get("abort/open") mustEqual v.toString
+        stats = client3.stats
+        stats("queue_abort_items") mustEqual "0"
+        stats("queue_abort_total_items") mustEqual "1"
+        stats("queue_abort_bytes") mustEqual "0"
+
+        client2.get("abort/abort") mustEqual ""
+        stats = client3.stats
+        stats("queue_abort_items") mustEqual "1"
+        stats("queue_abort_total_items") mustEqual "1"
+        stats("queue_abort_bytes") mustEqual v.toString.length.toString
+
+        client2.disconnect
+        Thread.sleep(10)
+        stats = client3.stats
+        stats("queue_abort_items") mustEqual "1"
+        stats("queue_abort_total_items") mustEqual "1"
+        stats("queue_abort_bytes") mustEqual v.toString.length.toString
+      }
+    }
 
     "auto-rollback a transaction on disconnect" in {
       withTempFolder {

@@ -138,6 +138,7 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
     var timeout = 0
     var closing = false
     var opening = false
+    var aborting = false
     if (name contains '/') {
       val options = name.split("/")
       key = options(0)
@@ -148,9 +149,10 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
         }
         if (opt == "close") closing = true
         if (opt == "open") opening = true
+        if (opt == "abort") aborting = true
       }
     }
-    log.debug("get -> q=%s t=%d open=%s close=%s", key, timeout, opening, closing)
+    log.debug("get -> q=%s t=%d open=%s close=%s abort=%s", key, timeout, opening, closing, aborting)
 
     if (key.length == 0) {
       writeResponse("CLIENT_ERROR\r\n")
@@ -159,33 +161,44 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
     }
 
     try {
-      if (closing) {
-        if (!closeTransaction(key)) {
-          log.warning("Attempt to close a non-existent transaction on '%s' (sid %d, %s:%d)",
+      if (aborting) {
+        if (!abortTransaction(key)) {
+          log.warning("Attempt to abort a non-existent transaction on '%s' (sid %d, %s:%d)",
                       key, sessionID, remoteAddress.getHostName, remoteAddress.getPort)
           // let the client continue. it may be optimistically closing previous transactions as
           // it randomly jumps servers.
         }
-        if (!opening) writeResponse("END\r\n")
+        writeResponse("END\r\n")
       }
-      if (opening || !closing) {
-        if (pendingTransaction.isDefined) {
-          log.warning("Attempt to perform a non-transactional fetch with an open transaction on " +
-                      " '%s' (sid %d, %s:%d)", key, sessionID, remoteAddress.getHostName,
-                      remoteAddress.getPort)
-          writeResponse("ERROR\r\n")
-          session.close
-          return
-        }
-        KestrelStats.getRequests.incr
-        Kestrel.queues.remove(key, timeout, opening) {
-          case None =>
-            writeResponse("END\r\n")
-          case Some(item) =>
-            log.debug("get <- %s", item)
-            if (opening) pendingTransaction = Some((key, item.xid))
-            writeResponse("VALUE %s 0 %d\r\n".format(key, item.data.length), item.data)
-        }
+      else {
+          if (closing) {
+            if (!closeTransaction(key)) {
+              log.warning("Attempt to close a non-existent transaction on '%s' (sid %d, %s:%d)",
+                          key, sessionID, remoteAddress.getHostName, remoteAddress.getPort)
+              // let the client continue. it may be optimistically closing previous transactions as
+              // it randomly jumps servers.
+            }
+            if (!opening) writeResponse("END\r\n")
+          }
+          if (opening || !closing) {
+            if (pendingTransaction.isDefined) {
+              log.warning("Attempt to perform a non-transactional fetch with an open transaction on " +
+                          " '%s' (sid %d, %s:%d)", key, sessionID, remoteAddress.getHostName,
+                          remoteAddress.getPort)
+              writeResponse("ERROR\r\n")
+              session.close
+              return
+            }
+            KestrelStats.getRequests.incr
+            Kestrel.queues.remove(key, timeout, opening) {
+              case None =>
+                writeResponse("END\r\n")
+              case Some(item) =>
+                log.debug("get <- %s", item)
+                if (opening) pendingTransaction = Some((key, item.xid))
+                writeResponse("VALUE %s 0 %d\r\n".format(key, item.data.length), item.data)
+            }
+          }
       }
     } catch {
       case e: MismatchedQueueException =>
@@ -211,6 +224,20 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
     }
   }
 
+  private def abortTransaction(name: String): Boolean = {
+    pendingTransaction match {
+      case None => false
+      case Some((qname, xid)) =>
+        if (qname != name) {
+          throw new MismatchedQueueException
+        } else {
+          Kestrel.queues.unremove(qname, xid)
+          pendingTransaction = None
+        }
+        true
+    }
+  }
+  
   private def abortAnyTransaction() = {
     pendingTransaction match {
       case None =>
