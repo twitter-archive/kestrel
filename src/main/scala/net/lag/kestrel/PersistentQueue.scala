@@ -77,6 +77,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   // force get/set operations to block while we're replaying any existing journal
   private val initialized = new CountDownLatch(1)
   private var closed = false
+  private var paused = false
 
   def overlay[T](base: => T) = new OverlaySetting(base)
 
@@ -120,6 +121,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   def totalExpired: Long = synchronized { _totalExpired }
   def currentAge: Long = synchronized { _currentAge }
   def totalDiscarded: Long = synchronized { _totalDiscarded }
+  def isClosed: Boolean = synchronized { closed || paused }
 
   // mostly for unit tests.
   def memoryLength: Long = synchronized { queue.size }
@@ -217,7 +219,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   def remove(transaction: Boolean): Option[QItem] = {
     initialized.await
     synchronized {
-      if (closed || queueLength == 0) {
+      if (closed || paused || queueLength == 0) {
         None
       } else {
         val item = _remove(transaction)
@@ -257,6 +259,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
             }
           }
         }
+      case _ => throw new RuntimeException()
     }
   }
 
@@ -265,16 +268,20 @@ class PersistentQueue(private val persistencePath: String, val name: String,
       case (item, None) =>
         item
       case (None, Some(w)) =>
-        Actor.self.receiveWithin((timeoutAbsolute - Time.now) max 0) {
-          case ItemArrived => removeReceive(timeoutAbsolute, transaction)
-          case TIMEOUT => synchronized {
-            waiters -= w
-            // race: someone could have done an add() between the timeout and grabbing the lock.
-            Actor.self.receiveWithin(0) {
-              case ItemArrived => remove(transaction)
-              case TIMEOUT => remove(transaction)
-            }
+        val gotSomething = Actor.self.receiveWithin((timeoutAbsolute - Time.now) max 0) {
+          case ItemArrived => true
+          case TIMEOUT => false
+        }
+        if (gotSomething) {
+          removeReceive(timeoutAbsolute, transaction)
+        } else {
+          synchronized { waiters -= w }
+          // race: someone could have done an add() between the timeout and grabbing the lock.
+          Actor.self.receiveWithin(0) {
+            case ItemArrived =>
+            case TIMEOUT =>
           }
+          remove(transaction)
         }
     }
   }
@@ -287,7 +294,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
    */
   private def removeOrWait(timeoutAbsolute: Long, transaction: Boolean): (Option[QItem], Option[Waiter]) = synchronized {
     val item = remove(transaction)
-    if (!item.isDefined && !closed && timeoutAbsolute > 0) {
+    if (!item.isDefined && !closed && !paused && timeoutAbsolute > 0) {
       val w = Waiter(Actor.self)
       waiters += w
       (None, Some(w))
@@ -337,6 +344,18 @@ class PersistentQueue(private val persistencePath: String, val name: String,
       w.actor ! ItemArrived
     }
     waiters.clear()
+  }
+
+  def pauseReads(): Unit = synchronized {
+    paused = true
+    for (w <- waiters) {
+      w.actor ! ItemArrived
+    }
+    waiters.clear()
+  }
+
+  def resumeReads(): Unit = synchronized {
+    paused = false
   }
 
   def setup(): Unit = synchronized {
