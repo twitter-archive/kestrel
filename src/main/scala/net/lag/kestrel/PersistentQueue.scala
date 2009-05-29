@@ -114,7 +114,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   def openTransactionCount = openTransactions.size
   def openTransactionIds = openTransactions.keys.toList.sort(_ - _ > 0)
 
-  def length: Long = synchronized { queueLength }
+  def length: Long = synchronized { queueLength + openTransactionCount }
   def totalItems: Long = synchronized { _totalItems }
   def bytes: Long = synchronized { queueSize }
   def journalSize: Long = synchronized { journal.size }
@@ -283,6 +283,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
           }
           remove(transaction)
         }
+      case _ => throw new RuntimeException()
     }
   }
 

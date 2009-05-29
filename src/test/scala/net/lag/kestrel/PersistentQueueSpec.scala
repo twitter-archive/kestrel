@@ -474,12 +474,12 @@ object PersistentQueueSpec extends Specification with TestHelper {
           // last remove will be an incomplete transaction:
           q.remove(i == 4) must beSomeQItem(512)
         }
-        q.length mustEqual 1
+        q.length mustEqual 2
         q.journalSize mustEqual (512 * 6) + (6 * 21) + 5
 
         // next add should force a recreate.
         q.add(new Array[Byte](512))
-        q.length mustEqual 2
+        q.length mustEqual 3
         q.journalSize mustEqual ((512 + 16) * 3) + 9 + 1 + 5 + (5 * 2)
 
         // journal should contain exactly: one unfinished transaction, 2 items.

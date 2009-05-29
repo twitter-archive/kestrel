@@ -121,7 +121,7 @@ object ServerSpec extends Specification with TestHelper {
 
         client2.get("commit/open") mustEqual v.toString
         stats = client3.stats
-        stats("queue_commit_items") mustEqual "0"
+        stats("queue_commit_items") mustEqual "1"
         stats("queue_commit_total_items") mustEqual "1"
         stats("queue_commit_bytes") mustEqual "0"
 
@@ -152,7 +152,7 @@ object ServerSpec extends Specification with TestHelper {
         val client3 = new TestClient("localhost", PORT)
         client3.get("auto-rollback") mustEqual ""
         var stats = client3.stats
-        stats("queue_auto-rollback_items") mustEqual "0"
+        stats("queue_auto-rollback_items") mustEqual "1"
         stats("queue_auto-rollback_total_items") mustEqual "1"
         stats("queue_auto-rollback_bytes") mustEqual "0"
 
@@ -167,7 +167,7 @@ object ServerSpec extends Specification with TestHelper {
         // subsequent fetch must get the same data item back.
         client3.get("auto-rollback/open") mustEqual v.toString
         stats = client3.stats
-        stats("queue_auto-rollback_items") mustEqual "0"
+        stats("queue_auto-rollback_items") mustEqual "1"
         stats("queue_auto-rollback_total_items") mustEqual "1"
         stats("queue_auto-rollback_bytes") mustEqual "0"
       }
