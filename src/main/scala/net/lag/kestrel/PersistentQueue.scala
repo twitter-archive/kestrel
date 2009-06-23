@@ -133,10 +133,6 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   configure(config)
 
   def configure(config: ConfigMap) = synchronized {
-    log.info("Configuring queue %s: journal=%s, max_items=%d, max_size=%d, max_age=%d, max_journal_size=%d, " +
-             "max_memory_size=%d, max_journal_overflow=%d, discard_old_when_full=%s",
-             name, keepJournal(), maxItems(), maxSize(), maxAge(), maxJournalSize(), maxMemorySize(),
-             maxJournalOverflow(), discardOldWhenFull())
     maxItems set config.getInt("max_items")
     maxSize set config.getLong("max_size")
     maxAge set config.getInt("max_age")
@@ -145,6 +141,10 @@ class PersistentQueue(private val persistencePath: String, val name: String,
     maxJournalOverflow set config.getInt("max_journal_overflow")
     discardOldWhenFull set config.getBool("discard_old_when_full")
     keepJournal set config.getBool("journal")
+    log.info("Configuring queue %s: journal=%s, max_items=%d, max_size=%d, max_age=%d, max_journal_size=%d, " +
+             "max_memory_size=%d, max_journal_overflow=%d, discard_old_when_full=%s",
+             name, keepJournal(), maxItems(), maxSize(), maxAge(), maxJournalSize(), maxMemorySize(),
+             maxJournalOverflow(), discardOldWhenFull())
     if (!keepJournal()) journal.erase()
   }
 
