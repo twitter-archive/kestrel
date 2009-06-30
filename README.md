@@ -154,8 +154,8 @@ in the config file included.
 
 - `max_age` (0 = off)
 
-  Expiration time (in seconds) for items on this queue. Any item that has
-  been sitting on the queue longer than this amount will be discarded.
+  Expiration time (in milliseconds) for items on this queue. Any item that
+  has been sitting on the queue longer than this amount will be discarded.
   Clients may also attach an expiration time when adding items to a queue,
   but if the expiration time is longer than `max_age`, `max_age` will be
   used instead.
