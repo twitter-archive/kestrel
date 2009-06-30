@@ -204,6 +204,7 @@ object ServerSpec extends Specification with TestHelper {
         makeServer
         val client = new TestClient("localhost", PORT)
         client.set("test_age", "nibbler") mustEqual "STORED"
+        client.set("test_age", "nibbler2") mustEqual "STORED"
         Time.advance(1000)
         client.get("test_age") mustEqual "nibbler"
         client.stats.contains("queue_test_age_age") mustEqual true

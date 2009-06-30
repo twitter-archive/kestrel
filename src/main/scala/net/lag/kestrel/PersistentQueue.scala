@@ -119,7 +119,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   def bytes: Long = synchronized { queueSize }
   def journalSize: Long = synchronized { journal.size }
   def totalExpired: Long = synchronized { _totalExpired }
-  def currentAge: Long = synchronized { _currentAge }
+  def currentAge: Long = synchronized { if (queueSize == 0) 0 else _currentAge }
   def totalDiscarded: Long = synchronized { _totalDiscarded }
   def isClosed: Boolean = synchronized { closed || paused }
 
