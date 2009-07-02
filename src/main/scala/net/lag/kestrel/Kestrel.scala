@@ -51,6 +51,7 @@ object KestrelStats {
   val totalConnections = new Counter
   val getRequests = new Counter
   val setRequests = new Counter
+  val peekRequests = new Counter
   val sessionID = new Counter
 }
 

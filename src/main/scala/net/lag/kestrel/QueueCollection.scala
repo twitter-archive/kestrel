@@ -147,23 +147,27 @@ class QueueCollection(private val queueFolder: String, private var queueConfigs:
    * Retrieve an item from a queue and pass it to a continuation. If no item is available within
    * the requested time, or the server is shutting down, None is passed.
    */
-  def remove(key: String, timeout: Int, transaction: Boolean)(f: Option[QItem] => Unit): Unit = {
+  def remove(key: String, timeout: Int, transaction: Boolean, peek: Boolean)(f: Option[QItem] => Unit): Unit = {
     queue(key) match {
       case None =>
         synchronized { _queueMisses += 1 }
         f(None)
       case Some(q) =>
-        q.removeReact(if (timeout == 0) timeout else Time.now + timeout, transaction) {
-          case None =>
-            synchronized { _queueMisses += 1 }
-            f(None)
-          case Some(item) =>
-            synchronized {
-              _queueHits += 1
-              _currentBytes -= item.data.length
-              _currentItems -= 1
-            }
-            f(Some(item))
+        if (peek) {
+          f(q.peek())
+        } else {
+          q.removeReact(if (timeout == 0) timeout else Time.now + timeout, transaction) {
+            case None =>
+              synchronized { _queueMisses += 1 }
+              f(None)
+            case Some(item) =>
+              synchronized {
+                _queueHits += 1
+                _currentBytes -= item.data.length
+                _currentItems -= 1
+              }
+              f(Some(item))
+          }
         }
     }
   }
@@ -172,7 +176,7 @@ class QueueCollection(private val queueFolder: String, private var queueConfigs:
   def receive(key: String): Option[Array[Byte]] = {
     var rv: Option[Array[Byte]] = None
     val latch = new CountDownLatch(1)
-    remove(key, 0, false) {
+    remove(key, 0, false, false) {
       case None =>
         rv = None
         latch.countDown

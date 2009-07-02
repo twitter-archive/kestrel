@@ -212,6 +212,22 @@ object ServerSpec extends Specification with TestHelper {
       }
     }
 
+    "peek" in {
+      withTempFolder {
+        makeServer
+        val client = new TestClient("localhost", PORT)
+        client.set("testy", "nibbler") mustEqual "STORED"
+        client.get("testy/peek/open") must throwA[ClientError]
+
+        val client2 = new TestClient("localhost", PORT)
+        client2.get("testy/peek") mustEqual "nibbler"
+        client2.get("testy/peek") mustEqual "nibbler"
+        client2.get("testy/peek") mustEqual "nibbler"
+        client2.get("testy") mustEqual "nibbler"
+        client2.get("testy") mustEqual ""
+      }
+    }
+
     "rotate logs" in {
       withTempFolder {
         makeServer

@@ -138,6 +138,8 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
     var timeout = 0
     var closing = false
     var opening = false
+    var peeking = false
+
     if (name contains '/') {
       val options = name.split("/")
       key = options(0)
@@ -148,11 +150,12 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
         }
         if (opt == "close") closing = true
         if (opt == "open") opening = true
+        if (opt == "peek") peeking = true
       }
     }
-    log.debug("get -> q=%s t=%d open=%s close=%s", key, timeout, opening, closing)
+    log.debug("get -> q=%s t=%d open=%s close=%s peek=%s", key, timeout, opening, closing, peeking)
 
-    if (key.length == 0) {
+    if ((key.length == 0) || (peeking && (opening || closing))) {
       writeResponse("CLIENT_ERROR\r\n")
       session.close
       return
@@ -169,7 +172,7 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
         if (!opening) writeResponse("END\r\n")
       }
       if (opening || !closing) {
-        if (pendingTransaction.isDefined) {
+        if (pendingTransaction.isDefined && !peeking) {
           log.warning("Attempt to perform a non-transactional fetch with an open transaction on " +
                       " '%s' (sid %d, %s:%d)", key, sessionID, remoteAddress.getHostName,
                       remoteAddress.getPort)
@@ -177,8 +180,12 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
           session.close
           return
         }
-        KestrelStats.getRequests.incr
-        Kestrel.queues.remove(key, timeout, opening) {
+        if (peeking) {
+          KestrelStats.peekRequests.incr
+        } else {
+          KestrelStats.getRequests.incr
+        }
+        Kestrel.queues.remove(key, timeout, opening, peeking) {
           case None =>
             writeResponse("END\r\n")
           case Some(item) =>
@@ -248,6 +255,7 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
     report += (("total_connections", KestrelStats.totalConnections.toString))
     report += (("cmd_get", KestrelStats.getRequests.toString))
     report += (("cmd_set", KestrelStats.setRequests.toString))
+    report += (("cmd_peek", KestrelStats.peekRequests.toString))
     report += (("get_hits", Kestrel.queues.queueHits.toString))
     report += (("get_misses", Kestrel.queues.queueMisses.toString))
     report += (("bytes_read", KestrelStats.bytesRead.toString))

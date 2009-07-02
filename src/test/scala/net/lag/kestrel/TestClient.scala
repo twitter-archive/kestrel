@@ -23,6 +23,8 @@ import scala.collection.Map
 import scala.collection.mutable
 
 
+class ClientError(reason: String) extends Exception(reason)
+
 class TestClient(host: String, port: Int) {
 
   var socket: Socket = null
@@ -79,6 +81,9 @@ class TestClient(host: String, port: Int) {
     val line = readline
     if (line == "END") {
       return new Array[Byte](0)
+    }
+    if (! line.startsWith("VALUE ")) {
+      throw new ClientError(line)
     }
     // VALUE <name> <flags> <length>
     val len = line.split(" ")(3).toInt

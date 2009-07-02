@@ -209,6 +209,20 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   def add(value: Array[Byte]): Boolean = add(value, 0)
 
   /**
+   * Peek at the head item in the queue, if there is one.
+   */
+  def peek(): Option[QItem] = {
+    initialized.await
+    synchronized {
+      if (closed || paused || queueLength == 0) {
+        None
+      } else {
+        _peek()
+      }
+    }
+  }
+
+  /**
    * Remove an item from the queue. If no item is available, an empty byte
    * array is returned.
    *
@@ -431,6 +445,11 @@ class PersistentQueue(private val persistencePath: String, val name: String,
     queueSize += item.data.length
     queueLength += 1
     discardExpired
+  }
+
+  private def _peek(): Option[QItem] = {
+    discardExpired
+    if (queue.isEmpty) None else Some(queue.front)
   }
 
   private def _remove(transaction: Boolean): Option[QItem] = {
