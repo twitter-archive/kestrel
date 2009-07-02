@@ -87,6 +87,9 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   // attempting to add an item after the queue reaches this size (in bytes) will fail.
   var maxSize = overlay(PersistentQueue.maxSize)
 
+  // attempting to add an item larger than this size (in bytes) will fail.
+  var maxItemSize = overlay(PersistentQueue.maxItemSize)
+
   // maximum expiration time for this queue (seconds).
   var maxAge = overlay(PersistentQueue.maxAge)
 
@@ -135,6 +138,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   def configure(config: ConfigMap) = synchronized {
     maxItems set config.getInt("max_items")
     maxSize set config.getLong("max_size")
+    maxItemSize set config.getLong("max_item_size")
     maxAge set config.getInt("max_age")
     maxJournalSize set config.getLong("max_journal_size")
     maxMemorySize set config.getLong("max_memory_size")
@@ -176,7 +180,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   def add(value: Array[Byte], expiry: Long): Boolean = {
     initialized.await
     synchronized {
-      if (closed) return false
+      if (closed || value.size > maxItemSize()) return false
       while (queueLength >= maxItems() || queueSize >= maxSize()) {
         if (!discardOldWhenFull()) return false
         _remove(false)
@@ -501,6 +505,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
 object PersistentQueue {
   @volatile var maxItems: Int = Math.MAX_INT
   @volatile var maxSize: Long = Math.MAX_LONG
+  @volatile var maxItemSize: Long = Math.MAX_LONG
   @volatile var maxAge: Int = 0
   @volatile var maxJournalSize: Long = 16 * 1024 * 1024
   @volatile var maxMemorySize: Long = 128 * 1024 * 1024

@@ -82,6 +82,7 @@ object Kestrel {
     // fill in defaults for all queues
     PersistentQueue.maxItems = config.getInt("max_items", Math.MAX_INT)
     PersistentQueue.maxSize = config.getLong("max_size", Math.MAX_LONG)
+    PersistentQueue.maxItemSize = config.getLong("max_item_size", Math.MAX_LONG)
     PersistentQueue.maxAge = config.getInt("max_age", 0)
     PersistentQueue.maxJournalSize = config.getInt("max_journal_size", 16 * 1024 * 1024)
     PersistentQueue.maxMemorySize = config.getInt("max_memory_size", 128 * 1024 * 1024)

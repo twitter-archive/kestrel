@@ -113,6 +113,18 @@ object PersistentQueueSpec extends Specification with TestHelper {
       }
     }
 
+    "resist adding an item that's too large" in {
+      withTempFolder {
+        val q = new PersistentQueue(folderName, "work", Config.fromMap(Map("max_item_size" -> "128")))
+        q.setup
+        q.length mustEqual 0
+        q.add(new Array[Byte](127)) mustEqual true
+        q.add(new Array[Byte](128)) mustEqual true
+        q.add(new Array[Byte](129)) mustEqual false
+        q.close
+      }
+    }
+
     "flush all items" in {
       withTempFolder {
         val q = makeQueue("work")
