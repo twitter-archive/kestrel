@@ -33,7 +33,7 @@ import net.lag.naggati.IoHandlerActorAdapter
 
 
 class Counter {
-  private var value = new AtomicLong(0)
+  private val value = new AtomicLong(0)
 
   def get() = value.get
   def set(n: Int) = value.set(n)
