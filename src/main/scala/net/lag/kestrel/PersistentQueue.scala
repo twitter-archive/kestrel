@@ -40,7 +40,7 @@ class OverlaySetting[T](base: => T) {
 }
 
 
-class PersistentQueue(private val persistencePath: String, val name: String,
+class PersistentQueue(persistencePath: String, val name: String,
                       val config: ConfigMap) {
 
   private case class Waiter(actor: Actor)
