@@ -50,6 +50,8 @@ class Journal(queuePath: String) {
 
   private val log = Logger.get
 
+  private val queueFile = new File(queuePath)
+
   private var writer: FileChannel = null
   private var reader: Option[FileChannel] = None
   private var replayer: Option[FileChannel] = None
@@ -72,13 +74,13 @@ class Journal(queuePath: String) {
 
 
   def open(): Unit = {
-    writer = new FileOutputStream(queuePath, true).getChannel
+    writer = new FileOutputStream(queueFile, true).getChannel
   }
 
   def roll(xid: Int, openItems: List[QItem], queue: Iterable[QItem]): Unit = {
     writer.close
     val backupFile = new File(queuePath + "." + Time.now)
-    new File(queuePath).renameTo(backupFile)
+    queueFile.renameTo(backupFile)
     open
     size = 0
     for (item <- openItems) {
@@ -101,7 +103,7 @@ class Journal(queuePath: String) {
   def erase(): Unit = {
     try {
       close()
-      new File(queuePath).delete
+      queueFile.delete
     } catch {
       case _ =>
     }
@@ -150,7 +152,7 @@ class Journal(queuePath: String) {
 
   def startReadBehind(): Unit = {
     val pos = if (replayer.isDefined) replayer.get.position else writer.position
-    val rj = new FileInputStream(queuePath).getChannel
+    val rj = new FileInputStream(queueFile).getChannel
     rj.position(pos)
     reader = Some(rj)
   }
@@ -174,7 +176,7 @@ class Journal(queuePath: String) {
   def replay(name: String)(f: JournalItem => Unit): Unit = {
     size = 0
     try {
-      val in = new FileInputStream(queuePath).getChannel
+      val in = new FileInputStream(queueFile).getChannel
       replayer = Some(in)
       var done = false
       do {
