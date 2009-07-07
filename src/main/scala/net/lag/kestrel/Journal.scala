@@ -73,15 +73,18 @@ class Journal(queuePath: String) {
   private val CMD_ADD_XID = 7
 
 
+  private def open(file: File): Unit = {
+    writer = new FileOutputStream(file, true).getChannel
+  }
+
   def open(): Unit = {
-    writer = new FileOutputStream(queueFile, true).getChannel
+    open(queueFile)
   }
 
   def roll(xid: Int, openItems: List[QItem], queue: Iterable[QItem]): Unit = {
     writer.close
-    val backupFile = new File(queuePath + "." + Time.now)
-    queueFile.renameTo(backupFile)
-    open
+    val tmpFile = new File(queuePath + "." + Time.now)
+    open(tmpFile)
     size = 0
     for (item <- openItems) {
       addWithXid(item)
@@ -91,7 +94,9 @@ class Journal(queuePath: String) {
     for (item <- queue) {
       add(item)
     }
-    backupFile.delete
+    writer.close
+    tmpFile.renameTo(queueFile)
+    open
   }
 
   def close(): Unit = {
