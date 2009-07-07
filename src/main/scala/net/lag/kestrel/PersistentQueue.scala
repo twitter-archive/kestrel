@@ -82,16 +82,16 @@ class PersistentQueue(persistencePath: String, val name: String,
   def overlay[T](base: => T) = new OverlaySetting(base)
 
   // attempting to add an item after the queue reaches this size (in items) will fail.
-  var maxItems = overlay(PersistentQueue.maxItems)
+  val maxItems = overlay(PersistentQueue.maxItems)
 
   // attempting to add an item after the queue reaches this size (in bytes) will fail.
-  var maxSize = overlay(PersistentQueue.maxSize)
+  val maxSize = overlay(PersistentQueue.maxSize)
 
   // attempting to add an item larger than this size (in bytes) will fail.
-  var maxItemSize = overlay(PersistentQueue.maxItemSize)
+  val maxItemSize = overlay(PersistentQueue.maxItemSize)
 
   // maximum expiration time for this queue (seconds).
-  var maxAge = overlay(PersistentQueue.maxAge)
+  val maxAge = overlay(PersistentQueue.maxAge)
 
   // maximum journal size before the journal should be rotated.
   val maxJournalSize = overlay(PersistentQueue.maxJournalSize)
@@ -103,10 +103,10 @@ class PersistentQueue(persistencePath: String, val name: String,
   val maxJournalOverflow = overlay(PersistentQueue.maxJournalOverflow)
 
   // whether to drop older items (instead of newer) when the queue is full
-  var discardOldWhenFull = overlay(PersistentQueue.discardOldWhenFull)
+  val discardOldWhenFull = overlay(PersistentQueue.discardOldWhenFull)
 
   // whether to keep a journal file at all
-  var keepJournal = overlay(PersistentQueue.keepJournal)
+  val keepJournal = overlay(PersistentQueue.keepJournal)
 
   // clients waiting on an item in this queue
   private val waiters = new mutable.ArrayBuffer[Waiter]
