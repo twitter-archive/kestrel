@@ -21,6 +21,7 @@ import net.lag.logging.Logger
 import java.io._
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.channels.FileChannel
+import net.lag.configgy.{Config, ConfigMap}
 
 
 // returned from journal replay
@@ -39,14 +40,9 @@ object JournalItem {
 /**
  * Codes for working with the journal file for a PersistentQueue.
  */
-class Journal(queuePath: String) {
-
-  /* in theory, you might want to sync the file after each
-   * transaction. however, the original starling doesn't.
-   * i think if you can cope with a truncated journal file,
-   * this is fine, because a non-synced file only matters on
-   * catastrophic disk/machine failure.
-   */
+class Journal(queuePath: String, config: ConfigMap) {
+  // whether to sync the journal file after each write
+  val syncJournal = new OverlaySetting(Journal.syncJournal)
 
   private val log = Logger.get
 
@@ -72,6 +68,13 @@ class Journal(queuePath: String) {
   private val CMD_CONFIRM_REMOVE = 6
   private val CMD_ADD_XID = 7
 
+  config.subscribe { c => configure(c.getOrElse(new Config)) }
+  configure(config)
+
+  def configure(config: ConfigMap) = {
+    syncJournal set config.getBool("sync_journal")
+    log.info("Configuring journal %s: sync_journal=%s", queuePath, syncJournal())
+  }
 
   private def open(file: File): Unit = {
     writer = new FileOutputStream(file, true).getChannel
@@ -324,4 +327,8 @@ class Journal(queuePath: String) {
     buffer.get(bytes)
     return QItem(Time.now, if (expiry == 0) 0 else expiry * 1000, bytes, 0)
   }
+}
+
+object Journal {
+  @volatile var syncJournal: Boolean = false
 }

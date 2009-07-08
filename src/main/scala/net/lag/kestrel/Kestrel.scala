@@ -89,6 +89,7 @@ object Kestrel {
     PersistentQueue.maxJournalOverflow = config.getInt("max_journal_overflow", 10)
     PersistentQueue.discardOldWhenFull = config.getBool("discard_old_when_full", false)
     PersistentQueue.keepJournal = config.getBool("journal", true)
+    Journal.syncJournal = config.getBool("sync_journal", false)
   }
 
   def startup(config: Config): Unit = {

@@ -72,7 +72,7 @@ class PersistentQueue(persistencePath: String, val name: String,
     def unget(item: QItem) = prependElem(item)
   }
   private var _memoryBytes: Long = 0
-  private var journal = new Journal(new File(persistencePath, name).getCanonicalPath)
+  private var journal = new Journal(new File(persistencePath, name).getCanonicalPath, config)
 
   // force get/set operations to block while we're replaying any existing journal
   private val initialized = new CountDownLatch(1)
