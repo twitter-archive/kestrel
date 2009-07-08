@@ -121,7 +121,7 @@ class Journal(queuePath: String, config: ConfigMap) {
 
   def add(item: QItem) = {
     val blob = ByteBuffer.wrap(pack(item))
-    size += write(CMD_ADDX.toByte, blob.limit)
+    size += write(false, CMD_ADDX.toByte, blob.limit)
     do {
       writer.write(blob)
     } while (blob.position < blob.limit)
@@ -131,7 +131,10 @@ class Journal(queuePath: String, config: ConfigMap) {
   // used only to list pending transactions when recreating the journal.
   private def addWithXid(item: QItem) = {
     val blob = ByteBuffer.wrap(pack(item))
-    size += write(CMD_ADD_XID.toByte, item.xid, blob.limit)
+
+    // this method is only called from roll(), so the journal does not
+    // need to be synced after a write.
+    size += write(false, CMD_ADD_XID.toByte, item.xid, blob.limit)
     do {
       writer.write(blob)
     } while (blob.position < blob.limit)
@@ -139,23 +142,25 @@ class Journal(queuePath: String, config: ConfigMap) {
   }
 
   def remove() = {
-    size += write(CMD_REMOVE.toByte)
+    size += write(true, CMD_REMOVE.toByte)
   }
 
   def removeTentative() = {
-    size += write(CMD_REMOVE_TENTATIVE.toByte)
+    size += write(true, CMD_REMOVE_TENTATIVE.toByte)
   }
 
   private def saveXid(xid: Int) = {
-    size += write(CMD_SAVE_XID.toByte, xid)
+    // this method is only called from roll(), so the journal does not
+    // need to be synced after a write.
+    size += write(false, CMD_SAVE_XID.toByte, xid)
   }
 
   def unremove(xid: Int) = {
-    size += write(CMD_UNREMOVE.toByte, xid)
+    size += write(true, CMD_UNREMOVE.toByte, xid)
   }
 
   def confirmRemove(xid: Int) = {
-    size += write(CMD_CONFIRM_REMOVE.toByte, xid)
+    size += write(true, CMD_CONFIRM_REMOVE.toByte, xid)
   }
 
   def startReadBehind(): Unit = {
@@ -286,7 +291,7 @@ class Journal(queuePath: String, config: ConfigMap) {
     byteBuffer.getInt()
   }
 
-  private def write(items: Any*): Int = {
+  private def write(allowSync: Boolean, items: Any*): Int = {
     byteBuffer.clear
     for (item <- items) item match {
       case b: Byte => byteBuffer.put(b)
