@@ -97,6 +97,7 @@ class Journal(queuePath: String, config: ConfigMap) {
     for (item <- queue) {
       add(false, item)
     }
+    if (syncJournal()) writer.force(false)
     writer.close
     tmpFile.renameTo(queueFile)
     open
@@ -125,6 +126,7 @@ class Journal(queuePath: String, config: ConfigMap) {
     do {
       writer.write(blob)
     } while (blob.position < blob.limit)
+    if (allowSync && syncJournal()) writer.force(false)
     size += blob.limit
   }
 
@@ -305,6 +307,7 @@ class Journal(queuePath: String, config: ConfigMap) {
     while (byteBuffer.position < byteBuffer.limit) {
       writer.write(byteBuffer)
     }
+    if (allowSync && syncJournal()) writer.force(false)
     byteBuffer.limit
   }
 
