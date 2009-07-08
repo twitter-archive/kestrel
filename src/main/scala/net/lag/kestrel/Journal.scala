@@ -91,11 +91,11 @@ class Journal(queuePath: String, config: ConfigMap) {
     size = 0
     for (item <- openItems) {
       addWithXid(item)
-      removeTentative()
+      removeTentative(false)
     }
     saveXid(xid)
     for (item <- queue) {
-      add(item)
+      add(false, item)
     }
     writer.close
     tmpFile.renameTo(queueFile)
@@ -119,7 +119,7 @@ class Journal(queuePath: String, config: ConfigMap) {
 
   def inReadBehind(): Boolean = reader.isDefined
 
-  def add(item: QItem) = {
+  private def add(allowSync: Boolean, item: QItem): Unit = {
     val blob = ByteBuffer.wrap(pack(item))
     size += write(false, CMD_ADDX.toByte, blob.limit)
     do {
@@ -127,6 +127,8 @@ class Journal(queuePath: String, config: ConfigMap) {
     } while (blob.position < blob.limit)
     size += blob.limit
   }
+
+  def add(item: QItem): Unit = add(true, item)
 
   // used only to list pending transactions when recreating the journal.
   private def addWithXid(item: QItem) = {
@@ -145,9 +147,11 @@ class Journal(queuePath: String, config: ConfigMap) {
     size += write(true, CMD_REMOVE.toByte)
   }
 
-  def removeTentative() = {
-    size += write(true, CMD_REMOVE_TENTATIVE.toByte)
+  private def removeTentative(allowSync: Boolean): Unit = {
+    size += write(allowSync, CMD_REMOVE_TENTATIVE.toByte)
   }
+
+  def removeTentative(): Unit = removeTentative(true)
 
   private def saveXid(xid: Int) = {
     // this method is only called from roll(), so the journal does not
