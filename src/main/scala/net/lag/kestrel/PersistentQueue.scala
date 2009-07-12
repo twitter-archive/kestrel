@@ -227,8 +227,7 @@ class PersistentQueue(persistencePath: String, val name: String,
   }
 
   /**
-   * Remove an item from the queue. If no item is available, an empty byte
-   * array is returned.
+   * Remove and return an item from the queue, if there is one.
    *
    * @param transaction true if this should be considered the first part
    *     of a transaction, to be committed or rolled back (put back at the
@@ -256,8 +255,7 @@ class PersistentQueue(persistencePath: String, val name: String,
   }
 
   /**
-   * Remove an item from the queue. If no item is available, an empty byte
-   * array is returned.
+   * Remove and return an item from the queue, if there is one.
    */
   def remove(): Option[QItem] = remove(false)
 
