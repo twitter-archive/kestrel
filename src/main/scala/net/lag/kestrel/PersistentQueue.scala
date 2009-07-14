@@ -493,11 +493,12 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   }
 
   private def _unremove(xid: Int) = {
-    val item = openTransactions.removeKey(xid).get
-    queueLength += 1
-    queueSize += item.data.length
-    queue unget item
-    _memoryBytes += item.data.length
+    openTransactions.removeKey(xid) map { item =>
+      queueLength += 1
+      queueSize += item.data.length
+      queue unget item
+      _memoryBytes += item.data.length
+    }
   }
 }
 
