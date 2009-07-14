@@ -17,11 +17,11 @@
 
 package net.lag.kestrel.load
 
-import java.net._
-import java.nio._
-import java.nio.channels._
-import java.util.concurrent.atomic._
-import net.lag.extensions._
+import _root_.java.net._
+import _root_.java.nio._
+import _root_.java.nio.channels._
+import _root_.java.util.concurrent.atomic._
+import _root_.net.lag.extensions._
 
 
 /**
