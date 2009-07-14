@@ -17,12 +17,12 @@
 
 package net.lag.kestrel
 
-import java.io._
-import java.net.Socket
-import scala.collection.Map
-import net.lag.configgy.Config
-import net.lag.logging.Logger
-import org.specs._
+import _root_.java.io._
+import _root_.java.net.Socket
+import _root_.scala.collection.Map
+import _root_.net.lag.configgy.Config
+import _root_.net.lag.logging.Logger
+import _root_.org.specs._
 
 
 object ServerSpec extends Specification with TestHelper {
@@ -94,7 +94,7 @@ object ServerSpec extends Specification with TestHelper {
       withTempFolder {
         makeServer
         val client = new TestClient("localhost", PORT)
-        for (encodedObject <- List(5, "scrooge mcduck", new java.util.Date())) {
+        for (encodedObject <- List(5, "scrooge mcduck", new _root_.java.util.Date())) {
           val buffer = new ByteArrayOutputStream()
           new ObjectOutputStream(buffer).writeObject(encodedObject)
           client.getData("binary").size mustEqual 0
@@ -158,11 +158,10 @@ object ServerSpec extends Specification with TestHelper {
 
         // oops, client2 dies before committing!
         client2.disconnect
-        Thread.sleep(10)
+        waitUntil { client3.stats("queue_auto-rollback_bytes") == v.toString.length.toString } mustBe true
         stats = client3.stats
         stats("queue_auto-rollback_items") mustEqual "1"
         stats("queue_auto-rollback_total_items") mustEqual "1"
-        stats("queue_auto-rollback_bytes") mustEqual v.toString.length.toString
 
         // subsequent fetch must get the same data item back.
         client3.get("auto-rollback/open") mustEqual v.toString
@@ -187,9 +186,9 @@ object ServerSpec extends Specification with TestHelper {
         client2.get("auto-commit/close/open") mustEqual (v + 1).toString
         client2.get("auto-commit/close/open") mustEqual (v + 2).toString
         client2.disconnect
-        Thread.sleep(10)
 
         val client3 = new TestClient("localhost", PORT)
+        waitUntil { client3.stats("queue_auto-commit_bytes") == v.toString.length.toString } mustBe true
         client3.get("auto-commit") mustEqual (v + 2).toString
 
         var stats = client3.stats
