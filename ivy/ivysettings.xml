@@ -12,6 +12,10 @@
         <artifact pattern="http://scala-tools.org/repo-snapshots/[organisation]/[module]/[revision]/[artifact]-[revision].[ext]" />
       </url>
       <ibiblio name="maven2" m2compatible="true"/>
+      <ibiblio name="powermock" m2compatible="true" root="http://powermock.googlecode.com/svn/repo/" />
+      <ibiblio name="jboss" m2compatible="true" root="http://repository.jboss.org/maven2/" />
+      <ibiblio name="download.java.net" m2compatible="true" root="http://download.java.net/maven/2/" />
+
       <url name="lag.net" m2compatible="true">
         <artifact pattern="http://www.lag.net/repo/[organisation]/[module]/[revision]/[artifact]-[revision].[ext]" />
       </url>
