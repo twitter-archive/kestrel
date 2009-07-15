@@ -17,13 +17,13 @@
 
 package net.lag.kestrel
 
-import java.io.{File, FileInputStream}
-import java.util.concurrent.CountDownLatch
-import scala.actors.Actor.actor
-import scala.collection.mutable
-import net.lag.configgy.Config
-import org.specs._
-import org.specs.matcher.Matcher
+import _root_.java.io.{File, FileInputStream}
+import _root_.java.util.concurrent.CountDownLatch
+import _root_.scala.actors.Actor.actor
+import _root_.scala.collection.mutable
+import _root_.net.lag.configgy.Config
+import _root_.org.specs._
+import _root_.org.specs.matcher.Matcher
 
 
 object PersistentQueueSpec extends Specification with TestHelper {

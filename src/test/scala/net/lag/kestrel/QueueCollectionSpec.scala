@@ -17,10 +17,10 @@
 
 package net.lag.kestrel
 
-import scala.util.Sorting
-import java.io.{File, FileInputStream}
-import net.lag.configgy.Config
-import org.specs._
+import _root_.java.io.{File, FileInputStream}
+import _root_.scala.util.Sorting
+import _root_.net.lag.configgy.Config
+import _root_.org.specs._
 
 
 object QueueCollectionSpec extends Specification with TestHelper {

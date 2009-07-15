@@ -17,10 +17,10 @@
 
 package net.lag.kestrel
 
-import java.io._
-import java.net.Socket
-import scala.collection.Map
-import scala.collection.mutable
+import _root_.java.io._
+import _root_.java.net.Socket
+import _root_.scala.collection.Map
+import _root_.scala.collection.mutable
 
 
 class ClientError(reason: String) extends Exception(reason)

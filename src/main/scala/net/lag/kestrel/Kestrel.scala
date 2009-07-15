@@ -27,9 +27,9 @@ import org.apache.mina.core.session.IoSession
 import org.apache.mina.filter.codec.ProtocolCodecFilter
 import org.apache.mina.transport.socket.SocketAcceptor
 import org.apache.mina.transport.socket.nio.{NioProcessor, NioSocketAcceptor}
-import net.lag.configgy.{Config, ConfigMap, Configgy, RuntimeEnvironment}
-import net.lag.logging.Logger
-import net.lag.naggati.IoHandlerActorAdapter
+import _root_.net.lag.configgy.{Config, ConfigMap, Configgy, RuntimeEnvironment}
+import _root_.net.lag.logging.Logger
+import _root_.net.lag.naggati.IoHandlerActorAdapter
 
 
 class Counter {
