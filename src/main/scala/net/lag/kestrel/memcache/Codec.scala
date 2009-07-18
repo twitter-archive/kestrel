@@ -55,6 +55,7 @@ object Codec {
   }
 
   val decoder = new Decoder(readLine(true, "ISO-8859-1") { line =>
+    KestrelStats.bytesRead.incr(line.length + 1)
     val segments = line.split(" ")
     segments(0) = segments(0).toUpperCase
 
@@ -69,6 +70,7 @@ object Codec {
       }
       val dataBytes = segments(4).toInt
       readBytes(dataBytes + 2) {
+        KestrelStats.bytesRead.incr(dataBytes + 2)
         // final 2 bytes are just "\r\n" mandated by protocol.
         val bytes = new Array[Byte](dataBytes)
         state.buffer.get(bytes)
