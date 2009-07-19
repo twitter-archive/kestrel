@@ -32,7 +32,7 @@ case class QItem(addTime: Long, expiry: Long, data: Array[Byte], var xid: Int)
 
 // a config value that's backed by a global setting but may be locally overridden
 class OverlaySetting[T](base: => T) {
-  var local: Option[T] = None
+  @volatile private var local: Option[T] = None
 
   def set(value: Option[T]) = local = value
 
@@ -40,7 +40,7 @@ class OverlaySetting[T](base: => T) {
 }
 
 
-class PersistentQueue(private val persistencePath: String, val name: String,
+class PersistentQueue(persistencePath: String, val name: String,
                       val config: ConfigMap) {
 
   private case class Waiter(actor: Actor)
@@ -72,7 +72,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
     def unget(item: QItem) = prependElem(item)
   }
   private var _memoryBytes: Long = 0
-  private var journal = new Journal(new File(persistencePath, name).getCanonicalPath)
+  private var journal = new Journal(new File(persistencePath, name).getCanonicalPath, config)
 
   // force get/set operations to block while we're replaying any existing journal
   private val initialized = new CountDownLatch(1)
@@ -82,16 +82,16 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   def overlay[T](base: => T) = new OverlaySetting(base)
 
   // attempting to add an item after the queue reaches this size (in items) will fail.
-  var maxItems = overlay(PersistentQueue.maxItems)
+  val maxItems = overlay(PersistentQueue.maxItems)
 
   // attempting to add an item after the queue reaches this size (in bytes) will fail.
-  var maxSize = overlay(PersistentQueue.maxSize)
+  val maxSize = overlay(PersistentQueue.maxSize)
 
   // attempting to add an item larger than this size (in bytes) will fail.
-  var maxItemSize = overlay(PersistentQueue.maxItemSize)
+  val maxItemSize = overlay(PersistentQueue.maxItemSize)
 
   // maximum expiration time for this queue (seconds).
-  var maxAge = overlay(PersistentQueue.maxAge)
+  val maxAge = overlay(PersistentQueue.maxAge)
 
   // maximum journal size before the journal should be rotated.
   val maxJournalSize = overlay(PersistentQueue.maxJournalSize)
@@ -103,10 +103,10 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   val maxJournalOverflow = overlay(PersistentQueue.maxJournalOverflow)
 
   // whether to drop older items (instead of newer) when the queue is full
-  var discardOldWhenFull = overlay(PersistentQueue.discardOldWhenFull)
+  val discardOldWhenFull = overlay(PersistentQueue.discardOldWhenFull)
 
   // whether to keep a journal file at all
-  var keepJournal = overlay(PersistentQueue.keepJournal)
+  val keepJournal = overlay(PersistentQueue.keepJournal)
 
   // clients waiting on an item in this queue
   private val waiters = new mutable.ArrayBuffer[Waiter]
@@ -227,8 +227,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   }
 
   /**
-   * Remove an item from the queue. If no item is available, an empty byte
-   * array is returned.
+   * Remove and return an item from the queue, if there is one.
    *
    * @param transaction true if this should be considered the first part
    *     of a transaction, to be committed or rolled back (put back at the
@@ -256,24 +255,23 @@ class PersistentQueue(private val persistencePath: String, val name: String,
   }
 
   /**
-   * Remove an item from the queue. If no item is available, an empty byte
-   * array is returned.
+   * Remove and return an item from the queue, if there is one.
    */
   def remove(): Option[QItem] = remove(false)
 
-  def removeReact(timeoutAbsolute: Long, transaction: Boolean)(f: Option[QItem] => Unit): Unit = {
-    removeOrWait(timeoutAbsolute, transaction) match {
+  def operateReact(op: => Option[QItem], timeoutAbsolute: Long)(f: Option[QItem] => Unit): Unit = {
+    operateOrWait(op, timeoutAbsolute) match {
       case (item, None) =>
         f(item)
       case (None, Some(w)) =>
         Actor.self.reactWithin((timeoutAbsolute - Time.now) max 0) {
-          case ItemArrived => removeReact(timeoutAbsolute, transaction)(f)
+          case ItemArrived => operateReact(op, timeoutAbsolute)(f)
           case TIMEOUT => synchronized {
             waiters -= w
             // race: someone could have done an add() between the timeout and grabbing the lock.
             Actor.self.reactWithin(0) {
-              case ItemArrived => f(remove(transaction))
-              case TIMEOUT => f(remove(transaction))
+              case ItemArrived => f(op)
+              case TIMEOUT => f(op)
             }
           }
         }
@@ -281,8 +279,8 @@ class PersistentQueue(private val persistencePath: String, val name: String,
     }
   }
 
-  def removeReceive(timeoutAbsolute: Long, transaction: Boolean): Option[QItem] = {
-    removeOrWait(timeoutAbsolute, transaction) match {
+  def operateReceive(op: => Option[QItem], timeoutAbsolute: Long): Option[QItem] = {
+    operateOrWait(op, timeoutAbsolute) match {
       case (item, None) =>
         item
       case (None, Some(w)) =>
@@ -291,7 +289,7 @@ class PersistentQueue(private val persistencePath: String, val name: String,
           case TIMEOUT => false
         }
         if (gotSomething) {
-          removeReceive(timeoutAbsolute, transaction)
+          operateReceive(op, timeoutAbsolute)
         } else {
           synchronized { waiters -= w }
           // race: someone could have done an add() between the timeout and grabbing the lock.
@@ -299,20 +297,36 @@ class PersistentQueue(private val persistencePath: String, val name: String,
             case ItemArrived =>
             case TIMEOUT =>
           }
-          remove(transaction)
+          op
         }
       case _ => throw new RuntimeException()
     }
   }
 
+  def removeReact(timeoutAbsolute: Long, transaction: Boolean)(f: Option[QItem] => Unit): Unit = {
+    operateReact(remove(transaction), timeoutAbsolute)(f)
+  }
+
+  def removeReceive(timeoutAbsolute: Long, transaction: Boolean): Option[QItem] = {
+    operateReceive(remove(transaction), timeoutAbsolute)
+  }
+
+  def peekReact(timeoutAbsolute: Long)(f: Option[QItem] => Unit): Unit = {
+    operateReact(peek, timeoutAbsolute)(f)
+  }
+
+  def peekReceive(timeoutAbsolute: Long): Option[QItem] = {
+    operateReceive(peek, timeoutAbsolute)
+  }
+
   /**
-   * Remove the next item from the queue, if there is one.
+   * Perform an operation on the next item from the queue, if there is one.
    * If the queue is closed, returns immediately. Otherwise, if a timeout is passed in, the
    * current actor is added to the wait-list, and will receive `ItemArrived` when an item is
    * available (or the queue is closed).
    */
-  private def removeOrWait(timeoutAbsolute: Long, transaction: Boolean): (Option[QItem], Option[Waiter]) = synchronized {
-    val item = remove(transaction)
+  private def operateOrWait(op: => Option[QItem], timeoutAbsolute: Long): (Option[QItem], Option[Waiter]) = synchronized {
+    val item = op
     if (!item.isDefined && !closed && !paused && timeoutAbsolute > 0) {
       val w = Waiter(Actor.self)
       waiters += w

@@ -1,3 +1,6 @@
 target
 kestrel.tmproj
 dist
+*.class
+bin
+.manager

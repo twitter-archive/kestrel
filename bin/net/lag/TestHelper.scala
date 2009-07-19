@@ -17,8 +17,8 @@
 
 package net.lag
 
-import _root_.java.io.File
-import _root_.java.util.UUID
+import java.io.File
+import java.util.UUID
 
 
 trait TestHelper {
@@ -59,17 +59,4 @@ trait TestHelper {
   def folderName = { _folderName.get.getPath }
 
   def canonicalFolderName = { _folderName.get.getCanonicalPath }
-
-  def waitUntil(outcome: => Boolean): Boolean = { waitUntil(40, 100)(outcome) }
-
-  def waitUntil(retries: Int, sleep: Long)(outcome: => Boolean): Boolean = {
-    if (retries == 0) {
-      false
-    } else {
-      outcome || {
-        Thread.sleep(sleep)
-        waitUntil(retries - 1, sleep)(outcome)
-      }
-    }
-  }
 }

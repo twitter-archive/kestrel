@@ -21,6 +21,7 @@ import net.lag.logging.Logger
 import java.io._
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.channels.FileChannel
+import net.lag.configgy.{Config, ConfigMap}
 
 
 // returned from journal replay
@@ -39,16 +40,13 @@ object JournalItem {
 /**
  * Codes for working with the journal file for a PersistentQueue.
  */
-class Journal(queuePath: String) {
-
-  /* in theory, you might want to sync the file after each
-   * transaction. however, the original starling doesn't.
-   * i think if you can cope with a truncated journal file,
-   * this is fine, because a non-synced file only matters on
-   * catastrophic disk/machine failure.
-   */
+class Journal(queuePath: String, config: ConfigMap) {
+  // whether to sync the journal file after each write
+  val syncJournal = new OverlaySetting(Journal.syncJournal)
 
   private val log = Logger.get
+
+  private val queueFile = new File(queuePath)
 
   private var writer: FileChannel = null
   private var reader: Option[FileChannel] = None
@@ -70,27 +68,39 @@ class Journal(queuePath: String) {
   private val CMD_CONFIRM_REMOVE = 6
   private val CMD_ADD_XID = 7
 
+  config.subscribe { c => configure(c.getOrElse(new Config)) }
+  configure(config)
+
+  def configure(config: ConfigMap) = {
+    syncJournal set config.getBool("sync_journal")
+    log.info("Configuring journal %s: sync_journal=%s", queuePath, syncJournal())
+  }
+
+  private def open(file: File): Unit = {
+    writer = new FileOutputStream(file, true).getChannel
+  }
 
   def open(): Unit = {
-    writer = new FileOutputStream(queuePath, true).getChannel
+    open(queueFile)
   }
 
   def roll(xid: Int, openItems: List[QItem], queue: Iterable[QItem]): Unit = {
     writer.close
-    val newFile = new File(queuePath + "." + Time.now)
-    writer = new FileOutputStream(newFile, true).getChannel
-
+    val tmpFile = new File(queuePath + "." + Time.now)
+    open(tmpFile)
     size = 0
     for (item <- openItems) {
       addWithXid(item)
-      removeTentative()
+      removeTentative(false)
     }
     saveXid(xid)
     for (item <- queue) {
-      add(item)
+      add(false, item)
     }
-    new File(queuePath).delete
-    newFile.renameTo(new File(queuePath))
+    if (syncJournal()) writer.force(false)
+    writer.close
+    tmpFile.renameTo(queueFile)
+    open
   }
 
   def close(): Unit = {
@@ -102,7 +112,7 @@ class Journal(queuePath: String) {
   def erase(): Unit = {
     try {
       close()
-      new File(queuePath).delete
+      queueFile.delete
     } catch {
       case _ =>
     }
@@ -110,19 +120,25 @@ class Journal(queuePath: String) {
 
   def inReadBehind(): Boolean = reader.isDefined
 
-  def add(item: QItem) = {
+  private def add(allowSync: Boolean, item: QItem): Unit = {
     val blob = ByteBuffer.wrap(pack(item))
-    size += write(CMD_ADDX.toByte, blob.limit)
+    size += write(false, CMD_ADDX.toByte, blob.limit)
     do {
       writer.write(blob)
     } while (blob.position < blob.limit)
+    if (allowSync && syncJournal()) writer.force(false)
     size += blob.limit
   }
+
+  def add(item: QItem): Unit = add(true, item)
 
   // used only to list pending transactions when recreating the journal.
   private def addWithXid(item: QItem) = {
     val blob = ByteBuffer.wrap(pack(item))
-    size += write(CMD_ADD_XID.toByte, item.xid, blob.limit)
+
+    // this method is only called from roll(), so the journal does not
+    // need to be synced after a write.
+    size += write(false, CMD_ADD_XID.toByte, item.xid, blob.limit)
     do {
       writer.write(blob)
     } while (blob.position < blob.limit)
@@ -130,28 +146,32 @@ class Journal(queuePath: String) {
   }
 
   def remove() = {
-    size += write(CMD_REMOVE.toByte)
+    size += write(true, CMD_REMOVE.toByte)
   }
 
-  def removeTentative() = {
-    size += write(CMD_REMOVE_TENTATIVE.toByte)
+  private def removeTentative(allowSync: Boolean): Unit = {
+    size += write(allowSync, CMD_REMOVE_TENTATIVE.toByte)
   }
+
+  def removeTentative(): Unit = removeTentative(true)
 
   private def saveXid(xid: Int) = {
-    size += write(CMD_SAVE_XID.toByte, xid)
+    // this method is only called from roll(), so the journal does not
+    // need to be synced after a write.
+    size += write(false, CMD_SAVE_XID.toByte, xid)
   }
 
   def unremove(xid: Int) = {
-    size += write(CMD_UNREMOVE.toByte, xid)
+    size += write(true, CMD_UNREMOVE.toByte, xid)
   }
 
   def confirmRemove(xid: Int) = {
-    size += write(CMD_CONFIRM_REMOVE.toByte, xid)
+    size += write(true, CMD_CONFIRM_REMOVE.toByte, xid)
   }
 
   def startReadBehind(): Unit = {
     val pos = if (replayer.isDefined) replayer.get.position else writer.position
-    val rj = new FileInputStream(queuePath).getChannel
+    val rj = new FileInputStream(queueFile).getChannel
     rj.position(pos)
     reader = Some(rj)
   }
@@ -175,7 +195,7 @@ class Journal(queuePath: String) {
   def replay(name: String)(f: JournalItem => Unit): Unit = {
     size = 0
     try {
-      val in = new FileInputStream(queuePath).getChannel
+      val in = new FileInputStream(queueFile).getChannel
       replayer = Some(in)
       var done = false
       do {
@@ -277,7 +297,7 @@ class Journal(queuePath: String) {
     byteBuffer.getInt()
   }
 
-  private def write(items: Any*): Int = {
+  private def write(allowSync: Boolean, items: Any*): Int = {
     byteBuffer.clear
     for (item <- items) item match {
       case b: Byte => byteBuffer.put(b)
@@ -287,6 +307,7 @@ class Journal(queuePath: String) {
     while (byteBuffer.position < byteBuffer.limit) {
       writer.write(byteBuffer)
     }
+    if (allowSync && syncJournal()) writer.force(false)
     byteBuffer.limit
   }
 
@@ -318,4 +339,8 @@ class Journal(queuePath: String) {
     buffer.get(bytes)
     return QItem(Time.now, if (expiry == 0) 0 else expiry * 1000, bytes, 0)
   }
+}
+
+object Journal {
+  @volatile var syncJournal: Boolean = false
 }
