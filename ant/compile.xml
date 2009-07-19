@@ -99,10 +99,12 @@
 
   <target name="find-git-revision" unless="no.git">
     <!-- ask git for the current "head" commit-id, for memoizing inside the built jar -->
-    <exec outputproperty="revision" executable="git-rev-parse" failifexecutionfails="false">
+    <exec outputproperty="revision" executable="git" failifexecutionfails="false">
+      <arg value="rev-parse" />
       <arg value="HEAD" />
     </exec>
-    <exec executable="git-rev-parse" failifexecutionfails="false">
+    <exec executable="git" failifexecutionfails="false">
+      <arg value="rev-parse" />
       <arg value="HEAD" />
       <redirector outputproperty="revision-short">
         <outputfilterchain>

@@ -57,27 +57,36 @@
         <filter token="DIST_NAME" value="${dist.name}" />
       </filterset>
     </copy>
+    <copy todir="${dist.dir}/scripts" overwrite="true">
+      <fileset dir="${target.dir}/gen-rb" />
+    </copy>
     <chmod dir="${dist.dir}/scripts" includes="*" perm="ugo+x" />
   </target>
 
   <target name="package" depends="test, make-non-executable-jar, make-executable-jar,
     generate-scripts, docs" description="build complete jar(s) and docs">
-    <ivy:makepom ivyfile="${basedir}/ivy/ivy.xml" pomfile="${dist.dir}/${dist.name}.pom" />
+    <ivy:makepom ivyfile="${basedir}/ivy/ivy.xml" pomfile="${dist.dir}/${dist.name}.pom">
+      <mapping conf="*" scope="runtime" />
+      <mapping conf="bootstrap" scope="compile" />
+      <mapping conf="test" scope="compile" />
+    </ivy:makepom>
     <ivy:deliver conf="*(public)" />
-    <condition property="dist.zip.name"
-               value="${dist.name}-${revision-short}.zip"
-               else="${dist.name}.zip">
-      <isset property="dist.build_name" />
+    <condition property="dist.tarball.name"
+               value="${ivy.module}-${revision-short}.tar.bz2"
+               else="${dist.name}.tar.bz2">
+      <isset property="dist.build_integration" />
     </condition>
-    <zip destfile="${basedir}/dist/${dist.zip.name}"
-         basedir="${basedir}/dist">
+    <tar destfile="${basedir}/dist/${dist.tarball.name}"
+         basedir="${basedir}/dist" compression="bzip2">
       <include name="${dist.name}/${jar.name}.jar" />
       <include name="${dist.name}/*.so" />
       <include name="${dist.name}/*.jnilib" />
       <include name="${dist.name}/libs/**" />
       <include name="${dist.name}/config/**" />
-      <include name="${dist.name}/scripts/**" />
-    </zip>
+      <tarfileset dir="${basedir}/dist" mode="755">
+        <include name="${dist.name}/scripts/**" />
+      </tarfileset>
+    </tar>
     <ivy:publish resolver="local" overwrite="true">
       <artifacts pattern="${dist.dir}/[artifact]-[revision].[ext]" />
     </ivy:publish>
