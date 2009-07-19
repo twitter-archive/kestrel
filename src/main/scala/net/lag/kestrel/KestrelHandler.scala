@@ -241,14 +241,10 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
         true
     }
   }
-  
+
   private def abortAnyTransaction() = {
-    pendingTransaction match {
-      case None =>
-      case Some((qname, xid)) =>
-        Kestrel.queues.unremove(qname, xid)
-        pendingTransaction = None
-    }
+    pendingTransaction map { (qname, xid) => Kestrel.queues.unremove(qname, xid) }
+    pendingTransaction = None
   }
 
   private def set(name: String, flags: Int, expiry: Int, data: Array[Byte]) = {
