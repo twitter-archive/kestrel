@@ -72,7 +72,6 @@ class PersistentQueue(persistencePath: String, val name: String,
     def unget(item: QItem) = prependElem(item)
   }
   private var _memoryBytes: Long = 0
-  private var journal = new Journal(new File(persistencePath, name).getCanonicalPath, config)
 
   // force get/set operations to block while we're replaying any existing journal
   private val initialized = new CountDownLatch(1)
@@ -108,8 +107,13 @@ class PersistentQueue(persistencePath: String, val name: String,
   // whether to keep a journal file at all
   val keepJournal = overlay(PersistentQueue.keepJournal)
 
+  // whether to sync the journal after each transaction
+  val syncJournal = overlay(PersistentQueue.syncJournal)
+
   // clients waiting on an item in this queue
   private val waiters = new mutable.ArrayBuffer[Waiter]
+
+  private var journal = new Journal(new File(persistencePath, name).getCanonicalPath, syncJournal())
 
   // track tentative removals
   private var xidCounter: Int = 0
@@ -145,10 +149,11 @@ class PersistentQueue(persistencePath: String, val name: String,
     maxJournalOverflow set config.getInt("max_journal_overflow")
     discardOldWhenFull set config.getBool("discard_old_when_full")
     keepJournal set config.getBool("journal")
+    syncJournal set config.getBool("sync_journal")
     log.info("Configuring queue %s: journal=%s, max_items=%d, max_size=%d, max_age=%d, max_journal_size=%d, " +
-             "max_memory_size=%d, max_journal_overflow=%d, discard_old_when_full=%s",
+             "max_memory_size=%d, max_journal_overflow=%d, discard_old_when_full=%s, sync_journal=%s",
              name, keepJournal(), maxItems(), maxSize(), maxAge(), maxJournalSize(), maxMemorySize(),
-             maxJournalOverflow(), discardOldWhenFull())
+             maxJournalOverflow(), discardOldWhenFull(), syncJournal())
     if (!keepJournal()) journal.erase()
   }
 
@@ -531,4 +536,5 @@ object PersistentQueue {
   @volatile var maxJournalOverflow: Int = 10
   @volatile var discardOldWhenFull: Boolean = false
   @volatile var keepJournal: Boolean = true
+  @volatile var syncJournal: Boolean = false
 }

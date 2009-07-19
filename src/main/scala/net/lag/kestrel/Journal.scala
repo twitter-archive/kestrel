@@ -40,10 +40,7 @@ object JournalItem {
 /**
  * Codes for working with the journal file for a PersistentQueue.
  */
-class Journal(queuePath: String, config: ConfigMap) {
-  // whether to sync the journal file after each write
-  val syncJournal = new OverlaySetting(Journal.syncJournal)
-
+class Journal(queuePath: String, syncJournal: => Boolean) {
   private val log = Logger.get
 
   private val queueFile = new File(queuePath)
@@ -68,13 +65,6 @@ class Journal(queuePath: String, config: ConfigMap) {
   private val CMD_CONFIRM_REMOVE = 6
   private val CMD_ADD_XID = 7
 
-  config.subscribe { c => configure(c.getOrElse(new Config)) }
-  configure(config)
-
-  def configure(config: ConfigMap) = {
-    syncJournal set config.getBool("sync_journal")
-    log.info("Configuring journal %s: sync_journal=%s", queuePath, syncJournal())
-  }
 
   private def open(file: File): Unit = {
     writer = new FileOutputStream(file, true).getChannel
@@ -97,7 +87,7 @@ class Journal(queuePath: String, config: ConfigMap) {
     for (item <- queue) {
       add(false, item)
     }
-    if (syncJournal()) writer.force(false)
+    if (syncJournal) writer.force(false)
     writer.close
     tmpFile.renameTo(queueFile)
     open
@@ -126,7 +116,7 @@ class Journal(queuePath: String, config: ConfigMap) {
     do {
       writer.write(blob)
     } while (blob.position < blob.limit)
-    if (allowSync && syncJournal()) writer.force(false)
+    if (allowSync && syncJournal) writer.force(false)
     size += blob.limit
   }
 
@@ -307,7 +297,7 @@ class Journal(queuePath: String, config: ConfigMap) {
     while (byteBuffer.position < byteBuffer.limit) {
       writer.write(byteBuffer)
     }
-    if (allowSync && syncJournal()) writer.force(false)
+    if (allowSync && syncJournal) writer.force(false)
     byteBuffer.limit
   }
 
@@ -339,8 +329,4 @@ class Journal(queuePath: String, config: ConfigMap) {
     buffer.get(bytes)
     return QItem(Time.now, if (expiry == 0) 0 else expiry * 1000, bytes, 0)
   }
-}
-
-object Journal {
-  @volatile var syncJournal: Boolean = false
 }
