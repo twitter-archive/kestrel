@@ -30,7 +30,7 @@ object PersistentQueueSpec extends Specification with TestHelper {
 
   def dumpJournal(qname: String): String = {
     var rv = new mutable.ListBuffer[JournalItem]
-    new Journal(new File(folderName, qname).getCanonicalPath, Config.fromMap(Map.empty)).replay(qname) { item => rv += item }
+    new Journal(new File(folderName, qname).getCanonicalPath, false).replay(qname) { item => rv += item }
     rv map {
       case JournalItem.Add(item) =>
         if (item.data.size > 0 && item.data(0) > 0) {
