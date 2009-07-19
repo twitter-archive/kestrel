@@ -120,5 +120,18 @@ object QueueCollectionSpec extends Specification with TestHelper {
         sorted(qc.queueNames) mustEqual List("apples", "oranges")
       }
     }
+
+    "drop a queue when asked" in {
+      withTempFolder {
+        new File(folderName + "/apples").createNewFile()
+        new File(folderName + "/oranges").createNewFile()
+        qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+        qc.loadQueues()
+        qc.drop("oranges")
+
+        sorted(new File(folderName).list().toList) mustEqual List("apples")
+        sorted(qc.queueNames) mustEqual List("apples")
+      }
+    }
   }
 }

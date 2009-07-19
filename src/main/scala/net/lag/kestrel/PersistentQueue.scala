@@ -397,6 +397,10 @@ class PersistentQueue(persistencePath: String, val name: String,
     initialized.countDown
   }
 
+  def destroyJournal(): Unit = synchronized {
+    if (keepJournal()) journal.erase()
+  }
+
   private final def nextXid(): Int = {
     do {
       xidCounter += 1

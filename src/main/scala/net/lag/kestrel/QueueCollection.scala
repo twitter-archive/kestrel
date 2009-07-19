@@ -193,24 +193,26 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
   }
 
   def unremove(key: String, xid: Int): Unit = {
-    queue(key) match {
-      case None =>
-      case Some(q) =>
-        q.unremove(xid)
-    }
+    queue(key) map { q => q.unremove(xid) }
   }
 
   def confirmRemove(key: String, xid: Int): Unit = {
-    queue(key) match {
-      case None =>
-      case Some(q) =>
-        q.confirmRemove(xid)
-    }
+    queue(key) map { q => q.confirmRemove(xid) }
   }
 
   def flush(key: String): Unit = {
     for (q <- queue(key)) {
-      q.flush
+      q.flush()
+    }
+  }
+
+  def drop(name: String): Unit = synchronized {
+    if (!shuttingDown) {
+      queues.get(name) map { q =>
+        q.close()
+        q.destroyJournal()
+        queues.removeKey(name)
+      }
     }
   }
 
