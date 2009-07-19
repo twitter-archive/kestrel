@@ -110,5 +110,15 @@ object QueueCollectionSpec extends Specification with TestHelper {
         qc.queueMisses mustEqual 3
       }
     }
+
+    "proactively load existing queue files" in {
+      withTempFolder {
+        new File(folderName + "/apples").createNewFile()
+        new File(folderName + "/oranges").createNewFile()
+        qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+        qc.loadQueues()
+        sorted(qc.queueNames) mustEqual List("apples", "oranges")
+      }
+    }
   }
 }
