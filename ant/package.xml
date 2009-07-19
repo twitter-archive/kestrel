@@ -57,7 +57,7 @@
         <filter token="DIST_NAME" value="${dist.name}" />
       </filterset>
     </copy>
-    <copy todir="${dist.dir}/scripts" overwrite="true">
+    <copy todir="${dist.dir}/scripts" overwrite="true" failonerror="false">
       <fileset dir="${target.dir}/gen-rb" />
     </copy>
     <chmod dir="${dist.dir}/scripts" includes="*" perm="ugo+x" />
