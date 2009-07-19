@@ -130,6 +130,8 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
         writeResponse("Flushed all queues.\r\n")
       case "DUMP_CONFIG" =>
         dumpConfig()
+      case "DROP" =>
+        drop(request.line(1))
     }
   }
 
@@ -241,7 +243,7 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
         true
     }
   }
-  
+
   private def abortAnyTransaction() = {
     pendingTransaction match {
       case None =>
@@ -264,6 +266,12 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
   private def flush(name: String) = {
     log.debug("flush -> q=%s", name)
     Kestrel.queues.flush(name)
+    writeResponse("END\r\n")
+  }
+
+  private def drop(name: String) = {
+    log.debug("drop -> q=%s", name)
+    Kestrel.queues.drop(name)
     writeResponse("END\r\n")
   }
 
