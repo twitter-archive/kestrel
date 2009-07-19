@@ -77,9 +77,9 @@ class Journal(queuePath: String) {
 
   def roll(xid: Int, openItems: List[QItem], queue: Iterable[QItem]): Unit = {
     writer.close
-    val backupFile = new File(queuePath + "." + Time.now)
-    new File(queuePath).renameTo(backupFile)
-    open
+    val newFile = new File(queuePath + "." + Time.now)
+    writer = new FileOutputStream(newFile, true).getChannel
+
     size = 0
     for (item <- openItems) {
       addWithXid(item)
@@ -89,7 +89,8 @@ class Journal(queuePath: String) {
     for (item <- queue) {
       add(item)
     }
-    backupFile.delete
+    new File(queuePath).delete
+    newFile.renameTo(new File(queuePath))
   }
 
   def close(): Unit = {
