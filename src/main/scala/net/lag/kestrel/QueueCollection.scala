@@ -68,6 +68,10 @@ class QueueCollection(private val queueFolder: String, private var queueConfigs:
     }
   }
 
+  // preload any queues
+  def loadQueues() {
+    path.list() map { queue(_) }
+  }
 
   def queueNames: List[String] = synchronized {
     queues.keys.toList

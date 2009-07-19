@@ -103,6 +103,8 @@ object Kestrel {
     configure(config)
     config.subscribe { c => configure(c.getOrElse(new Config)) }
 
+    queues.loadQueues()
+
     acceptorExecutor = Executors.newCachedThreadPool()
     acceptor = new NioSocketAcceptor(acceptorExecutor, new NioProcessor(acceptorExecutor))
 
