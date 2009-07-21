@@ -43,24 +43,17 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
   private var shuttingDown = false
 
   // total of all data in all queues
-  private var _currentBytes: Long = 0
+  val currentBytes = new Counter()
 
   // total of all items in all queues
-  private var _currentItems: Long = 0
+  val currentItems = new Counter()
 
   // total items added since the server started up.
-  private var _totalAdded: Long = 0
+  val totalAdded = new Counter()
 
   // hits/misses on removing items from the queue
-  private var _queueHits: Long = 0
-  private var _queueMisses: Long = 0
-
-  // reader accessors:
-  def currentBytes: Long = _currentBytes
-  def currentItems: Long = _currentItems
-  def totalAdded: Long = _totalAdded
-  def queueHits: Long = _queueHits
-  def queueMisses: Long = _queueMisses
+  val queueHits = new Counter()
+  val queueMisses = new Counter()
 
   queueConfigs.subscribe { c =>
     synchronized {
@@ -106,10 +99,8 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
        * method is called and completed:
        */
       queue.get.setup
-      synchronized {
-        _currentBytes += queue.get.bytes
-        _currentItems += queue.get.length
-      }
+      currentBytes.incr(queue.get.bytes)
+      currentItems.incr(queue.get.length)
     }
     queue
   }
@@ -135,11 +126,9 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
         }
         val result = q.add(item, normalizedExpiry)
         if (result) {
-          synchronized {
-            _currentBytes += item.length
-            _currentItems += 1
-            _totalAdded += 1
-          }
+          currentBytes.incr(item.length)
+          currentItems.incr()
+          totalAdded.incr()
         }
         result
     }
@@ -154,7 +143,7 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
   def remove(key: String, timeout: Int, transaction: Boolean, peek: Boolean)(f: Option[QItem] => Unit): Unit = {
     queue(key) match {
       case None =>
-        synchronized { _queueMisses += 1 }
+        queueMisses.incr
         f(None)
       case Some(q) =>
         if (peek) {
@@ -162,14 +151,12 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
         } else {
           q.removeReact(if (timeout == 0) timeout else Time.now + timeout, transaction) {
             case None =>
-              synchronized { _queueMisses += 1 }
+              queueMisses.incr
               f(None)
             case Some(item) =>
-              synchronized {
-                _queueHits += 1
-                _currentBytes -= item.data.length
-                _currentItems -= 1
-              }
+              queueHits.incr
+              currentBytes.decr(item.data.length)
+              currentItems.decr
               f(Some(item))
           }
         }

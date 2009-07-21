@@ -35,11 +35,12 @@ import _root_.net.lag.naggati.IoHandlerActorAdapter
 class Counter {
   private val value = new AtomicLong(0)
 
-  def get() = value.get
-  def set(n: Int) = value.set(n)
-  def incr = value.addAndGet(1)
-  def incr(n: Int) = value.addAndGet(n)
-  def decr = value.addAndGet(-1)
+  def apply() = value.get
+  def set(n: Long) = value.set(n)
+  def incr() = value.addAndGet(1)
+  def incr(n: Long) = value.addAndGet(n)
+  def decr() = value.addAndGet(-1)
+  def decr(n: Long) = value.addAndGet(-n)
   override def toString = value.get.toString
 }
 
