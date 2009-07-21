@@ -40,6 +40,7 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
   }
 
   private val queues = new mutable.HashMap[String, PersistentQueue]
+  private val fanout_queues = new mutable.HashMap[String, mutable.HashSet[String]]
   private var shuttingDown = false
 
   // total of all data in all queues
@@ -87,7 +88,14 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
         case q @ Some(_) => q
         case None =>
           setup = true
-          val q = new PersistentQueue(path.getPath, name, queueConfigs.configMap(name))
+          val q = if (name contains '+') {
+            val master = name.split('+')(0)
+            fanout_queues.getOrElseUpdate(master, new mutable.HashSet[String]) += name
+            log.info("Fanout queue %s added to %s", name, master)
+            new PersistentQueue(path.getPath, name, queueConfigs.configMap(master))
+          } else {
+            new PersistentQueue(path.getPath, name, queueConfigs.configMap(name))
+          }
           queues(name) = q
           Some(q)
       }
@@ -113,6 +121,10 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
    *     down
    */
   def add(key: String, item: Array[Byte], expiry: Int): Boolean = {
+    for (fanouts <- fanout_queues.get(key); name <- fanouts) {
+      add(name, item, expiry)
+    }
+
     queue(key) match {
       case None => false
       case Some(q) =>
@@ -199,6 +211,11 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
         q.close()
         q.destroyJournal()
         queues.removeKey(name)
+      }
+      if (name contains '+') {
+        val master = name.split('+')(0)
+        fanout_queues.getOrElseUpdate(master, new mutable.HashSet[String]) -= name
+        log.info("Fanout queue %s dropped from %s", name, master)
       }
     }
   }

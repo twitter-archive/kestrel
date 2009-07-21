@@ -133,5 +133,55 @@ object QueueCollectionSpec extends Specification with TestHelper {
         sorted(qc.queueNames) mustEqual List("apples")
       }
     }
+
+    "fanout queues" in {
+      "generate on the fly" in {
+        withTempFolder {
+          qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+          qc.add("jobs", "job1".getBytes)
+          qc.receive("jobs+client1") mustEqual None
+          qc.add("jobs", "job2".getBytes)
+
+          new String(qc.receive("jobs+client1").get) mustEqual "job2"
+          new String(qc.receive("jobs").get) mustEqual "job1"
+          new String(qc.receive("jobs").get) mustEqual "job2"
+        }
+      }
+
+      "preload existing" in {
+        withTempFolder {
+          new File(folderName + "/jobs").createNewFile()
+          new File(folderName + "/jobs+client1").createNewFile()
+          qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+          qc.loadQueues()
+          qc.add("jobs", "job1".getBytes)
+          new String(qc.receive("jobs+client1").get) mustEqual "job1"
+          qc.add("jobs", "job2".getBytes)
+
+          new String(qc.receive("jobs+client1").get) mustEqual "job2"
+          new String(qc.receive("jobs").get) mustEqual "job1"
+          new String(qc.receive("jobs").get) mustEqual "job2"
+        }
+      }
+
+      "drop on the fly" in {
+        withTempFolder {
+          new File(folderName + "/jobs").createNewFile()
+          new File(folderName + "/jobs+client1").createNewFile()
+          qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+          qc.loadQueues()
+          qc.add("jobs", "job1".getBytes)
+
+          qc.drop("jobs+client1")
+
+          sorted(new File(folderName).list().toList) mustEqual List("jobs")
+          new String(qc.receive("jobs").get) mustEqual "job1"
+
+          qc.add("jobs", "job2".getBytes)
+          sorted(new File(folderName).list().toList) mustEqual List("jobs")
+          new String(qc.receive("jobs").get) mustEqual "job2"
+        }
+      }
+    }
   }
 }

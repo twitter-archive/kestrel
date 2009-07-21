@@ -160,6 +160,15 @@ in the config file included.
   but if the expiration time is longer than `max_age`, `max_age` will be
   used instead.
 
+Fanout Queues
+-------------
+
+FIXME
+include:
+- names are <master>+<name>: orders, orders+client1, orders+client2
+- config for all fanout queues comes from the master queue (orders) not orders+foo
+- uses (k+1)N disk space where k = fanout slaves, N = size of queue
+
 Performance
 -----------
 
