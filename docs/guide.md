@@ -139,13 +139,18 @@ trade-off to avoid filling memory and crashing the JVM.
 
 
 
--- expiration of items
+-- expiration of items (esp: when does it happen)
 
 -- fanout queues
+- names are <master>+<name>: orders, orders+client1, orders+client2
+- config for all fanout queues comes from the master queue (orders) not orders+foo
+- uses (k+1)N disk space where k = fanout slaves, N = size of queue
 
--- non-memcache commands (dump_config, flush)
 
+-- non-memcache commands
+("GET", "SET", "STATS", "SHUTDOWN", "RELOAD", "FLUSH", "FLUSH_ALL", "DUMP_CONFIG", "DROP")
 
+-- what's in stats?
 
 
 
