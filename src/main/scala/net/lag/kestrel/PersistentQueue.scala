@@ -173,7 +173,7 @@ class PersistentQueue(persistencePath: String, val name: String,
       "max_journal_size_absolute=" + maxJournalSizeAbsolute(),
       "discard_old_when_full=" + discardOldWhenFull(),
       "journal=" + keepJournal(),
-      "sync_journal=" + sync_journal()
+      "sync_journal=" + syncJournal()
     )
   }
 
