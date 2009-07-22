@@ -101,6 +101,9 @@ class PersistentQueue(persistencePath: String, val name: String,
   // maximum overflow (multiplier) of a journal file before we re-create it.
   val maxJournalOverflow = overlay(PersistentQueue.maxJournalOverflow)
 
+  // absolute maximum size of a journal file until we rebuild it, no matter what.
+  val maxJournalSizeAbsolute = overlay(PersistentQueue.maxJournalSizeAbsolute)
+
   // whether to drop older items (instead of newer) when the queue is full
   val discardOldWhenFull = overlay(PersistentQueue.discardOldWhenFull)
 
@@ -147,13 +150,15 @@ class PersistentQueue(persistencePath: String, val name: String,
     maxJournalSize set config.getLong("max_journal_size")
     maxMemorySize set config.getLong("max_memory_size")
     maxJournalOverflow set config.getInt("max_journal_overflow")
+    maxJournalSizeAbsolute set config.getLong("max_journal_size_absolute")
     discardOldWhenFull set config.getBool("discard_old_when_full")
     keepJournal set config.getBool("journal")
     syncJournal set config.getBool("sync_journal")
     log.info("Configuring queue %s: journal=%s, max_items=%d, max_size=%d, max_age=%d, max_journal_size=%d, " +
-             "max_memory_size=%d, max_journal_overflow=%d, discard_old_when_full=%s, sync_journal=%s",
+             "max_memory_size=%d, max_journal_overflow=%d, max_journal_size_absolute=%d, " +
+             "discard_old_when_full=%s, sync_journal=%s",
              name, keepJournal(), maxItems(), maxSize(), maxAge(), maxJournalSize(), maxMemorySize(),
-             maxJournalOverflow(), discardOldWhenFull(), syncJournal())
+             maxJournalOverflow(), maxJournalSizeAbsolute(), discardOldWhenFull(), syncJournal())
     if (!keepJournal()) journal.erase()
   }
 
@@ -165,8 +170,10 @@ class PersistentQueue(persistencePath: String, val name: String,
       "max_journal_size=" + maxJournalSize(),
       "max_memory_size=" + maxMemorySize(),
       "max_journal_overflow=" + maxJournalOverflow(),
+      "max_journal_size_absolute=" + maxJournalSizeAbsolute(),
       "discard_old_when_full=" + discardOldWhenFull(),
-      "journal=" + keepJournal()
+      "journal=" + keepJournal(),
+      "sync_journal=" + sync_journal()
     )
   }
 
@@ -534,6 +541,7 @@ object PersistentQueue {
   @volatile var maxJournalSize: Long = 16 * 1024 * 1024
   @volatile var maxMemorySize: Long = 128 * 1024 * 1024
   @volatile var maxJournalOverflow: Int = 10
+  @volatile var maxJournalSizeAbsolute: Long = Math.MAX_LONG
   @volatile var discardOldWhenFull: Boolean = false
   @volatile var keepJournal: Boolean = true
   @volatile var syncJournal: Boolean = false
