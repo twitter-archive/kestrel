@@ -15,14 +15,14 @@ A cluster of kestrel servers is like a memcache cluster: the servers don't
 know about each other, and don't do any cross-communication, so you can add as
 many as you like. Clients have a list of all servers in the cluster, and pick
 one at random for each operation. In this way, each queue appears to be spread
-out across every server in a loose ordering.
+out across every server, with items in a loose ordering.
 
 
 Configuration
 -------------
 
 All of the per-queue configuration can be set in the global scope of
-`production.conf`, as a default for all queues, or in the per-queue
+`production.conf` as a default for all queues, or in the per-queue
 configuration to override the defaults for a specific queue. You can see an
 example of this in the default config file.
 
@@ -148,9 +148,9 @@ trade-off to avoid filling memory and crashing the JVM.
 
 
 -- non-memcache commands
-("GET", "SET", "STATS", "SHUTDOWN", "RELOAD", "FLUSH", "FLUSH_ALL", "DUMP_CONFIG", "DROP")
+("SHUTDOWN", "RELOAD", "FLUSH", "FLUSH_ALL", "DUMP_CONFIG", "DROP")
 
--- what's in stats?
+-- what's in stats? "STATS"
 
 
 

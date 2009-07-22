@@ -73,28 +73,51 @@ Kestrel is not:
   client has accepted it.
 
 
-Use
----
+Building it
+-----------
 
-Kestrel requires java 6 (for JMX support) and ant 1.7.
+Kestrel requires java 6 (for JMX support) and ant 1.7. If you see an error
+about missing JMX classes, it usually means you're building with java 5. On a mac, you may have to hard-code an
+annoying `JAVA_HOME` to use java 6:
+
+    $ export JAVA_HOME=/System/Library/Frameworks/JavaVM.framework/Versions/1.6/Home
 
 Building from source is easy:
 
     $ ant
-    
+
 Scala libraries and dependencies will be downloaded from maven repositories
 the first time you do a build. The finished distribution will be in `dist`.
 
-A sample startup script is included, or you may run the jar directly. All
-configuration is loaded from `kestrel.conf`.
 
-The created file `kestrel-VERSION.zip` can be expanded into a place like
-`/usr/local` (or wherever you like) and executed within its own folder as a
-self-contained package. All dependent jars are included, and the startup
+Running it
+----------
+
+You can run kestrel by hand via:
+
+    $ java -jar ./dist/kestrel-VERSION/kestrel-VERSION.jar
+
+To run in development mode (using `development.conf` instead of
+`production.conf`), add a `stage` variable:
+
+    $ java -Dstage=development -jar ./dist/kestrel-VERSION/kestrel-VERSION.jar
+
+When running it as a server, a startup script is provided in
+`dist/kestrel-VERSION/scripts/kestrel.sh`. The script assumes you have
+`daemon`, a standard daemonizer for Linux, but also available
+[here](http://libslack.org/daemon/) for all common unix platforms.
+
+The created archive `kestrel-VERSION.tar.bz2` can be expanded into a place
+like `/usr/local` (or wherever you like) and executed within its own folder as
+a self-contained package. All dependent jars are included, and the startup
 script loads things from relative paths.
 
 The default configuration puts logfiles into `/var/log/kestrel/` and queue
 journal files into `/var/spool/kestrel/`.
+
+The startup script logs extensive GC information to a file named `stdout` in
+the log folder. If kestrel has problems starting up (before it can initialize
+logging), it will usually appear in `error` in the same folder.
 
 
 Configuration
@@ -123,7 +146,7 @@ guide). There are a few global config options that should be self-explanatory:
 
 - `log`
 
-  Logfile configuration, as done in configgy.
+  Logfile configuration, as described in configgy.
 
 
 Performance
