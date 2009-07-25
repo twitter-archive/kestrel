@@ -126,8 +126,7 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
   private def addWithXid(item: QItem) = {
     val blob = ByteBuffer.wrap(pack(item))
 
-    // this method is only called from roll(), so the journal does not
-    // need to be synced after a write.
+    // only called from roll(), so the journal does not need to be synced after a write.
     size += write(false, CMD_ADD_XID.toByte, item.xid, blob.limit)
     do {
       writer.write(blob)
@@ -146,8 +145,7 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
   def removeTentative(): Unit = removeTentative(true)
 
   private def saveXid(xid: Int) = {
-    // this method is only called from roll(), so the journal does not
-    // need to be synced after a write.
+    // only called from roll(), so the journal does not need to be synced after a write.
     size += write(false, CMD_SAVE_XID.toByte, xid)
   }
 
@@ -214,47 +212,41 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
       x = in.read(byteBuffer)
     } while (byteBuffer.position < byteBuffer.limit && x >= 0)
 
-    if (x < 0) {
-      JournalItem.EndOfFile
+    val (item, itemsize) = if (x < 0) {
+      (JournalItem.EndOfFile, 0)
     } else {
       buffer(0) match {
         case CMD_ADD =>
           val data = readBlock(in)
-          if (replaying) size += 5 + data.length
-          JournalItem.Add(unpackOldAdd(data))
+          (JournalItem.Add(unpackOldAdd(data)), 5 + data.length)
         case CMD_REMOVE =>
-          if (replaying) size += 1
-          JournalItem.Remove
+          (JournalItem.Remove, 1)
         case CMD_ADDX =>
           val data = readBlock(in)
-          if (replaying) size += 5 + data.length
-          JournalItem.Add(unpack(data))
+          (JournalItem.Add(unpack(data)), 5 + data.length)
         case CMD_REMOVE_TENTATIVE =>
-          if (replaying) size += 1
-          JournalItem.RemoveTentative
+          (JournalItem.RemoveTentative, 1)
         case CMD_SAVE_XID =>
           val xid = readInt(in)
-          if (replaying) size += 5
-          JournalItem.SavedXid(xid)
+          (JournalItem.SavedXid(xid), 5)
         case CMD_UNREMOVE =>
           val xid = readInt(in)
-          if (replaying) size += 5
-          JournalItem.Unremove(xid)
+          (JournalItem.Unremove(xid), 5)
         case CMD_CONFIRM_REMOVE =>
           val xid = readInt(in)
-          if (replaying) size += 5
-          JournalItem.ConfirmRemove(xid)
+          (JournalItem.ConfirmRemove(xid), 5)
         case CMD_ADD_XID =>
           val xid = readInt(in)
           val data = readBlock(in)
           val item = unpack(data)
           item.xid = xid
-          if (replaying) size += 9 + data.length
-          JournalItem.Add(item)
+          (JournalItem.Add(item), 9 + data.length)
         case n =>
           throw new IOException("invalid opcode in journal: " + n.toInt)
       }
     }
+    if (replaying) size += itemsize
+    item
   }
 
   private def readBlock(in: FileChannel): Array[Byte] = {
