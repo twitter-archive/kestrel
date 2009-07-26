@@ -70,8 +70,6 @@ class PersistentQueue(persistencePath: String, val name: String,
   }
   private var _memoryBytes: Long = 0
 
-  // force get/set operations to block while we're replaying any existing journal
-  private val initialized = new CountDownLatch(1)
   private var closed = false
   private var paused = false
 
@@ -187,7 +185,6 @@ class PersistentQueue(persistencePath: String, val name: String,
    * Add a value to the end of the queue, transactionally.
    */
   def add(value: Array[Byte], expiry: Long): Boolean = {
-    initialized.await
     synchronized {
       if (closed || value.size > maxItemSize()) return false
       while (queueLength >= maxItems() || queueSize >= maxSize()) {
@@ -225,7 +222,6 @@ class PersistentQueue(persistencePath: String, val name: String,
    * Peek at the head item in the queue, if there is one.
    */
   def peek(): Option[QItem] = {
-    initialized.await
     synchronized {
       if (closed || paused || queueLength == 0) {
         None
@@ -243,7 +239,6 @@ class PersistentQueue(persistencePath: String, val name: String,
    *     head of the queue)
    */
   def remove(transaction: Boolean): Option[QItem] = {
-    initialized.await
     synchronized {
       if (closed || paused || queueLength == 0) {
         None
@@ -350,7 +345,6 @@ class PersistentQueue(persistencePath: String, val name: String,
    * back transaction.
    */
   def unremove(xid: Int): Unit = {
-    initialized.await
     synchronized {
       if (!closed) {
         if (keepJournal()) journal.unremove(xid)
@@ -363,7 +357,6 @@ class PersistentQueue(persistencePath: String, val name: String,
   }
 
   def confirmRemove(xid: Int): Unit = {
-    initialized.await
     synchronized {
       if (!closed) {
         if (keepJournal()) journal.confirmRemove(xid)
@@ -403,7 +396,6 @@ class PersistentQueue(persistencePath: String, val name: String,
   def setup(): Unit = synchronized {
     queueSize = 0
     replayJournal
-    initialized.countDown
   }
 
   def destroyJournal(): Unit = synchronized {

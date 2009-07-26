@@ -75,42 +75,27 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
    * Get a named queue, creating it if necessary.
    * Exposed only to unit tests.
    */
-  private[kestrel] def queue(name: String): Option[PersistentQueue] = {
-    var setup = false
-    var queue: Option[PersistentQueue] = None
-
-    synchronized {
-      if (shuttingDown) {
-        return None
-      }
-
-      queue = queues.get(name) match {
-        case q @ Some(_) => q
-        case None =>
-          setup = true
-          val q = if (name contains '+') {
-            val master = name.split('+')(0)
-            fanout_queues.getOrElseUpdate(master, new mutable.HashSet[String]) += name
-            log.info("Fanout queue %s added to %s", name, master)
-            new PersistentQueue(path.getPath, name, queueConfigs.configMap(master))
-          } else {
-            new PersistentQueue(path.getPath, name, queueConfigs.configMap(name))
-          }
-          queues(name) = q
-          Some(q)
-      }
+  private[kestrel] def queue(name: String): Option[PersistentQueue] = synchronized {
+    if (shuttingDown) {
+      None
+    } else {
+      Some(queues.get(name) getOrElse {
+        // only happens when creating a queue for the first time.
+        val q = if (name contains '+') {
+          val master = name.split('+')(0)
+          fanout_queues.getOrElseUpdate(master, new mutable.HashSet[String]) += name
+          log.info("Fanout queue %s added to %s", name, master)
+          new PersistentQueue(path.getPath, name, queueConfigs.configMap(master))
+        } else {
+          new PersistentQueue(path.getPath, name, queueConfigs.configMap(name))
+        }
+        q.setup
+        currentBytes.incr(q.bytes)
+        currentItems.incr(q.length)
+        queues(name) = q
+        q
+      })
     }
-
-    if (setup) {
-      /* race is handled by having PersistentQueue start up with an
-       * un-initialized flag that blocks all operations until this
-       * method is called and completed:
-       */
-      queue.get.setup
-      currentBytes.incr(queue.get.bytes)
-      currentItems.incr(queue.get.length)
-    }
-    queue
   }
 
   /**
