@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package net.lag.kestrel
+package net.lag.kestrel.tools
 
 import java.io._
 import java.nio.channels.FileChannel
