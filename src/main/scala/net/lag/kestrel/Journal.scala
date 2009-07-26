@@ -172,9 +172,9 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
         rj.close
         reader = None
       } else {
-        readJournalEntry(rj, false) match {
-          case JournalItem.Add(item) => f(item)
-          case _ =>
+        readJournalEntry(rj) match {
+          case (JournalItem.Add(item), _) => f(item)
+          case (_, _) =>
         }
       }
     }
@@ -187,9 +187,11 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
       replayer = Some(in)
       var done = false
       do {
-        readJournalEntry(in, true) match {
-          case JournalItem.EndOfFile => done = true
-          case x: JournalItem => f(x)
+        readJournalEntry(in) match {
+          case (JournalItem.EndOfFile, _) => done = true
+          case (x, itemsize) =>
+            size += itemsize
+            f(x)
         }
       } while (!done)
     } catch {
@@ -204,7 +206,7 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
     replayer = None
   }
 
-  private def readJournalEntry(in: FileChannel, replaying: Boolean): JournalItem = {
+  def readJournalEntry(in: FileChannel): (JournalItem, Int) = {
     byteBuffer.rewind
     byteBuffer.limit(1)
     var x: Int = 0
@@ -212,7 +214,7 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
       x = in.read(byteBuffer)
     } while (byteBuffer.position < byteBuffer.limit && x >= 0)
 
-    val (item, itemsize) = if (x < 0) {
+    if (x < 0) {
       (JournalItem.EndOfFile, 0)
     } else {
       buffer(0) match {
@@ -245,8 +247,6 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
           throw new IOException("invalid opcode in journal: " + n.toInt)
       }
     }
-    if (replaying) size += itemsize
-    item
   }
 
   private def readBlock(in: FileChannel): Array[Byte] = {
