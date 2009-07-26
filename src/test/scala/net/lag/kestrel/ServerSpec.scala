@@ -310,5 +310,33 @@ object ServerSpec extends Specification with TestHelper {
         client.get("disconnecting") mustEqual v.toString
       }
     }
+
+    "flush expired items" in {
+      withTempFolder {
+        makeServer
+        val client = new TestClient("localhost", PORT)
+        client.set("q1", "1", 1)
+        client.set("q2", "2", 1)
+        client.set("q2", "2", 1)
+        client.set("q3", "3", 1)
+        client.stats("queue_q1_items") mustEqual "1"
+        client.stats("queue_q2_items") mustEqual "2"
+        client.stats("queue_q3_items") mustEqual "1"
+
+        Time.advance(5000)
+
+        client.out.write("flush_expired q1\n".getBytes)
+        client.readline mustEqual "1"
+        client.stats("queue_q1_items") mustEqual "0"
+        client.stats("queue_q2_items") mustEqual "2"
+        client.stats("queue_q3_items") mustEqual "1"
+
+        client.out.write("flush_all_expired\n".getBytes)
+        client.readline mustEqual "3"
+        client.stats("queue_q1_items") mustEqual "0"
+        client.stats("queue_q2_items") mustEqual "0"
+        client.stats("queue_q3_items") mustEqual "0"
+      }
+    }
   }
 }
