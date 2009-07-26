@@ -27,9 +27,6 @@ import net.lag.configgy.{Config, Configgy, ConfigMap}
 import net.lag.logging.Logger
 
 
-case class QItem(addTime: Long, expiry: Long, data: Array[Byte], var xid: Int)
-
-
 // a config value that's backed by a global setting but may be locally overridden
 class OverlaySetting[T](base: => T) {
   @volatile private var local: Option[T] = None

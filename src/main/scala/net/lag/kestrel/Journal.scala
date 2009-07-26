@@ -111,7 +111,7 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
   def inReadBehind(): Boolean = reader.isDefined
 
   private def add(allowSync: Boolean, item: QItem): Unit = {
-    val blob = ByteBuffer.wrap(pack(item))
+    val blob = ByteBuffer.wrap(item.pack())
     size += write(false, CMD_ADDX.toByte, blob.limit)
     do {
       writer.write(blob)
@@ -124,7 +124,7 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
 
   // used only to list pending transactions when recreating the journal.
   private def addWithXid(item: QItem) = {
-    val blob = ByteBuffer.wrap(pack(item))
+    val blob = ByteBuffer.wrap(item.pack())
 
     // only called from roll(), so the journal does not need to be synced after a write.
     size += write(false, CMD_ADD_XID.toByte, item.xid, blob.limit)
@@ -220,12 +220,12 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
       buffer(0) match {
         case CMD_ADD =>
           val data = readBlock(in)
-          (JournalItem.Add(unpackOldAdd(data)), 5 + data.length)
+          (JournalItem.Add(QItem.unpackOldAdd(data)), 5 + data.length)
         case CMD_REMOVE =>
           (JournalItem.Remove, 1)
         case CMD_ADDX =>
           val data = readBlock(in)
-          (JournalItem.Add(unpack(data)), 5 + data.length)
+          (JournalItem.Add(QItem.unpack(data)), 5 + data.length)
         case CMD_REMOVE_TENTATIVE =>
           (JournalItem.RemoveTentative, 1)
         case CMD_SAVE_XID =>
@@ -240,7 +240,7 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
         case CMD_ADD_XID =>
           val xid = readInt(in)
           val data = readBlock(in)
-          val item = unpack(data)
+          val item = QItem.unpack(data)
           item.xid = xid
           (JournalItem.Add(item), 9 + data.length)
         case n =>
@@ -291,34 +291,5 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
     }
     if (allowSync && syncJournal) writer.force(false)
     byteBuffer.limit
-  }
-
-  private def pack(item: QItem): Array[Byte] = {
-    val bytes = new Array[Byte](item.data.length + 16)
-    val buffer = ByteBuffer.wrap(bytes)
-    buffer.order(ByteOrder.LITTLE_ENDIAN)
-    buffer.putLong(item.addTime)
-    buffer.putLong(item.expiry)
-    buffer.put(item.data)
-    bytes
-  }
-
-  private def unpack(data: Array[Byte]): QItem = {
-    val buffer = ByteBuffer.wrap(data)
-    val bytes = new Array[Byte](data.length - 16)
-    buffer.order(ByteOrder.LITTLE_ENDIAN)
-    val addTime = buffer.getLong
-    val expiry = buffer.getLong
-    buffer.get(bytes)
-    return QItem(addTime, expiry, bytes, 0)
-  }
-
-  private def unpackOldAdd(data: Array[Byte]): QItem = {
-    val buffer = ByteBuffer.wrap(data)
-    val bytes = new Array[Byte](data.length - 4)
-    buffer.order(ByteOrder.LITTLE_ENDIAN)
-    val expiry = buffer.getInt
-    buffer.get(bytes)
-    return QItem(Time.now, if (expiry == 0) 0 else expiry * 1000, bytes, 0)
   }
 }
