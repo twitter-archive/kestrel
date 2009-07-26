@@ -125,6 +125,7 @@ class PersistentQueue(persistencePath: String, val name: String,
   def journalSize: Long = synchronized { journal.size }
   def totalExpired: Long = synchronized { _totalExpired }
   def currentAge: Long = synchronized { if (queueSize == 0) 0 else _currentAge }
+  def waiterCount: Long = synchronized { waiters.size }
   def totalDiscarded: Long = synchronized { _totalDiscarded }
   def isClosed: Boolean = synchronized { closed || paused }
 
@@ -184,8 +185,7 @@ class PersistentQueue(persistencePath: String, val name: String,
   /**
    * Add a value to the end of the queue, transactionally.
    */
-  def add(value: Array[Byte], expiry: Long): Boolean = {
-    synchronized {
+  def add(value: Array[Byte], expiry: Long): Boolean = synchronized {
       if (closed || value.size > maxItemSize()) return false
       while (queueLength >= maxItems() || queueSize >= maxSize()) {
         if (!discardOldWhenFull()) return false
@@ -213,7 +213,6 @@ class PersistentQueue(persistencePath: String, val name: String,
         waiters.remove(0).actor ! ItemArrived
       }
       true
-    }
   }
 
   def add(value: Array[Byte]): Boolean = add(value, 0)

@@ -310,6 +310,7 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
       report += (("queue_" + qName + "_mem_bytes", s.memoryBytes.toString))
       report += (("queue_" + qName + "_age", s.currentAge.toString))
       report += (("queue_" + qName + "_discarded", s.totalDiscarded.toString))
+      report += (("queue_" + qName + "_waiters", s.waiterCount.toString))
     }
 
     val summary = {
