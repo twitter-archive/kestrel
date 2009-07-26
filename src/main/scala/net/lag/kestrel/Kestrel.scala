@@ -19,7 +19,6 @@ package net.lag.kestrel
 
 import java.net.InetSocketAddress
 import java.util.concurrent.{CountDownLatch, Executors, ExecutorService, TimeUnit}
-import java.util.concurrent.atomic.AtomicLong
 import scala.actors.{Actor, Scheduler}
 import scala.actors.Actor._
 import scala.collection.mutable
@@ -30,19 +29,6 @@ import org.apache.mina.transport.socket.nio.{NioProcessor, NioSocketAcceptor}
 import _root_.net.lag.configgy.{Config, ConfigMap, Configgy, RuntimeEnvironment}
 import _root_.net.lag.logging.Logger
 import _root_.net.lag.naggati.IoHandlerActorAdapter
-
-
-class Counter {
-  private val value = new AtomicLong(0)
-
-  def apply() = value.get
-  def set(n: Long) = value.set(n)
-  def incr() = value.addAndGet(1)
-  def incr(n: Long) = value.addAndGet(n)
-  def decr() = value.addAndGet(-1)
-  def decr(n: Long) = value.addAndGet(-n)
-  override def toString = value.get.toString
-}
 
 
 object KestrelStats {
