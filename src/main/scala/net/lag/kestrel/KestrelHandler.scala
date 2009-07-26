@@ -130,8 +130,13 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
         writeResponse("Flushed all queues.\r\n")
       case "DUMP_CONFIG" =>
         dumpConfig()
-      case "DROP" =>
-        drop(request.line(1))
+      case "DELETE" =>
+        delete(request.line(1))
+      case "FLUSH_EXPIRED" =>
+        flushExpired(request.line(1))
+      case "FLUSH_ALL_EXPIRED" =>
+        val flushed = Kestrel.queues.queueNames.foldLeft(0) { (sum, qName) => sum + Kestrel.queues.flushExpired(qName) }
+        writeResponse("%d\r\n".format(flushed))
     }
   }
 
@@ -265,10 +270,15 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
     writeResponse("END\r\n")
   }
 
-  private def drop(name: String) = {
-    log.debug("drop -> q=%s", name)
-    Kestrel.queues.drop(name)
+  private def delete(name: String) = {
+    log.debug("delete -> q=%s", name)
+    Kestrel.queues.delete(name)
     writeResponse("END\r\n")
+  }
+
+  private def flushExpired(name: String) = {
+    log.debug("flush_expired -> q=%s", name)
+    writeResponse("%d\r\n".format(Kestrel.queues.flushExpired(name)))
   }
 
   private def stats() = {

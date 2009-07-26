@@ -176,21 +176,19 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
     rv
   }
 
-  def unremove(key: String, xid: Int): Unit = {
+  def unremove(key: String, xid: Int) {
     queue(key) map { q => q.unremove(xid) }
   }
 
-  def confirmRemove(key: String, xid: Int): Unit = {
+  def confirmRemove(key: String, xid: Int) {
     queue(key) map { q => q.confirmRemove(xid) }
   }
 
-  def flush(key: String): Unit = {
-    for (q <- queue(key)) {
-      q.flush()
-    }
+  def flush(key: String) {
+    queue(key) map { q => q.flush() }
   }
 
-  def drop(name: String): Unit = synchronized {
+  def delete(name: String): Unit = synchronized {
     if (!shuttingDown) {
       queues.get(name) map { q =>
         q.close()
@@ -202,6 +200,14 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
         fanout_queues.getOrElseUpdate(master, new mutable.HashSet[String]) -= name
         log.info("Fanout queue %s dropped from %s", name, master)
       }
+    }
+  }
+
+  def flushExpired(name: String): Int = synchronized {
+    if (shuttingDown) {
+      0
+    } else {
+      queue(name) map { q => q.discardExpired() } getOrElse(0)
     }
   }
 

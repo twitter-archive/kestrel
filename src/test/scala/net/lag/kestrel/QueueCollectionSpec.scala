@@ -121,13 +121,13 @@ object QueueCollectionSpec extends Specification with TestHelper {
       }
     }
 
-    "drop a queue when asked" in {
+    "delete a queue when asked" in {
       withTempFolder {
         new File(folderName + "/apples").createNewFile()
         new File(folderName + "/oranges").createNewFile()
         qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
         qc.loadQueues()
-        qc.drop("oranges")
+        qc.delete("oranges")
 
         sorted(new File(folderName).list().toList) mustEqual List("apples")
         sorted(qc.queueNames) mustEqual List("apples")
@@ -164,7 +164,7 @@ object QueueCollectionSpec extends Specification with TestHelper {
         }
       }
 
-      "drop on the fly" in {
+      "delete on the fly" in {
         withTempFolder {
           new File(folderName + "/jobs").createNewFile()
           new File(folderName + "/jobs+client1").createNewFile()
@@ -172,7 +172,7 @@ object QueueCollectionSpec extends Specification with TestHelper {
           qc.loadQueues()
           qc.add("jobs", "job1".getBytes)
 
-          qc.drop("jobs+client1")
+          qc.delete("jobs+client1")
 
           sorted(new File(folderName).list().toList) mustEqual List("jobs")
           new String(qc.receive("jobs").get) mustEqual "job1"

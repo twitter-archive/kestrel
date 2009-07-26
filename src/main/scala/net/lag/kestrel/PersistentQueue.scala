@@ -496,8 +496,10 @@ class PersistentQueue(persistencePath: String, val name: String,
     Some(item)
   }
 
-  private final def discardExpired(): Unit = {
-    if (!queue.isEmpty) {
+  final def discardExpired(): Int = {
+    if (queue.isEmpty) {
+      0
+    } else {
       val realExpiry = adjustExpiry(queue.first.addTime, queue.first.expiry)
       if ((realExpiry != 0) && (realExpiry < Time.now)) {
         _totalExpired += 1
@@ -506,7 +508,9 @@ class PersistentQueue(persistencePath: String, val name: String,
         _memoryBytes -= len
         queueLength -= 1
         fillReadBehind
-        discardExpired
+        1 + discardExpired()
+      } else {
+        0
       }
     }
   }
