@@ -17,14 +17,13 @@
 
 package net.lag.kestrel.tools
 
-import java.io._
-import java.nio.channels.FileChannel
+import java.io.{FileNotFoundException, IOException}
 import scala.collection.mutable
 
 class QueueDumper(filename: String) {
   var offset = 0L
   var operations = 0L
-  var xid = 0
+  var currentXid = 0
 
   val queue = new mutable.Queue[Int] {
     def unget(item: Int) = prependElem(item)
@@ -33,12 +32,20 @@ class QueueDumper(filename: String) {
 
   def apply() {
     val journal = new Journal(filename, false)
+    var lastDisplay = 0L
+
     try {
       for ((item, itemsize) <- journal.walk()) {
         operations += 1
         dumpItem(item)
         offset += itemsize
+        if (QDumper.quiet && offset - lastDisplay > 1024 * 1024) {
+          print("\rReading journal: %-6s".format(Util.bytesToHuman(offset, 0)))
+          Console.flush()
+          lastDisplay = offset
+        }
       }
+      print("\r" + (" " * 30))
 
       println()
       val totalItems = queue.size + openTransactions.size
@@ -79,19 +86,19 @@ class QueueDumper(filename: String) {
         queue.dequeue
       case JournalItem.RemoveTentative =>
         do {
-          xid += 1
-        } while (openTransactions contains xid)
-        openTransactions(xid) = queue.dequeue
-        if (!QDumper.quiet) println("RSV %d".format(xid))
-      case JournalItem.SavedXid(sxid) =>
-        if (!QDumper.quiet) println("XID %d".format(sxid))
-        xid = sxid
-      case JournalItem.Unremove(sxid) =>
-        queue.unget(openTransactions.removeKey(sxid).get)
-        if (!QDumper.quiet) println("CAN %d".format(sxid))
-      case JournalItem.ConfirmRemove(sxid) =>
-        if (!QDumper.quiet) println("ACK %d".format(sxid))
-        openTransactions.removeKey(sxid)
+          currentXid += 1
+        } while (openTransactions contains currentXid)
+        openTransactions(currentXid) = queue.dequeue
+        if (!QDumper.quiet) println("RSV %d".format(currentXid))
+      case JournalItem.SavedXid(xid) =>
+        if (!QDumper.quiet) println("XID %d".format(xid))
+        currentXid = xid
+      case JournalItem.Unremove(xid) =>
+        queue.unget(openTransactions.removeKey(xid).get)
+        if (!QDumper.quiet) println("CAN %d".format(xid))
+      case JournalItem.ConfirmRemove(xid) =>
+        if (!QDumper.quiet) println("ACK %d".format(xid))
+        openTransactions.removeKey(xid)
       case x =>
         if (!QDumper.quiet) println(x)
     }
@@ -134,7 +141,7 @@ object QDumper {
     }
 
     for (filename <- filenames) {
-      println("Queue file: " + filename)
+      println("Queue: " + filename)
       new QueueDumper(filename)()
     }
   }
