@@ -33,20 +33,12 @@ class QueueDumper(filename: String) {
 
   def apply() {
     val journal = new Journal(filename, false)
-
     try {
-      val in = new FileInputStream(filename).getChannel
-      var done = false
-      do {
-        journal.readJournalEntry(in) match {
-          case (JournalItem.EndOfFile, _) =>
-            done = true
-          case (x, itemsize) =>
-            operations += 1
-            dumpItem(x)
-            offset += itemsize
-        }
-      } while (!done)
+      for ((item, itemsize) <- journal.walk()) {
+        operations += 1
+        dumpItem(item)
+        offset += itemsize
+      }
 
       println()
       val totalItems = queue.size + openTransactions.size

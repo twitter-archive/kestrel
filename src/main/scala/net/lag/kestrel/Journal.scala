@@ -249,6 +249,29 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
     }
   }
 
+  def walk() = new Iterator[(JournalItem, Int)] {
+    val in = new FileInputStream(queuePath).getChannel
+    var done = false
+    var nextItem: Option[(JournalItem, Int)] = None
+
+    def hasNext = {
+      if (done) {
+        false
+      } else {
+        nextItem = readJournalEntry(in) match {
+          case (JournalItem.EndOfFile, _) =>
+            done = true
+            None
+          case x =>
+            Some(x)
+        }
+        nextItem.isDefined
+      }
+    }
+
+    def next() = nextItem.get
+  }
+
   private def readBlock(in: FileChannel): Array[Byte] = {
     val size = readInt(in)
     val data = new Array[Byte](size)
