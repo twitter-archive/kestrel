@@ -186,33 +186,33 @@ class PersistentQueue(persistencePath: String, val name: String,
    * Add a value to the end of the queue, transactionally.
    */
   def add(value: Array[Byte], expiry: Long): Boolean = synchronized {
-      if (closed || value.size > maxItemSize()) return false
-      while (queueLength >= maxItems() || queueSize >= maxSize()) {
-        if (!discardOldWhenFull()) return false
-        _remove(false)
-        _totalDiscarded += 1
-        if (keepJournal()) journal.remove()
-      }
+    if (closed || value.size > maxItemSize()) return false
+    while (queueLength >= maxItems() || queueSize >= maxSize()) {
+      if (!discardOldWhenFull()) return false
+      _remove(false)
+      _totalDiscarded += 1
+      if (keepJournal()) journal.remove()
+    }
 
-      val now = Time.now
-      val item = QItem(now, adjustExpiry(now, expiry), value, 0)
-      if (keepJournal() && !journal.inReadBehind) {
-        if (journal.size > maxJournalSize() * maxJournalOverflow() && queueSize < maxJournalSize()) {
-          // force re-creation of the journal.
-          log.info("Rolling journal file for '%s' (qsize=%d)", name, queueSize)
-          journal.roll(xidCounter, openTransactionIds map { openTransactions(_) }, queue)
-        }
-        if (queueSize >= maxMemorySize()) {
-          log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
-          journal.startReadBehind
-        }
+    val now = Time.now
+    val item = QItem(now, adjustExpiry(now, expiry), value, 0)
+    if (keepJournal() && !journal.inReadBehind) {
+      if (journal.size > maxJournalSize() * maxJournalOverflow() && queueSize < maxJournalSize()) {
+        // force re-creation of the journal.
+        log.info("Rolling journal file for '%s' (qsize=%d)", name, queueSize)
+        journal.roll(xidCounter, openTransactionIds map { openTransactions(_) }, queue)
       }
-      _add(item)
-      if (keepJournal()) journal.add(item)
-      if (waiters.size > 0) {
-        waiters.remove(0).actor ! ItemArrived
+      if (queueSize >= maxMemorySize()) {
+        log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
+        journal.startReadBehind
       }
-      true
+    }
+    _add(item)
+    if (keepJournal()) journal.add(item)
+    if (waiters.size > 0) {
+      waiters.remove(0).actor ! ItemArrived
+    }
+    true
   }
 
   def add(value: Array[Byte]): Boolean = add(value, 0)
