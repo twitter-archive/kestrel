@@ -11,6 +11,12 @@ also the filename of that queue's journal file (usually in
 binary data. Usually this data is in some serialized format like JSON or
 ruby's marshal format.
 
+Generally queue names should be limited to alphanumerics `[A-Za-z0-9]`, dash
+(`-`) and underline (`_`). In practice, kestrel doesn't enforce any
+restrictions other than the name can't contain slash (`/`) because that can't
+be used in filenames, squiggle (`~`) because it's used for temporary files,
+and dot (`.`) because it's reserved for future use.
+
 A cluster of kestrel servers is like a memcache cluster: the servers don't
 know about each other, and don't do any cross-communication, so you can add as
 many as you like. Clients have a list of all servers in the cluster, and pick
