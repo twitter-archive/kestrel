@@ -76,7 +76,7 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
 
   def roll(xid: Int, openItems: List[QItem], queue: Iterable[QItem]): Unit = {
     writer.close
-    val tmpFile = new File(queuePath + "." + Time.now)
+    val tmpFile = new File(queuePath + "~~" + Time.now)
     open(tmpFile)
     size = 0
     for (item <- openItems) {
