@@ -22,9 +22,8 @@ import java.nio.channels.FileChannel
 import scala.collection.mutable
 
 class QueueDumper(filename: String) {
-  var items = 0L
-  var size = 0L
   var offset = 0L
+  var operations = 0L
   var xid = 0
 
   val queue = new mutable.Queue[Int] {
@@ -43,6 +42,7 @@ class QueueDumper(filename: String) {
           case (JournalItem.EndOfFile, _) =>
             done = true
           case (x, itemsize) =>
+            operations += 1
             dumpItem(x)
             offset += itemsize
         }
@@ -51,7 +51,7 @@ class QueueDumper(filename: String) {
       println()
       val totalItems = queue.size + openTransactions.size
       val totalBytes = queue.foldLeft(0L) { _ + _ } + openTransactions.values.foldLeft(0L) { _ + _ }
-      println("Journal size: %d bytes.".format(offset))
+      println("Journal size: %d bytes, with %d operations.".format(offset, operations))
       println("%d items totalling %d bytes.".format(totalItems, totalBytes))
     } catch {
       case e: FileNotFoundException =>
