@@ -64,7 +64,7 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
 
   // preload any queues
   def loadQueues() {
-    path.list() map { queue(_) }
+    path.list() filter { name => !(name contains "~~") } map { queue(_) }
   }
 
   def queueNames: List[String] = synchronized {
@@ -211,17 +211,9 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
     }
   }
 
-  case class Stats(items: Long, bytes: Long, totalItems: Long, journalSize: Long,
-                   totalExpired: Long, currentAge: Long, memoryItems: Long, memoryBytes: Long,
-                   totalDiscarded: Long, waiterCount: Long)
-
-  def stats(key: String): Stats = {
-    queue(key) match {
-      case None => Stats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-      case Some(q) => Stats(q.length, q.bytes, q.totalItems, q.journalSize,
-                            q.totalExpired, q.currentAge, q.memoryLength, q.memoryBytes,
-                            q.totalDiscarded, q.waiterCount)
-    }
+  def stats(key: String): Array[(String, String)] = queue(key) match {
+    case None => Array[(String, String)]()
+    case Some(q) => q.dumpStats()
   }
 
   def dumpConfig(key: String): Array[String] = {

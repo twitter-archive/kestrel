@@ -121,6 +121,17 @@ object QueueCollectionSpec extends Specification with TestHelper {
       }
     }
 
+    "ignore partially rolled queue files" in {
+      withTempFolder {
+        new File(folderName + "/apples").createNewFile()
+        new File(folderName + "/oranges").createNewFile()
+        new File(folderName + "/oranges~~900").createNewFile()
+        qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+        qc.loadQueues()
+        sorted(qc.queueNames) mustEqual List("apples", "oranges")
+      }
+    }
+
     "delete a queue when asked" in {
       withTempFolder {
         new File(folderName + "/apples").createNewFile()

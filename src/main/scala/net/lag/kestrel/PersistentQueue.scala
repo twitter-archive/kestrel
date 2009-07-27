@@ -173,6 +173,21 @@ class PersistentQueue(persistencePath: String, val name: String,
     )
   }
 
+  def dumpStats(): Array[(String, String)] = synchronized {
+    Array(
+      ("items", length.toString),
+      ("bytes", bytes.toString),
+      ("total_items", totalItems.toString),
+      ("logsize", journalSize.toString),
+      ("expired_items", totalExpired.toString),
+      ("mem_items", memoryLength.toString),
+      ("mem_bytes", memoryBytes.toString),
+      ("age", currentAge.toString),
+      ("discarded", totalDiscarded.toString),
+      ("waiters", waiterCount.toString)
+    )
+  }
+
   private final def adjustExpiry(startingTime: Long, expiry: Long): Long = {
     if (maxAge() > 0) {
       val maxExpiry = startingTime + maxAge()
