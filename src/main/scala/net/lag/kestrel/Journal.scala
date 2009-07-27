@@ -261,6 +261,7 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
         nextItem = readJournalEntry(in) match {
           case (JournalItem.EndOfFile, _) =>
             done = true
+            in.close()
             None
           case x =>
             Some(x)
