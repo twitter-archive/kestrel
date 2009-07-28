@@ -313,7 +313,7 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
   }
   
   private def version() = {
-    writeResponse("VERSION Kestrel 1.1.2\r\n")
+    writeResponse("VERSION " + Kestrel.runtime.jarVersion + "\r\n")
   }
 
   private def shutdown() = {
