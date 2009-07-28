@@ -130,6 +130,8 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
         writeResponse("Flushed all queues.\r\n")
       case "DUMP_CONFIG" =>
         dumpConfig()
+      case "VERSION" =>
+        version()
     }
   }
 
@@ -308,6 +310,10 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
       dump += "}"
     }
     writeResponse(dump.mkString("", "\r\n", "\r\nEND\r\n"))
+  }
+  
+  private def version() = {
+    writeResponse("VERSION Kestrel 1.1.2\r\n")
   }
 
   private def shutdown() = {
