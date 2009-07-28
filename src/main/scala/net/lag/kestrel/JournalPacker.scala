@@ -35,7 +35,7 @@ class JournalPacker(filenames: Array[String], newFilename: String) {
   val adder = Iterator.flatten(journals.map { _.walk() }.elements)
   val writer = new FileOutputStream(newFilename, false).getChannel
 
-  val adderStack = new mutable.Stack[QItem]
+  val adderStack = new mutable.ListBuffer[QItem]
   val openTransactions = new mutable.HashMap[Int, QItem]
   var currentXid = 0
 
@@ -44,40 +44,47 @@ class JournalPacker(filenames: Array[String], newFilename: String) {
   var lastUpdate = 0L
   var lastAdderUpdate = 0L
 
-  private def advanceAdder(statusCallback: (Long, Long) => Unit): QItem = {
+  private var statusCallback: ((Long, Long) => Unit) = (_, _) => ()
+
+  private def advanceAdder(): Option[QItem] = {
     if (!adderStack.isEmpty) {
-      adderStack.pop
+      Some(adderStack.remove(0))
     } else {
-      val (item, itemsize) = adder.next()
-      adderOffset += itemsize
-      if (adderOffset - lastAdderUpdate > 1024 * 1024) {
-        statusCallback(offset, adderOffset)
-        lastAdderUpdate = adderOffset
-      }
-      item match {
-        case JournalItem.Add(qitem) => qitem
-        case _ => advanceAdder(statusCallback)
+      if (!adder.hasNext) {
+        None
+      } else {
+        val (item, itemsize) = adder.next()
+        adderOffset += itemsize
+        if (adderOffset - lastAdderUpdate > 1024 * 1024) {
+          statusCallback(offset, adderOffset)
+          lastAdderUpdate = adderOffset
+        }
+        item match {
+          case JournalItem.Add(qitem) => Some(qitem)
+          case _ => advanceAdder()
+        }
       }
     }
   }
 
   def apply(statusCallback: (Long, Long) => Unit) = {
+    this.statusCallback = statusCallback
     for ((item, itemsize) <- remover) {
       item match {
         case JournalItem.Add(qitem) =>
         case JournalItem.Remove =>
-          advanceAdder(statusCallback)
+          advanceAdder().get
         case JournalItem.RemoveTentative =>
           do {
             currentXid += 1
           } while (openTransactions contains currentXid)
-          val qitem = advanceAdder(statusCallback)
+          val qitem = advanceAdder().get
           qitem.xid = currentXid
           openTransactions(currentXid) = qitem
         case JournalItem.SavedXid(xid) =>
           currentXid = xid
         case JournalItem.Unremove(xid) =>
-          adderStack.push(openTransactions.removeKey(xid).get)
+          adderStack prepend openTransactions.removeKey(xid).get
         case JournalItem.ConfirmRemove(xid) =>
           openTransactions -= xid
       }
@@ -90,9 +97,10 @@ class JournalPacker(filenames: Array[String], newFilename: String) {
 
     // now write the new journal.
     statusCallback(0, 0)
-    val remaining = new mutable.ListBuffer[QItem]
-    while (!adderStack.isEmpty || adder.hasNext) {
-      remaining += advanceAdder(statusCallback)
+    val remaining = new Iterable[QItem] {
+      def elements = new tools.PythonIterator[QItem] {
+        def apply() = advanceAdder()
+      }
     }
 
     val out = new Journal(newFilename, false)

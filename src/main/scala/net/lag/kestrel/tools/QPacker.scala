@@ -69,6 +69,7 @@ object QPacker {
       }
       Console.flush()
     }
+    println("\r" + (" " * 40))
     println("Done. New journal size: %d".format(journal.size))
   }
 }
