@@ -74,10 +74,17 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
     open(queueFile)
   }
 
-  def roll(xid: Int, openItems: List[QItem], queue: Iterable[QItem]): Unit = {
+  def roll(xid: Int, openItems: List[QItem], queue: Iterable[QItem]) {
     writer.close
     val tmpFile = new File(queuePath + "~~" + Time.now)
     open(tmpFile)
+    dump(xid, openItems, queue)
+    writer.close
+    tmpFile.renameTo(queueFile)
+    open
+  }
+
+  def dump(xid: Int, openItems: List[QItem], queue: Iterable[QItem]) {
     size = 0
     for (item <- openItems) {
       addWithXid(item)
@@ -88,9 +95,6 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
       add(false, item)
     }
     if (syncJournal) writer.force(false)
-    writer.close
-    tmpFile.renameTo(queueFile)
-    open
   }
 
   def close(): Unit = {
