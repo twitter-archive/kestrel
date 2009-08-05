@@ -43,12 +43,6 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
   private val fanout_queues = new mutable.HashMap[String, mutable.HashSet[String]]
   private var shuttingDown = false
 
-  // total of all data in all queues
-  val currentBytes = new Counter()
-
-  // total of all items in all queues
-  val currentItems = new Counter()
-
   // total items added since the server started up.
   val totalAdded = new Counter()
 
@@ -71,6 +65,9 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
     queues.keys.toList
   }
 
+  def currentItems = queues.values.foldLeft(0L) { _ + _.length }
+  def currentBytes = queues.values.foldLeft(0L) { _ + _.bytes }
+
   /**
    * Get a named queue, creating it if necessary.
    * Exposed only to unit tests.
@@ -90,8 +87,6 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
           new PersistentQueue(path.getPath, name, queueConfigs.configMap(name))
         }
         q.setup
-        currentBytes.incr(q.bytes)
-        currentItems.incr(q.length)
         queues(name) = q
         q
       })
@@ -122,11 +117,7 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
           expiry * 1000
         }
         val result = q.add(item, normalizedExpiry)
-        if (result) {
-          currentBytes.incr(item.length)
-          currentItems.incr()
-          totalAdded.incr()
-        }
+        if (result) totalAdded.incr()
         result
     }
   }
@@ -152,8 +143,6 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
               f(None)
             case Some(item) =>
               queueHits.incr
-              currentBytes.decr(item.data.length)
-              currentItems.decr
               f(Some(item))
           }
         }

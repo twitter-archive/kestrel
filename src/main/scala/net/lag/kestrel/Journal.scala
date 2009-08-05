@@ -114,6 +114,8 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
 
   def inReadBehind(): Boolean = reader.isDefined
 
+  def isReplaying(): Boolean = replayer.isDefined
+
   private def add(allowSync: Boolean, item: QItem): Unit = {
     val blob = ByteBuffer.wrap(item.pack())
     size += write(false, CMD_ADDX.toByte, blob.limit)

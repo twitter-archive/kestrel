@@ -49,8 +49,8 @@ object QueueCollectionSpec extends Specification with TestHelper {
         qc.add("work2", "other stuff".getBytes)
 
         sorted(qc.queueNames) mustEqual List("work1", "work2")
-        qc.currentBytes() mustEqual 16
-        qc.currentItems() mustEqual 2
+        qc.currentBytes mustEqual 16
+        qc.currentItems mustEqual 2
         qc.totalAdded() mustEqual 2
 
         new String(qc.receive("work1").get) mustEqual "stuff"
@@ -58,8 +58,8 @@ object QueueCollectionSpec extends Specification with TestHelper {
         new String(qc.receive("work2").get) mustEqual "other stuff"
         qc.receive("work2") mustEqual None
 
-        qc.currentBytes() mustEqual 0
-        qc.currentItems() mustEqual 0
+        qc.currentBytes mustEqual 0
+        qc.currentItems mustEqual 0
         qc.totalAdded() mustEqual 2
       }
     }
@@ -71,16 +71,16 @@ object QueueCollectionSpec extends Specification with TestHelper {
         qc.add("ducklings", "dewey".getBytes)
         qc.add("ducklings", "louie".getBytes)
         qc.queueNames mustEqual List("ducklings")
-        qc.currentBytes() mustEqual 14
-        qc.currentItems() mustEqual 3
+        qc.currentBytes mustEqual 14
+        qc.currentItems mustEqual 3
         qc.shutdown
 
         qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
         qc.queueNames mustEqual Nil
         new String(qc.receive("ducklings").get) mustEqual "huey"
         // now the queue should be suddenly instantiated:
-        qc.currentBytes() mustEqual 10
-        qc.currentItems() mustEqual 2
+        qc.currentBytes mustEqual 10
+        qc.currentItems mustEqual 2
       }
     }
 
