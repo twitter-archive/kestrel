@@ -64,7 +64,7 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
 
   // preload any queues
   def loadQueues() {
-    path.list() filter { name => !(name contains "~~") } map { queue(_) }
+    Journal.getQueueNamesFromFolder(path) map { queue(_) }
   }
 
   def queueNames: List[String] = synchronized {

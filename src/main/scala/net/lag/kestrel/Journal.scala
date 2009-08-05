@@ -310,3 +310,13 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
     byteBuffer.limit
   }
 }
+
+object Journal {
+  def getQueueNamesFromFolder(path: File): Seq[String] = {
+    path.list().filter { name =>
+      !(name contains "~~")
+    }.map { name =>
+      name.split('~')(0)
+    }
+  }
+}
