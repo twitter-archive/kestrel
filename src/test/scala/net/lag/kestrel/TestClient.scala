@@ -44,7 +44,7 @@ class TestClient(host: String, port: Int) {
     socket.close
   }
 
-  private def readline = {
+  def readline = {
     // this isn't meant to be efficient, just simple.
     val out = new StringBuilder
     var done = false

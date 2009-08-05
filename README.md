@@ -73,92 +73,81 @@ Kestrel is not:
   client has accepted it.
 
 
-Use
----
+Building it
+-----------
 
-Kestrel requires java 6 (for JMX support) and ant 1.7.
+Kestrel requires java 6 (for JMX support) and ant 1.7. If you see an error
+about missing JMX classes, it usually means you're building with java 5. On a mac, you may have to hard-code an
+annoying `JAVA_HOME` to use java 6:
+
+    $ export JAVA_HOME=/System/Library/Frameworks/JavaVM.framework/Versions/1.6/Home
 
 Building from source is easy:
 
     $ ant
-    
+
 Scala libraries and dependencies will be downloaded from maven repositories
 the first time you do a build. The finished distribution will be in `dist`.
 
-A sample startup script is included, or you may run the jar directly. All
-configuration is loaded from `kestrel.conf`.
 
-The created file `kestrel-VERSION.zip` can be expanded into a place like
-`/usr/local` (or wherever you like) and executed within its own folder as a
-self-contained package. All dependent jars are included, and the startup
+Running it
+----------
+
+You can run kestrel by hand via:
+
+    $ java -jar ./dist/kestrel-VERSION/kestrel-VERSION.jar
+
+To run in development mode (using `development.conf` instead of
+`production.conf`), add a `stage` variable:
+
+    $ java -Dstage=development -jar ./dist/kestrel-VERSION/kestrel-VERSION.jar
+
+When running it as a server, a startup script is provided in
+`dist/kestrel-VERSION/scripts/kestrel.sh`. The script assumes you have
+`daemon`, a standard daemonizer for Linux, but also available
+[here](http://libslack.org/daemon/) for all common unix platforms.
+
+The created archive `kestrel-VERSION.tar.bz2` can be expanded into a place
+like `/usr/local` (or wherever you like) and executed within its own folder as
+a self-contained package. All dependent jars are included, and the startup
 script loads things from relative paths.
 
 The default configuration puts logfiles into `/var/log/kestrel/` and queue
 journal files into `/var/spool/kestrel/`.
 
+The startup script logs extensive GC information to a file named `stdout` in
+the log folder. If kestrel has problems starting up (before it can initialize
+logging), it will usually appear in `error` in the same folder.
+
 
 Configuration
 -------------
 
-All of the per-queue configuration can be set in the global scope of
-`kestrel.conf`, as a default for all queues, or in the per-queue configuration
-to override the defaults for a specific queue. You can see an example of this
-in the config file included.
+Queue configuration is described in detail in `docs/guide.md` (an operational
+guide). There are a few global config options that should be self-explanatory:
 
-- `max_items` (infinite)
+- `host`
 
-  Set a hard limit on the number of items this queue can hold. When the queue
-  is full, `discard_old_when_full` dictates the behavior when a client
-  attempts to add another item.
+  Host to accept connections on.
 
-- `max_size` (infinite)
+- `port`
 
-  Set a hard limit on the number of bytes (of data in queued items) this
-  queue can hold. When the queue is full, `discard_old_when_full` dictates
-  the behavior when a client attempts to add another item.
+  Port to listen on. 22133 is the standard.
 
-- `discard_old_when_full` (false)
+- `timeout`
 
-  If this is false, when a queue is full, clients attempting to add another
-  item will get an error. No new items will be accepted. If this is true, old
-  items will be discarded to make room for the new one. This settting has no
-  effect unless at least one of `max_items` or `max_size` is set.
+  Seconds after which an idle client is disconnected, or 0 to have no idle
+  timeout.
 
-- `journal` (true)
+- `queue_path`
 
-  If false, don't keep a journal file for this queue. When kestrel exits, any
-  remaining contents in the queue will be lost.
+  The folder to store queue journal files in. Each queue (and each client of
+  a fanout queue) gets its own file here.
 
-- `max_journal_size` (16MB)
+- `log`
 
-  When a journal reaches this size, it will be rolled over to a new file as
-  soon as the queue is empty. The value must be given in bytes.
+  Logfile configuration, as described in configgy.
 
-- `max_journal_overflow` (10)
-
-  If a journal file grows to this many times its desired maximum size, and
-  the total queue contents (in bytes) are smaller than the desired maximum
-  size, the journal file will be rewritten from scratch, to avoid using up
-  all disk space. For example, using the default `max_journal_size` of 16MB
-  and `max_journal_overflow` of 10, if the journal file ever grows beyond
-  160MB (and the queue's contents are less than 16MB), the journal file will
-  be re-written.
-
-- `max_memory_size` (128MB)
-
-  If a queue's contents grow past this size, only this part will be kept in
-  memory. Newly added items will be written directly to the journal file and
-  read back into memory as the queue is drained. This setting is a release
-  valve to keep a backed-up queue from consuming all memory. The value must
-  be given in bytes.
-
-- `max_age` (0 = off)
-
-  Expiration time (in milliseconds) for items on this queue. Any item that
-  has been sitting on the queue longer than this amount will be discarded.
-  Clients may also attach an expiration time when adding items to a queue,
-  but if the expiration time is longer than `max_age`, `max_age` will be
-  used instead.
 
 Performance
 -----------

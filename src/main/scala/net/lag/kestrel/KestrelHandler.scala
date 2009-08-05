@@ -130,6 +130,17 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
         writeResponse("Flushed all queues.\r\n")
       case "DUMP_CONFIG" =>
         dumpConfig()
+      case "DUMP_STATS" =>
+        dumpStats()
+      case "DELETE" =>
+        delete(request.line(1))
+      case "FLUSH_EXPIRED" =>
+        flushExpired(request.line(1))
+      case "FLUSH_ALL_EXPIRED" =>
+        val flushed = Kestrel.queues.queueNames.foldLeft(0) { (sum, qName) => sum + Kestrel.queues.flushExpired(qName) }
+        writeResponse("%d\r\n".format(flushed))
+      case "VERSION" =>
+        version()
     }
   }
 
@@ -263,6 +274,17 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
     writeResponse("END\r\n")
   }
 
+  private def delete(name: String) = {
+    log.debug("delete -> q=%s", name)
+    Kestrel.queues.delete(name)
+    writeResponse("END\r\n")
+  }
+
+  private def flushExpired(name: String) = {
+    log.debug("flush_expired -> q=%s", name)
+    writeResponse("%d\r\n".format(Kestrel.queues.flushExpired(name)))
+  }
+
   private def stats() = {
     var report = new mutable.ArrayBuffer[(String, String)]
     report += (("uptime", Kestrel.uptime.toString))
@@ -282,16 +304,7 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
     report += (("bytes_written", KestrelStats.bytesWritten.toString))
 
     for (qName <- Kestrel.queues.queueNames) {
-      val s = Kestrel.queues.stats(qName)
-      report += (("queue_" + qName + "_items", s.items.toString))
-      report += (("queue_" + qName + "_bytes", s.bytes.toString))
-      report += (("queue_" + qName + "_total_items", s.totalItems.toString))
-      report += (("queue_" + qName + "_logsize", s.journalSize.toString))
-      report += (("queue_" + qName + "_expired_items", s.totalExpired.toString))
-      report += (("queue_" + qName + "_mem_items", s.memoryItems.toString))
-      report += (("queue_" + qName + "_mem_bytes", s.memoryBytes.toString))
-      report += (("queue_" + qName + "_age", s.currentAge.toString))
-      report += (("queue_" + qName + "_discarded", s.totalDiscarded.toString))
+      report ++= Kestrel.queues.stats(qName).map { case (k, v) => ("queue_" + qName + "_" + k, v) }
     }
 
     val summary = {
@@ -308,6 +321,20 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
       dump += "}"
     }
     writeResponse(dump.mkString("", "\r\n", "\r\nEND\r\n"))
+  }
+
+  private def dumpStats() = {
+    val dump = new mutable.ListBuffer[String]
+    for (qName <- Kestrel.queues.queueNames) {
+      dump += "queue '" + qName + "' {"
+      dump += Kestrel.queues.stats(qName).map { case (k, v) => k + "=" + v }.mkString("  ", "\r\n  ", "")
+      dump += "}"
+    }
+    writeResponse(dump.mkString("", "\r\n", "\r\nEND\r\n"))
+  }
+  
+  private def version() = {
+    writeResponse("VERSION " + Kestrel.runtime.jarVersion + "\r\n")
   }
 
   private def shutdown() = {

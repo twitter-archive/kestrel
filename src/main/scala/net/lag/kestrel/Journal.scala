@@ -76,7 +76,7 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
 
   def roll(xid: Int, openItems: List[QItem], queue: Iterable[QItem]): Unit = {
     writer.close
-    val tmpFile = new File(queuePath + "." + Time.now)
+    val tmpFile = new File(queuePath + "~~" + Time.now)
     open(tmpFile)
     size = 0
     for (item <- openItems) {
@@ -110,8 +110,10 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
 
   def inReadBehind(): Boolean = reader.isDefined
 
+  def isReplaying(): Boolean = replayer.isDefined
+
   private def add(allowSync: Boolean, item: QItem): Unit = {
-    val blob = ByteBuffer.wrap(pack(item))
+    val blob = ByteBuffer.wrap(item.pack())
     size += write(false, CMD_ADDX.toByte, blob.limit)
     do {
       writer.write(blob)
@@ -124,10 +126,9 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
 
   // used only to list pending transactions when recreating the journal.
   private def addWithXid(item: QItem) = {
-    val blob = ByteBuffer.wrap(pack(item))
+    val blob = ByteBuffer.wrap(item.pack())
 
-    // this method is only called from roll(), so the journal does not
-    // need to be synced after a write.
+    // only called from roll(), so the journal does not need to be synced after a write.
     size += write(false, CMD_ADD_XID.toByte, item.xid, blob.limit)
     do {
       writer.write(blob)
@@ -146,8 +147,7 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
   def removeTentative(): Unit = removeTentative(true)
 
   private def saveXid(xid: Int) = {
-    // this method is only called from roll(), so the journal does not
-    // need to be synced after a write.
+    // only called from roll(), so the journal does not need to be synced after a write.
     size += write(false, CMD_SAVE_XID.toByte, xid)
   }
 
@@ -174,9 +174,9 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
         rj.close
         reader = None
       } else {
-        readJournalEntry(rj, false) match {
-          case JournalItem.Add(item) => f(item)
-          case _ =>
+        readJournalEntry(rj) match {
+          case (JournalItem.Add(item), _) => f(item)
+          case (_, _) =>
         }
       }
     }
@@ -189,9 +189,11 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
       replayer = Some(in)
       var done = false
       do {
-        readJournalEntry(in, true) match {
-          case JournalItem.EndOfFile => done = true
-          case x: JournalItem => f(x)
+        readJournalEntry(in) match {
+          case (JournalItem.EndOfFile, _) => done = true
+          case (x, itemsize) =>
+            size += itemsize
+            f(x)
         }
       } while (!done)
     } catch {
@@ -206,7 +208,7 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
     replayer = None
   }
 
-  private def readJournalEntry(in: FileChannel, replaying: Boolean): JournalItem = {
+  def readJournalEntry(in: FileChannel): (JournalItem, Int) = {
     byteBuffer.rewind
     byteBuffer.limit(1)
     var x: Int = 0
@@ -215,46 +217,62 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
     } while (byteBuffer.position < byteBuffer.limit && x >= 0)
 
     if (x < 0) {
-      JournalItem.EndOfFile
+      (JournalItem.EndOfFile, 0)
     } else {
       buffer(0) match {
         case CMD_ADD =>
           val data = readBlock(in)
-          if (replaying) size += 5 + data.length
-          JournalItem.Add(unpackOldAdd(data))
+          (JournalItem.Add(QItem.unpackOldAdd(data)), 5 + data.length)
         case CMD_REMOVE =>
-          if (replaying) size += 1
-          JournalItem.Remove
+          (JournalItem.Remove, 1)
         case CMD_ADDX =>
           val data = readBlock(in)
-          if (replaying) size += 5 + data.length
-          JournalItem.Add(unpack(data))
+          (JournalItem.Add(QItem.unpack(data)), 5 + data.length)
         case CMD_REMOVE_TENTATIVE =>
-          if (replaying) size += 1
-          JournalItem.RemoveTentative
+          (JournalItem.RemoveTentative, 1)
         case CMD_SAVE_XID =>
           val xid = readInt(in)
-          if (replaying) size += 5
-          JournalItem.SavedXid(xid)
+          (JournalItem.SavedXid(xid), 5)
         case CMD_UNREMOVE =>
           val xid = readInt(in)
-          if (replaying) size += 5
-          JournalItem.Unremove(xid)
+          (JournalItem.Unremove(xid), 5)
         case CMD_CONFIRM_REMOVE =>
           val xid = readInt(in)
-          if (replaying) size += 5
-          JournalItem.ConfirmRemove(xid)
+          (JournalItem.ConfirmRemove(xid), 5)
         case CMD_ADD_XID =>
           val xid = readInt(in)
           val data = readBlock(in)
-          val item = unpack(data)
+          val item = QItem.unpack(data)
           item.xid = xid
-          if (replaying) size += 9 + data.length
-          JournalItem.Add(item)
+          (JournalItem.Add(item), 9 + data.length)
         case n =>
           throw new IOException("invalid opcode in journal: " + n.toInt)
       }
     }
+  }
+
+  def walk() = new Iterator[(JournalItem, Int)] {
+    val in = new FileInputStream(queuePath).getChannel
+    var done = false
+    var nextItem: Option[(JournalItem, Int)] = None
+
+    def hasNext = {
+      if (done) {
+        false
+      } else {
+        nextItem = readJournalEntry(in) match {
+          case (JournalItem.EndOfFile, _) =>
+            done = true
+            in.close()
+            None
+          case x =>
+            Some(x)
+        }
+        nextItem.isDefined
+      }
+    }
+
+    def next() = nextItem.get
   }
 
   private def readBlock(in: FileChannel): Array[Byte] = {
@@ -299,34 +317,5 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
     }
     if (allowSync && syncJournal) writer.force(false)
     byteBuffer.limit
-  }
-
-  private def pack(item: QItem): Array[Byte] = {
-    val bytes = new Array[Byte](item.data.length + 16)
-    val buffer = ByteBuffer.wrap(bytes)
-    buffer.order(ByteOrder.LITTLE_ENDIAN)
-    buffer.putLong(item.addTime)
-    buffer.putLong(item.expiry)
-    buffer.put(item.data)
-    bytes
-  }
-
-  private def unpack(data: Array[Byte]): QItem = {
-    val buffer = ByteBuffer.wrap(data)
-    val bytes = new Array[Byte](data.length - 16)
-    buffer.order(ByteOrder.LITTLE_ENDIAN)
-    val addTime = buffer.getLong
-    val expiry = buffer.getLong
-    buffer.get(bytes)
-    return QItem(addTime, expiry, bytes, 0)
-  }
-
-  private def unpackOldAdd(data: Array[Byte]): QItem = {
-    val buffer = ByteBuffer.wrap(data)
-    val bytes = new Array[Byte](data.length - 4)
-    buffer.order(ByteOrder.LITTLE_ENDIAN)
-    val expiry = buffer.getInt
-    buffer.get(bytes)
-    return QItem(Time.now, if (expiry == 0) 0 else expiry * 1000, bytes, 0)
   }
 }

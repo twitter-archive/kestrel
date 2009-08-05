@@ -51,7 +51,7 @@ object QueueCollectionSpec extends Specification with TestHelper {
         sorted(qc.queueNames) mustEqual List("work1", "work2")
         qc.currentBytes mustEqual 16
         qc.currentItems mustEqual 2
-        qc.totalAdded mustEqual 2
+        qc.totalAdded() mustEqual 2
 
         new String(qc.receive("work1").get) mustEqual "stuff"
         qc.receive("work1") mustEqual None
@@ -60,7 +60,7 @@ object QueueCollectionSpec extends Specification with TestHelper {
 
         qc.currentBytes mustEqual 0
         qc.currentItems mustEqual 0
-        qc.totalAdded mustEqual 2
+        qc.totalAdded() mustEqual 2
       }
     }
 
@@ -89,25 +89,109 @@ object QueueCollectionSpec extends Specification with TestHelper {
         qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
         qc.add("ducklings", "ugly1".getBytes)
         qc.add("ducklings", "ugly2".getBytes)
-        qc.queueHits mustEqual 0
-        qc.queueMisses mustEqual 0
+        qc.queueHits() mustEqual 0
+        qc.queueMisses() mustEqual 0
 
         new String(qc.receive("ducklings").get) mustEqual "ugly1"
-        qc.queueHits mustEqual 1
-        qc.queueMisses mustEqual 0
+        qc.queueHits() mustEqual 1
+        qc.queueMisses() mustEqual 0
         qc.receive("zombie") mustEqual None
-        qc.queueHits mustEqual 1
-        qc.queueMisses mustEqual 1
+        qc.queueHits() mustEqual 1
+        qc.queueMisses() mustEqual 1
 
         new String(qc.receive("ducklings").get) mustEqual "ugly2"
-        qc.queueHits mustEqual 2
-        qc.queueMisses mustEqual 1
+        qc.queueHits() mustEqual 2
+        qc.queueMisses() mustEqual 1
         qc.receive("ducklings") mustEqual None
-        qc.queueHits mustEqual 2
-        qc.queueMisses mustEqual 2
+        qc.queueHits() mustEqual 2
+        qc.queueMisses() mustEqual 2
         qc.receive("ducklings") mustEqual None
-        qc.queueHits mustEqual 2
-        qc.queueMisses mustEqual 3
+        qc.queueHits() mustEqual 2
+        qc.queueMisses() mustEqual 3
+      }
+    }
+
+    "proactively load existing queue files" in {
+      withTempFolder {
+        new File(folderName + "/apples").createNewFile()
+        new File(folderName + "/oranges").createNewFile()
+        qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+        qc.loadQueues()
+        sorted(qc.queueNames) mustEqual List("apples", "oranges")
+      }
+    }
+
+    "ignore partially rolled queue files" in {
+      withTempFolder {
+        new File(folderName + "/apples").createNewFile()
+        new File(folderName + "/oranges").createNewFile()
+        new File(folderName + "/oranges~~900").createNewFile()
+        qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+        qc.loadQueues()
+        sorted(qc.queueNames) mustEqual List("apples", "oranges")
+      }
+    }
+
+    "delete a queue when asked" in {
+      withTempFolder {
+        new File(folderName + "/apples").createNewFile()
+        new File(folderName + "/oranges").createNewFile()
+        qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+        qc.loadQueues()
+        qc.delete("oranges")
+
+        sorted(new File(folderName).list().toList) mustEqual List("apples")
+        sorted(qc.queueNames) mustEqual List("apples")
+      }
+    }
+
+    "fanout queues" in {
+      "generate on the fly" in {
+        withTempFolder {
+          qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+          qc.add("jobs", "job1".getBytes)
+          qc.receive("jobs+client1") mustEqual None
+          qc.add("jobs", "job2".getBytes)
+
+          new String(qc.receive("jobs+client1").get) mustEqual "job2"
+          new String(qc.receive("jobs").get) mustEqual "job1"
+          new String(qc.receive("jobs").get) mustEqual "job2"
+        }
+      }
+
+      "preload existing" in {
+        withTempFolder {
+          new File(folderName + "/jobs").createNewFile()
+          new File(folderName + "/jobs+client1").createNewFile()
+          qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+          qc.loadQueues()
+          qc.add("jobs", "job1".getBytes)
+          new String(qc.receive("jobs+client1").get) mustEqual "job1"
+          qc.add("jobs", "job2".getBytes)
+
+          new String(qc.receive("jobs+client1").get) mustEqual "job2"
+          new String(qc.receive("jobs").get) mustEqual "job1"
+          new String(qc.receive("jobs").get) mustEqual "job2"
+        }
+      }
+
+      "delete on the fly" in {
+        withTempFolder {
+          new File(folderName + "/jobs").createNewFile()
+          new File(folderName + "/jobs+client1").createNewFile()
+          qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+          qc.loadQueues()
+          qc.add("jobs", "job1".getBytes)
+
+          qc.delete("jobs+client1")
+
+          sorted(new File(folderName).list().toList) mustEqual List("jobs")
+          new String(qc.receive("jobs").get) mustEqual "job1"
+
+          qc.add("jobs", "job2".getBytes)
+          sorted(new File(folderName).list().toList) mustEqual List("jobs")
+          new String(qc.receive("jobs").get) mustEqual "job2"
+        }
       }
     }
   }

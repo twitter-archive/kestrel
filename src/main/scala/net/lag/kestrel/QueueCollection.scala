@@ -40,27 +40,15 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
   }
 
   private val queues = new mutable.HashMap[String, PersistentQueue]
+  private val fanout_queues = new mutable.HashMap[String, mutable.HashSet[String]]
   private var shuttingDown = false
 
-  // total of all data in all queues
-  private var _currentBytes: Long = 0
-
-  // total of all items in all queues
-  private var _currentItems: Long = 0
-
   // total items added since the server started up.
-  private var _totalAdded: Long = 0
+  val totalAdded = new Counter()
 
   // hits/misses on removing items from the queue
-  private var _queueHits: Long = 0
-  private var _queueMisses: Long = 0
-
-  // reader accessors:
-  def currentBytes: Long = _currentBytes
-  def currentItems: Long = _currentItems
-  def totalAdded: Long = _totalAdded
-  def queueHits: Long = _queueHits
-  def queueMisses: Long = _queueMisses
+  val queueHits = new Counter()
+  val queueMisses = new Counter()
 
   queueConfigs.subscribe { c =>
     synchronized {
@@ -68,46 +56,41 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
     }
   }
 
+  // preload any queues
+  def loadQueues() {
+    path.list() filter { name => !(name contains "~~") } map { queue(_) }
+  }
 
   def queueNames: List[String] = synchronized {
     queues.keys.toList
   }
 
+  def currentItems = queues.values.foldLeft(0L) { _ + _.length }
+  def currentBytes = queues.values.foldLeft(0L) { _ + _.bytes }
+
   /**
    * Get a named queue, creating it if necessary.
    * Exposed only to unit tests.
    */
-  private[kestrel] def queue(name: String): Option[PersistentQueue] = {
-    var setup = false
-    var queue: Option[PersistentQueue] = None
-
-    synchronized {
-      if (shuttingDown) {
-        return None
-      }
-
-      queue = queues.get(name) match {
-        case q @ Some(_) => q
-        case None =>
-          setup = true
-          val q = new PersistentQueue(path.getPath, name, queueConfigs.configMap(name))
-          queues(name) = q
-          Some(q)
-      }
+  private[kestrel] def queue(name: String): Option[PersistentQueue] = synchronized {
+    if (shuttingDown) {
+      None
+    } else {
+      Some(queues.get(name) getOrElse {
+        // only happens when creating a queue for the first time.
+        val q = if (name contains '+') {
+          val master = name.split('+')(0)
+          fanout_queues.getOrElseUpdate(master, new mutable.HashSet[String]) += name
+          log.info("Fanout queue %s added to %s", name, master)
+          new PersistentQueue(path.getPath, name, queueConfigs.configMap(master))
+        } else {
+          new PersistentQueue(path.getPath, name, queueConfigs.configMap(name))
+        }
+        q.setup
+        queues(name) = q
+        q
+      })
     }
-
-    if (setup) {
-      /* race is handled by having PersistentQueue start up with an
-       * un-initialized flag that blocks all operations until this
-       * method is called and completed:
-       */
-      queue.get.setup
-      synchronized {
-        _currentBytes += queue.get.bytes
-        _currentItems += queue.get.length
-      }
-    }
-    queue
   }
 
   /**
@@ -118,6 +101,10 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
    *     down
    */
   def add(key: String, item: Array[Byte], expiry: Int): Boolean = {
+    for (fanouts <- fanout_queues.get(key); name <- fanouts) {
+      add(name, item, expiry)
+    }
+
     queue(key) match {
       case None => false
       case Some(q) =>
@@ -130,13 +117,7 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
           expiry * 1000
         }
         val result = q.add(item, normalizedExpiry)
-        if (result) {
-          synchronized {
-            _currentBytes += item.length
-            _currentItems += 1
-            _totalAdded += 1
-          }
-        }
+        if (result) totalAdded.incr()
         result
     }
   }
@@ -150,7 +131,7 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
   def remove(key: String, timeout: Int, transaction: Boolean, peek: Boolean)(f: Option[QItem] => Unit): Unit = {
     queue(key) match {
       case None =>
-        synchronized { _queueMisses += 1 }
+        queueMisses.incr
         f(None)
       case Some(q) =>
         if (peek) {
@@ -158,14 +139,10 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
         } else {
           q.removeReact(if (timeout == 0) timeout else Time.now + timeout, transaction) {
             case None =>
-              synchronized { _queueMisses += 1 }
+              queueMisses.incr
               f(None)
             case Some(item) =>
-              synchronized {
-                _queueHits += 1
-                _currentBytes -= item.data.length
-                _currentItems -= 1
-              }
+              queueHits.incr
               f(Some(item))
           }
         }
@@ -188,39 +165,44 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
     rv
   }
 
-  def unremove(key: String, xid: Int): Unit = {
-    queue(key) match {
-      case None =>
-      case Some(q) =>
-        q.unremove(xid)
+  def unremove(key: String, xid: Int) {
+    queue(key) map { q => q.unremove(xid) }
+  }
+
+  def confirmRemove(key: String, xid: Int) {
+    queue(key) map { q => q.confirmRemove(xid) }
+  }
+
+  def flush(key: String) {
+    queue(key) map { q => q.flush() }
+  }
+
+  def delete(name: String): Unit = synchronized {
+    if (!shuttingDown) {
+      queues.get(name) map { q =>
+        q.close()
+        q.destroyJournal()
+        queues.removeKey(name)
+      }
+      if (name contains '+') {
+        val master = name.split('+')(0)
+        fanout_queues.getOrElseUpdate(master, new mutable.HashSet[String]) -= name
+        log.info("Fanout queue %s dropped from %s", name, master)
+      }
     }
   }
 
-  def confirmRemove(key: String, xid: Int): Unit = {
-    queue(key) match {
-      case None =>
-      case Some(q) =>
-        q.confirmRemove(xid)
+  def flushExpired(name: String): Int = synchronized {
+    if (shuttingDown) {
+      0
+    } else {
+      queue(name) map { q => q.discardExpired() } getOrElse(0)
     }
   }
 
-  def flush(key: String): Unit = {
-    for (q <- queue(key)) {
-      q.flush
-    }
-  }
-
-  case class Stats(items: Long, bytes: Long, totalItems: Long, journalSize: Long,
-                   totalExpired: Long, currentAge: Long, memoryItems: Long, memoryBytes: Long,
-                   totalDiscarded: Long)
-
-  def stats(key: String): Stats = {
-    queue(key) match {
-      case None => Stats(0, 0, 0, 0, 0, 0, 0, 0, 0)
-      case Some(q) => Stats(q.length, q.bytes, q.totalItems, q.journalSize,
-                            q.totalExpired, q.currentAge, q.memoryLength, q.memoryBytes,
-                            q.totalDiscarded)
-    }
+  def stats(key: String): Array[(String, String)] = queue(key) match {
+    case None => Array[(String, String)]()
+    case Some(q) => q.dumpStats()
   }
 
   def dumpConfig(key: String): Array[String] = {

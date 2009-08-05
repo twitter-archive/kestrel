@@ -9,6 +9,8 @@
         <artifact pattern="${basedir}/libs/[artifact]-[revision].[ext]" />
       </filesystem>
 
+      <ibiblio name="testing.scala-tools.org" m2compatible="true" root="http://scala-tools.org/repo-releases/"/>
+
       <ibiblio name="scala-tools.org" m2compatible="true" root="http://scala-tools.org/repo-releases/"/>
       <ibiblio name="scala-tools.org-snapshots" m2compatible="true" root="http://scala-tools.org/repo-snapshots/"
                changingPattern=".*-SNAPSHOT"/>
