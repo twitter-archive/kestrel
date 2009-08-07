@@ -202,7 +202,9 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
 
   def stats(key: String): Array[(String, String)] = queue(key) match {
     case None => Array[(String, String)]()
-    case Some(q) => q.dumpStats()
+    case Some(q) =>
+      q.dumpStats() ++
+        fanout_queues.get(key).map { qset => ("children", qset.mkString(",")) }.toList.toArray
   }
 
   def dumpConfig(key: String): Array[String] = {
