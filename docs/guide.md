@@ -1,6 +1,6 @@
 
-An operational guide to kestrel
-===============================
+A working guide to kestrel
+==========================
 
 Kestrel is a very simple message queue that runs on the JVM and uses the
 memcache protocol (with some extensions) to talk to clients.

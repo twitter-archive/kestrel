@@ -332,7 +332,7 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
     }
     writeResponse(dump.mkString("", "\r\n", "\r\nEND\r\n"))
   }
-  
+
   private def version() = {
     writeResponse("VERSION " + Kestrel.runtime.jarVersion + "\r\n")
   }
