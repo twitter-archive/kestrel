@@ -386,7 +386,7 @@ class PersistentQueue(persistencePath: String, val name: String,
   /**
    * Close the queue's journal file. Not safe to call on an active queue.
    */
-  def close() = synchronized {
+  def close(): Unit = synchronized {
     closed = true
     if (keepJournal()) journal.close()
     for (w <- waiters) {

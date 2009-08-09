@@ -191,36 +191,36 @@ Memcache commands
   and it's full.
 
 - `GET <queue-name>`
-  
+
   Remove an item from a queue. It will return an empty response immediately if
   the queue is empty. The queue name may be followed by options separated
   by `/`:
-  
-  - `/t=<milliseconds>`
-    
-    Wait up to a given time limit for a new item to arrive. If an item arrives
-    on the queue within this timeout, it's returned as normal. Otherwise,
-    after that timeout, an empty response is returned.
-  
-  - `/open`
 
-    Tentatively remove an item from the queue. The item is returned as usual
-    but is also set aside in case the client disappears before sending a
-    "close" request. (See "Reliable Reads" below.)
+    - `/t=<milliseconds>`
 
-  - `/close`
+      Wait up to a given time limit for a new item to arrive. If an item arrives
+      on the queue within this timeout, it's returned as normal. Otherwise,
+      after that timeout, an empty response is returned.
 
-    Close any existing open read. (See "Reliable Reads" below.)
+    - `/open`
 
-  - `/abort`
+      Tentatively remove an item from the queue. The item is returned as usual
+      but is also set aside in case the client disappears before sending a
+      "close" request. (See "Reliable Reads" below.)
 
-    Cancel any existing open read, returing that item to the head of the
-    queue. It will be the next item fetched. (See "Reliable Reads" below.)
+    - `/close`
 
-  - `/peek`
+      Close any existing open read. (See "Reliable Reads" below.)
 
-    Return the first available item from the queue, if there is one, but don't
-    remove it. You can't combine this with any of the reliable read options.
+    - `/abort`
+
+      Cancel any existing open read, returing that item to the head of the
+      queue. It will be the next item fetched. (See "Reliable Reads" below.)
+
+    - `/peek`
+
+      Return the first available item from the queue, if there is one, but don't
+      remove it. You can't combine this with any of the reliable read options.
 
 - `DELETE <queue-name>`
 
@@ -257,20 +257,20 @@ Memcache commands
   Dump a list of each queue currently known to the server, and list the config
   values for each queue. The format is:
 
-    queue 'master' {
-      max_items=2147483647
-      max_size=9223372036854775807
-      max_age=0
-      max_journal_size=16277216
-      max_memory_size=134217728
-      max_journal_overflow=10
-      max_journal_size_absolute=9223372036854775807
-      discard_old_when_full=false
-      journal=true
-      sync_journal=false
-    }
+        queue 'master' {
+          max_items=2147483647
+          max_size=9223372036854775807
+          max_age=0
+          max_journal_size=16277216
+          max_memory_size=134217728
+          max_journal_overflow=10
+          max_journal_size_absolute=9223372036854775807
+          discard_old_when_full=false
+          journal=true
+          sync_journal=false
+        }
 
-  The last queue will be followed by `END` on a line by itself.  
+  The last queue will be followed by `END` on a line by itself.
 
 - `STATS`
 
@@ -316,13 +316,120 @@ done only once (except wasting some resources).
 Server stats
 ------------
 
+Global stats reported by kestrel are:
+
+- `uptime` - seconds the server has been online
+- `time` - current time in unix epoch
+- `version` - version string, like "1.2"
+- `curr_items` - total of items waiting in all queues
+- `total_itmes` - total of items that have ever been added in this server's
+  lifetime
+- `bytes` - total byte size of items waiting in all queues
+- `curr_connections` - current open connections from clients
+- `total_connections` - total connections that have been opened in this
+  server's lifetime
+- `cmd_get` - total `GET` requests
+- `cmd_set` - total `SET` requests
+- `cmd_peek` - total `GET/peek` requests
+- `get_hits` - total `GET` requests that received an item
+- `get_misses` - total `GET` requests on an empty queue
+- `bytes_read` - total bytes read from clients
+- `bytes_written` - total bytes written to clients
+
+For each queue, the following stats are also reported:
+
+- `items` - items waiting in this queue
+- `bytes` - total byte size of items waiting in this queue
+- `total_items` - total items that have been added to this queue in this
+  server's lifetime
+- `logsize` - byte size of the queue's journal file
+- `expired_items` - total items that have been expired from this queue in this
+  server's lifetime
+- `mem_items` - items in this queue that are currently in memory
+- `mem_bytes` - total byte size of items in this queue that are currently in
+  memory (will always be less than or equal to `max_memory_size` config for
+  the queue)
+- `age` - time, in milliseconds, that the last item to be fetched from this
+  queue had been waiting; that is, the time between `SET` and `GET`; if the
+  queue is empty, this will always be zero
+- `discarded` - number of items discarded because the queue was too full
+- `waiters` - number of clients waiting for an item from this queue (using
+  `GET/t`)
 
 
+Kestrel as a library
+--------------------
 
+You can use kestrel as a library by just sticking the jar on your classpath.
+It's a cheap way to get a durable work queue for inter-process or inter-thread
+communication. Each queue is represented by a `PersistentQueue` object:
 
--- what's in stats? "STATS"
+    class PersistentQueue(persistencePath: String, val name: String, val config: ConfigMap)
 
--- API for diet kestrel
-   - blog post
-   
+and must be initialized before using:
 
+    def setup(): Unit
+
+specifying the path for the journal files (if the queue will be journaled),
+the name of the queue, and a configgy `ConfigMap` block with any special
+configuration. (See "Configuration" above.)
+
+To add an item to a queue:
+
+    def add(value: Array[Byte], expiry: Long): Boolean
+
+It will return `false` if the item was rejected because the queue was full.
+
+Queue items are represented by a case class:
+
+    case class QItem(addTime: Long, expiry: Long, data: Array[Byte], var xid: Int)
+
+and several operations exist to remove or peek at the head item:
+
+    def peek(): Option[QItem]
+    def remove(): Option[QItem]
+
+To open a reliable read, set `transaction` true, and later confirm or unremove
+the item by its `xid`:
+
+    def remove(transaction: Boolean): Option[QItem]
+    def unremove(xid: Int)
+    def confirmRemove(xid: Int)
+
+You can also asynchronously remove or peek at items using actors, as either
+a `receive` or `react` callback:
+
+    def removeReact(timeoutAbsolute: Long, transaction: Boolean)(f: Option[QItem] => Unit): Unit
+    def removeReceive(timeoutAbsolute: Long, transaction: Boolean): Option[QItem]
+    def peekReact(timeoutAbsolute: Long)(f: Option[QItem] => Unit): Unit
+    def peekReceive(timeoutAbsolute: Long): Option[QItem]
+
+When done, you should close the queue:
+
+    def close(): Unit
+    def isClosed: Boolean
+
+Here's a short example:
+
+    var queue = new PersistentQueue("/var/spool/kestrel", "work", config)
+    queue.setup()
+
+    // add an item with no expiration:
+    queue.add("hello".getBytes, 0)
+
+    // start to remove it, then back out:
+    val item = queue.remove(true)
+    queue.unremove(item.xid)
+
+    // remove an item with a 500msec timeout, and confirm it:
+    queue.removeReact(System.currentTimeMillis + 500, true) { x =>
+      x match {
+        case None =>
+          println("nothing. :(")
+        case Some(item) =>
+          println("got: " + new String(item.data))
+          queue.confirmRemove(item.xid)
+      }
+    }
+
+    queue.close()
