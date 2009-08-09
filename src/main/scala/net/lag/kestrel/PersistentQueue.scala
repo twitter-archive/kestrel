@@ -108,6 +108,9 @@ class PersistentQueue(persistencePath: String, val name: String,
   // whether to sync the journal after each transaction
   val syncJournal = overlay(PersistentQueue.syncJournal)
 
+  // move
+  val expiredQueue = overlay(PersistentQueue.expiredQueue)
+
   // clients waiting on an item in this queue
   private val waiters = new mutable.ArrayBuffer[Waiter]
 
@@ -150,6 +153,7 @@ class PersistentQueue(persistencePath: String, val name: String,
     discardOldWhenFull set config.getBool("discard_old_when_full")
     keepJournal set config.getBool("journal")
     syncJournal set config.getBool("sync_journal")
+    expiredQueue set config.getString("move_expired_to").map { qname => Kestrel.queues.queue(qname) }
     log.info("Configuring queue %s: journal=%s, max_items=%d, max_size=%d, max_age=%d, max_journal_size=%d, " +
              "max_memory_size=%d, max_journal_overflow=%d, max_journal_size_absolute=%d, " +
              "discard_old_when_full=%s, sync_journal=%s",
@@ -169,7 +173,8 @@ class PersistentQueue(persistencePath: String, val name: String,
       "max_journal_size_absolute=" + maxJournalSizeAbsolute(),
       "discard_old_when_full=" + discardOldWhenFull(),
       "journal=" + keepJournal(),
-      "sync_journal=" + syncJournal()
+      "sync_journal=" + syncJournal(),
+      "move_expired_to" + expiredQueue().map { _.name }.getOrElse("(none)")
     )
   }
 
@@ -474,6 +479,7 @@ class PersistentQueue(persistencePath: String, val name: String,
   //  -----  internal implementations
 
   private def _add(item: QItem): Unit = {
+    discardExpired
     if (!journal.inReadBehind) {
       queue += item
       _memoryBytes += item.data.length
@@ -481,7 +487,6 @@ class PersistentQueue(persistencePath: String, val name: String,
     _totalItems += 1
     queueSize += item.data.length
     queueLength += 1
-    discardExpired
   }
 
   private def _peek(): Option[QItem] = {
@@ -517,12 +522,14 @@ class PersistentQueue(persistencePath: String, val name: String,
       val realExpiry = adjustExpiry(queue.front.addTime, queue.front.expiry)
       if ((realExpiry != 0) && (realExpiry < Time.now)) {
         _totalExpired += 1
-        val len = queue.dequeue.data.length
+        val item = queue.dequeue
+        val len = item.data.length
         queueSize -= len
         _memoryBytes -= len
         queueLength -= 1
         fillReadBehind
         if (keepJournal()) journal.remove()
+        expiredQueue().map { _.add(item.data, 0) }
         1 + discardExpired()
       } else {
         0
@@ -553,4 +560,5 @@ object PersistentQueue {
   @volatile var discardOldWhenFull: Boolean = false
   @volatile var keepJournal: Boolean = true
   @volatile var syncJournal: Boolean = false
+  @volatile var expiredQueue: Option[PersistentQueue] = None
 }

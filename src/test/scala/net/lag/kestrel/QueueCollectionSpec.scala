@@ -194,5 +194,26 @@ object QueueCollectionSpec extends Specification with TestHelper {
         }
       }
     }
+
+    "move expired items from one queue to another" in {
+      withTempFolder {
+        new File(folderName + "/jobs").createNewFile()
+        new File(folderName + "/expired").createNewFile()
+        qc = new QueueCollection(folderName, Config.fromMap(Map("jobs.move_expired_to" -> "expired")))
+        Kestrel.queues = qc
+        qc.loadQueues()
+        qc.add("jobs", "hello".getBytes, 1)
+        qc.queue("jobs").get.length mustEqual 1
+        qc.queue("expired").get.length mustEqual 0
+
+        Time.advance(1000)
+        qc.queue("jobs").get.length mustEqual 1
+        qc.queue("expired").get.length mustEqual 0
+        qc.receive("jobs") mustEqual None
+        qc.queue("jobs").get.length mustEqual 0
+        qc.queue("expired").get.length mustEqual 1
+        new String(qc.receive("expired").get) mustEqual "hello"
+      }
+    }
   }
 }
