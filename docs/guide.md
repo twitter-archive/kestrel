@@ -15,7 +15,11 @@ Generally queue names should be limited to alphanumerics `[A-Za-z0-9]`, dash
 (`-`) and underline (`_`). In practice, kestrel doesn't enforce any
 restrictions other than the name can't contain slash (`/`) because that can't
 be used in filenames, squiggle (`~`) because it's used for temporary files,
-and dot (`.`) because it's reserved for future use.
+plus (`+`) because it's used for fanout queues, and dot (`.`) because it's
+reserved for future use. Queue names are case-sensitive, but if you're running
+kestrel on OS X or Windows, you will want to refrain from taking advantage of
+this, since the journal filenames on those two platforms are *not*
+case-sensitive.
 
 A cluster of kestrel servers is like a memcache cluster: the servers don't
 know about each other, and don't do any cross-communication, so you can add as
@@ -190,7 +194,7 @@ Memcache commands
   Add an item to a queue. It may fail if the queue has a size or item limit
   and it's full.
 
-- `GET <queue-name>`
+- `GET <queue-name>[options]`
 
   Remove an item from a queue. It will return an empty response immediately if
   the queue is empty. The queue name may be followed by options separated
@@ -221,6 +225,14 @@ Memcache commands
 
       Return the first available item from the queue, if there is one, but don't
       remove it. You can't combine this with any of the reliable read options.
+
+  For example, to open a new read, waiting up to 250msec for an item:
+
+        GET work/t=500/open
+
+  Or to close an existing read and open a new one:
+
+        GET work/close/open
 
 - `DELETE <queue-name>`
 
@@ -293,7 +305,8 @@ happens in two stages, using the `/open` and `/close` options to `GET`.
 When `/open` is used, and an item is available, kestrel will remove it from
 the queue and send it to the client as usual. But it will also set the item
 aside. If a client disconnects while it has an open read, the item is put back
-into the queue, at the head, so it will be the next item fetched.
+into the queue, at the head, so it will be the next item fetched. Only one
+item can be "open" per client connection.
 
 A previous open request is closed with `/close`. The server will reject any
 attempt to open another read when one is already open, but it will ignore
@@ -312,6 +325,13 @@ To use this tactic successfully, work items should be idempotent, meaning the
 work could be done 2 or 3 times and have the same effect as if it had been
 done only once (except wasting some resources).
 
+Example:
+
+    GET dirty_jobs/close/open
+    (receives job 1)
+    GET dirty_jobs/close/open
+    (closes job 1, receives job 2)
+    ...etc...
 
 Server stats
 ------------

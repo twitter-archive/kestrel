@@ -108,7 +108,7 @@ class PersistentQueue(persistencePath: String, val name: String,
   // whether to sync the journal after each transaction
   val syncJournal = overlay(PersistentQueue.syncJournal)
 
-  // move
+  // (optional) move expired items over to this queue
   val expiredQueue = overlay(PersistentQueue.expiredQueue)
 
   // clients waiting on an item in this queue
