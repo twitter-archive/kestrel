@@ -38,7 +38,7 @@ Kestrel is:
   
 - small
 
-  Currently about 1.5K lines of scala (including comments), because it relies
+  Currently about 2K lines of scala (including comments), because it relies
   on Apache Mina (a rough equivalent of Danger's ziggurat or Ruby's
   EventMachine) and actors -- and frankly because Scala is extremely
   expressive.
