@@ -184,6 +184,8 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
 
   def replay(name: String)(f: JournalItem => Unit): Unit = {
     size = 0
+    var lastUpdate = 0L
+    val TEN_MB = 10L * 1024 * 1024
     try {
       val in = new FileInputStream(queueFile).getChannel
       replayer = Some(in)
@@ -194,6 +196,10 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
           case (x, itemsize) =>
             size += itemsize
             f(x)
+            if (size / TEN_MB > lastUpdate) {
+              lastUpdate = size / TEN_MB
+              log.info("Continuing to read '%s' journal; %d MB so far...", name, lastUpdate * 10)
+            }
         }
       } while (!done)
     } catch {
@@ -246,7 +252,7 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
           item.xid = xid
           (JournalItem.Add(item), 9 + data.length)
         case n =>
-          throw new IOException("invalid opcode in journal: " + n.toInt)
+          throw new IOException("invalid opcode in journal: " + n.toInt + " at position " + in.position)
       }
     }
   }
