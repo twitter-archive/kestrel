@@ -30,10 +30,9 @@ function find_java() {
   if [ ! -z "$JAVA_HOME" ]; then
     return
   fi
-  potential=$(ls -r1d /opt/jdk /System/Library/Frameworks/JavaVM.framework/Versions/CurrentJDK/Home /usr/java/default /usr/java/j* 2>/dev/null)
-  for p in $potential; do
-    if [ -x $p/bin/java ]; then
-      JAVA_HOME=$p
+  for dir in /opt/jdk /System/Library/Frameworks/JavaVM.framework/Versions/CurrentJDK/Home /usr/java/default; do
+    if [ -x $dir/bin/java ]; then
+      JAVA_HOME=$dir
       break
     fi
   done
