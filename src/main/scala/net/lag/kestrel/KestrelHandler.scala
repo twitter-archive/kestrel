@@ -184,8 +184,8 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
       } else {
         if (closing) {
           if (!closeTransaction(key)) {
-            log.warning("Attempt to close a non-existent transaction on '%s' (sid %d, %s:%d)",
-                        key, sessionID, remoteAddress.getHostName, remoteAddress.getPort)
+            log.debug("Attempt to close a non-existent transaction on '%s' (sid %d, %s:%d)",
+                      key, sessionID, remoteAddress.getHostName, remoteAddress.getPort)
             // let the client continue. it may be optimistically closing previous transactions as
             // it randomly jumps servers.
           }
