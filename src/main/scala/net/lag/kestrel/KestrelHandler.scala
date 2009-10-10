@@ -137,7 +137,7 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
       case "FLUSH_EXPIRED" =>
         flushExpired(request.line(1))
       case "FLUSH_ALL_EXPIRED" =>
-        val flushed = Kestrel.queues.queueNames.foldLeft(0) { (sum, qName) => sum + Kestrel.queues.flushExpired(qName) }
+        val flushed = Kestrel.queues.flushAllExpired()
         writeResponse("%d\r\n".format(flushed))
       case "VERSION" =>
         version()

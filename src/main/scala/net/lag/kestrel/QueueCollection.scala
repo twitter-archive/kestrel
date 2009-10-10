@@ -200,6 +200,10 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
     }
   }
 
+  def flushAllExpired(): Int = synchronized {
+    queueNames.foldLeft(0) { (sum, qName) => sum + flushExpired(qName) }
+  }
+
   def stats(key: String): Array[(String, String)] = queue(key) match {
     case None => Array[(String, String)]()
     case Some(q) =>
