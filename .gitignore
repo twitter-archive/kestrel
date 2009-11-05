@@ -5,3 +5,4 @@ dist
 bin
 .manager
 .DS_Store
+*.sw?
