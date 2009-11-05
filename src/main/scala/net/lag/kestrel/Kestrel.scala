@@ -101,8 +101,10 @@ object Kestrel {
     acceptor.setBacklog(1000)
     acceptor.setReuseAddress(true)
     acceptor.getSessionConfig.setTcpNoDelay(true)
-    acceptor.getFilterChain.addLast("codec", new ProtocolCodecFilter(memcache.Codec.encoder,
-      memcache.Codec.decoder))
+    val protocolCodec = config.getString("protocol", "ascii")
+    acceptor.getFilterChain.addLast("codec", new ProtocolCodecFilter(
+      memcache.Codec.encoderFor(protocolCodec),
+      memcache.Codec.decoderFor(protocolCodec)))
     acceptor.setHandler(new IoHandlerActorAdapter(session => new KestrelHandler(session, config)))
     acceptor.bind(new InetSocketAddress(listenAddress, listenPort))
 

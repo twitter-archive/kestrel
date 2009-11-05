@@ -17,13 +17,9 @@
 
 package net.lag.kestrel.memcache
 
-import scala.collection.mutable
 import org.apache.mina.core.buffer.IoBuffer
-import org.apache.mina.core.session.{IdleStatus, IoSession}
-import org.apache.mina.filter.codec._
 import net.lag.extensions._
-import net.lag.naggati.{Decoder, End, ProtocolError, Step}
-import net.lag.naggati.Steps._
+import net.lag.naggati.ProtocolError
 
 
 case class Request(line: List[String], data: Option[Array[Byte]]) {
@@ -37,51 +33,24 @@ case class Request(line: List[String], data: Option[Array[Byte]]) {
 
 case class Response(data: IoBuffer)
 
-
 object Codec {
-  private val KNOWN_COMMANDS = List("GET", "SET", "STATS", "SHUTDOWN", "RELOAD", "FLUSH", "FLUSH_ALL",
-    "DUMP_CONFIG", "DUMP_STATS", "DELETE", "FLUSH_EXPIRED", "FLUSH_ALL_EXPIRED", "VERSION")
-  private val DATA_COMMANDS = List("SET")
-
-  val encoder = new ProtocolEncoder {
-    def encode(session: IoSession, message: AnyRef, out: ProtocolEncoderOutput) = {
-      val buffer = message.asInstanceOf[Response].data
-      KestrelStats.bytesWritten.incr(buffer.remaining)
-      out.write(buffer)
-    }
-
-    def dispose(session: IoSession): Unit = {
-      // nothing.
+  def encoderFor(protocol: String) = {
+    protocol match {
+      case "ascii" => memcache.ASCIICodec.encoder
+      case "binary" => memcache.BinaryCodec.encoder
+      case _ => throw new ProtocolError("Invalid protocol: " + protocol)
     }
   }
 
-  val decoder = new Decoder(readLine(true, "ISO-8859-1") { line =>
-    KestrelStats.bytesRead.incr(line.length + 1)
-    val segments = line.split(" ")
-    segments(0) = segments(0).toUpperCase
-
-    val command = segments(0)
-    if (! KNOWN_COMMANDS.contains(command)) {
-      throw new ProtocolError("Invalid command: " + command)
+  def decoderFor(protocol: String) = {
+    protocol match {
+      case "ascii" => memcache.ASCIICodec.decoder
+      case "binary" => memcache.BinaryCodec.decoder
+      case _ => throw new ProtocolError("Invalid protocol: " + protocol)
     }
+  }
+}
 
-    if (DATA_COMMANDS.contains(command)) {
-      if (segments.length < 5) {
-        throw new ProtocolError("Malformed request line")
-      }
-      val dataBytes = segments(4).toInt
-      readBytes(dataBytes + 2) {
-        KestrelStats.bytesRead.incr(dataBytes + 2)
-        // final 2 bytes are just "\r\n" mandated by protocol.
-        val bytes = new Array[Byte](dataBytes)
-        state.buffer.get(bytes)
-        state.buffer.position(state.buffer.position + 2)
-        state.out.write(Request(segments.toList, Some(bytes)))
-        End
-      }
-    } else {
-      state.out.write(Request(segments.toList, None))
-      End
-    }
-  })
+class Codec {
+  // See ASCII and Binary for their respective implementations
 }
