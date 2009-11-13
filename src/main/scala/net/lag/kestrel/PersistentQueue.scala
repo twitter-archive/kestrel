@@ -122,7 +122,7 @@ class PersistentQueue(persistencePath: String, val name: String,
   def openTransactionCount = openTransactions.size
   def openTransactionIds = openTransactions.keys.toList.sort(_ - _ > 0)
 
-  def length: Long = synchronized { queueLength + openTransactionCount }
+  def length: Long = synchronized { queueLength }
   def totalItems: Long = synchronized { _totalItems }
   def bytes: Long = synchronized { queueSize }
   def journalSize: Long = synchronized { journal.size }
@@ -189,7 +189,8 @@ class PersistentQueue(persistencePath: String, val name: String,
       ("mem_bytes", memoryBytes.toString),
       ("age", currentAge.toString),
       ("discarded", totalDiscarded.toString),
-      ("waiters", waiterCount.toString)
+      ("waiters", waiterCount.toString),
+      ("open_transactions", openTransactionCount.toString)
     )
   }
 
