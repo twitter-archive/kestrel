@@ -267,10 +267,9 @@ class PersistentQueue(persistencePath: String, val name: String,
         if (keepJournal()) {
           if (transaction) journal.removeTentative() else journal.remove()
 
-          if ((queueLength == 0) && (journal.size >= maxJournalSize()) &&
-              (openTransactions.size == 0)) {
+          if ((queueLength == 0) && (journal.size >= maxJournalSize())) {
             log.info("Rolling journal file for '%s'", name)
-            journal.roll(xidCounter, Nil, Nil)
+            journal.roll(xidCounter, openTransactionIds map { openTransactions(_) }, Nil)
           }
         }
         item
