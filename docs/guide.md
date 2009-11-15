@@ -375,6 +375,7 @@ For each queue, the following stats are also reported:
 - `discarded` - number of items discarded because the queue was too full
 - `waiters` - number of clients waiting for an item from this queue (using
   `GET/t`)
+- `open_transactions` - items read with `/open` but not yet confirmed
 
 
 Kestrel as a library
