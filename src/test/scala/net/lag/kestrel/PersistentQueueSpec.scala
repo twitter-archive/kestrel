@@ -582,7 +582,7 @@ object PersistentQueueSpec extends Specification with TestHelper {
   "PersistentQueue with no journal" should {
     "create no journal" in {
       withTempFolder {
-        val q = makeQueue("mem", "journal" -> "off")
+        val q = makeQueue("mem", "journal" -> "false")
         q.setup
 
         q.add("coffee".getBytes)
@@ -593,12 +593,12 @@ object PersistentQueueSpec extends Specification with TestHelper {
 
     "lose all data after being destroyed" in {
       withTempFolder {
-        val q = makeQueue("mem", "journal" -> "off")
+        val q = makeQueue("mem", "journal" -> "false")
         q.setup
         q.add("coffee".getBytes)
         q.close
 
-        val q2 = makeQueue("mem", "journal" -> "off")
+        val q2 = makeQueue("mem", "journal" -> "false")
         q2.setup
         q2.remove mustEqual None
       }
