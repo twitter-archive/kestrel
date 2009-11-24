@@ -226,7 +226,7 @@ Memcache commands
       Return the first available item from the queue, if there is one, but don't
       remove it. You can't combine this with any of the reliable read options.
 
-  For example, to open a new read, waiting up to 250msec for an item:
+  For example, to open a new read, waiting up to 500msec for an item:
 
         GET work/t=500/open
 
