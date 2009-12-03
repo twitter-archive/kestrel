@@ -203,13 +203,11 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
               }
           }
         } while (!done)
-      }
-      catch {
+      } catch {
         case e: BrokenItemException =>
           log.error(e, "Exception replaying journal for '%s'", name)
-          log.error("DATA MAY HAVE BEEN LOST!")
-          log.error("LAST ENTRY WILL BE REMOVED!")
-          truncateJournal(e.lastValisPosition)
+          log.error("DATA MAY HAVE BEEN LOST! Truncated entry will be deleted.")
+          truncateJournal(e.lastValidPosition)
       }
     } catch {
       case e: FileNotFoundException =>
@@ -223,13 +221,13 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
     replayer = None
   }
 
-  private def truncateJournal(position: Long){
+  private def truncateJournal(position: Long) {
     val trancateWriter = new FileOutputStream(queueFile, true).getChannel
     try {
       trancateWriter.truncate(position)
+    } finally {
+      trancateWriter.close()
     }
-    finally
-      trancateWriter.close();
   }
 
   def readJournalEntry(in: FileChannel): (JournalItem, Int) = {
@@ -272,11 +270,11 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
             item.xid = xid
             (JournalItem.Add(item), 9 + data.length)
           case n =>
-            throw BrokenItemException(lastPosition, new IOException("invalid opcode in journal: " + n.toInt + " at position " + in.position))
+            throw new BrokenItemException(lastPosition, new IOException("invalid opcode in journal: " + n.toInt + " at position " + in.position))
         }
-      }
-      catch {
-        case ex: IOException => throw BrokenItemException(lastPosition, ex)
+      } catch {
+        case ex: IOException =>
+          throw new BrokenItemException(lastPosition, ex)
       }
     }
   }
