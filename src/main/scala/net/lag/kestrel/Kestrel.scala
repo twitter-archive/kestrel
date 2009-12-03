@@ -82,7 +82,16 @@ object Kestrel {
 
   def startup(config: Config): Unit = {
     // this one is used by the actor initialization, so can only be set at startup.
-    val maxThreads = config.getInt("max_threads", Runtime.getRuntime().availableProcessors * 2)
+    var maxThreads = config.getInt("max_threads", Runtime.getRuntime().availableProcessors * 2)
+
+    // If we don't set this to atleast 4, we get an IllegalArgumentException 
+    // when constructing the ThreadPoolExecutor from inside
+    // FJTaskScheduler2.scala
+    // This is due to minNumThreads = 4 in FJTaskScheduler2.scala
+    // and maxThreads is set to 2 above, when running on a uni-processor box
+    if (maxThreads < 4)
+       maxThreads = 4
+
     System.setProperty("actors.maxPoolSize", maxThreads.toString)
     log.debug("max_threads=%d", maxThreads)
 
