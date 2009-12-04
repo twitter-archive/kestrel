@@ -37,7 +37,9 @@ object QueueCollectionSpec extends Specification with TestHelper {
   "QueueCollection" should {
 
     doAfter {
-      qc.shutdown
+      if (qc ne null) {
+        qc.shutdown
+      }
     }
 
     "create a queue" in {

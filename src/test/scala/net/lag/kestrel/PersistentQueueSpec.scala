@@ -208,25 +208,6 @@ object PersistentQueueSpec extends Specification with TestHelper {
       }
     }
 
-    "walk a journal" in {
-      withTempFolder {
-        val q = makeQueue("walking")
-        q.setup
-
-        q.add(new Array[Byte](32))
-        q.add(new Array[Byte](64))
-        q.add(new Array[Byte](10))
-
-        val j = new Journal(folderName + "/walking", false)
-        j.walk().map {
-          case (item, itemsize) => item match {
-            case JournalItem.Add(qitem) => qitem.data.size.toString
-            case x => ""
-          }
-        }.mkString(",") mustEqual "32,64,10"
-      }
-    }
-
     "recover the journal after a restart" in {
       withTempFolder {
         val q = makeQueue("rolling")
