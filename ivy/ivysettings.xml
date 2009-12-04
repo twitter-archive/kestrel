@@ -23,6 +23,7 @@
       <ibiblio name="maven2" m2compatible="true" usepoms="false"/>
 
       <ibiblio name="lag.net" m2compatible="true" root="http://www.lag.net/repo/" />
+      <ibiblio name="com.twitter" m2compatible="true" root="http://www.lag.net/nest/" />
     </chain>
     <filesystem name="local" m2compatible="true" transactional="false">
       <artifact pattern="${basedir}/dist/repo/[organisation]/[module]/[revision]/[artifact]-[revision].[ext]" />
