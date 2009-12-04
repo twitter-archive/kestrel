@@ -17,6 +17,7 @@
 
 package net.lag.kestrel
 
+import _root_.java.io._
 import _root_.org.specs.Specification
 
 
@@ -38,6 +39,22 @@ object JournalSpec extends Specification with TestHelper {
             case x => ""
           }
         }.mkString(",") mustEqual "32,64,10"
+      }
+    }
+
+    "recover from corruption" in {
+      withTempFolder {
+        val journal = new Journal(folderName + "/a1", false)
+        journal.open()
+        journal.add(QItem(0, 0, new Array[Byte](32), 0))
+        journal.close()
+
+        val f = new FileOutputStream(folderName + "/a1", true)
+        f.write(127)
+        f.close()
+
+        val journal2 = new Journal(folderName + "/a1", false)
+        journal2.walk().map { case (item, itemsize) => item.toString }.mkString(",") must throwA[BrokenItemException]
       }
     }
   }

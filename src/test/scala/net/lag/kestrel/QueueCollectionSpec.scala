@@ -35,7 +35,6 @@ object QueueCollectionSpec extends Specification with TestHelper {
 
 
   "QueueCollection" should {
-
     doAfter {
       if (qc ne null) {
         qc.shutdown
