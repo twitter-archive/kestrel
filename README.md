@@ -2,29 +2,22 @@
 Kestrel
 =======
 
-Kestrel is a port of Blaine Cook's "starling" message queue
-system from ruby to scala: <http://rubyforge.org/projects/starling/>
+Kestrel is based on Blaine Cook's "starling" simple, distributed message
+queue, with added features and bulletproofing, as well as the scalability
+offered by actors and the JVM.
 
-In Blaine's words:
-
-> Starling is a powerful but simple messaging server that enables reliable 
-> distributed queuing with an absolutely minimal overhead. It speaks the
-> MemCache protocol for maximum cross-platform compatibility. Any language
-> that speaks MemCache can take advantage of Starling's queue facilities.
-
-The concept of starling is to have a single server handle reliable, ordered
-message queues. When you put a cluster of these servers together,
-*with no cross communication*, and pick a server at random whenever you do a
-`set` or `get`, you end up with a reliable, *loosely ordered* message queue.
+Each server handles a set reliable, ordered message queues. When you put a
+cluster of these servers together, *with no cross communication*, and pick a
+server at random whenever you do a `set` or `get`, you end up with a reliable,
+*loosely ordered* message queue.
 
 In many situations, loose ordering is sufficient. Dropping the requirement on
 cross communication makes it horizontally scale to infinity and beyond: no
 multicast, no clustering, no "elections", no coordination at all. No talking!
 Shhh!
 
-Kestrel adds several additional features, like ginormous queues, reliable
-fetch, and blocking/timeout fetch -- as well as the scalability offered by
-actors and the JVM.
+For more information about what it is and how to use it, check out
+the included [guide](docs/guide.md).
 
 Features
 --------
@@ -69,8 +62,8 @@ Kestrel is not:
 - transactional
 
   This is not a database. Item ownership is transferred with acknowledgement,
-  but kestrel does not concern itself with what happens to an item after a
-  client has accepted it.
+  but kestrel does not support multiple outstanding operations, and treats
+  each enqueued item as an atomic unit.
 
 
 Building it

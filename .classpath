@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<classpath>
-	<classpathentry kind="src" path="src/main/scala"/>
-	<classpathentry kind="src" path="src/test/scala"/>
-	<classpathentry kind="con" path="ch.epfl.lamp.sdt.launching.SCALA_CONTAINER"/>
-	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
-	<classpathentry kind="con" path="org.apache.ivyde.eclipse.cpcontainer.IVYDE_CONTAINER/?ivyXmlPath=ivy%2Fivy.xml&amp;confs=*&amp;ivySettingsPath=file%3A%2FUsers%2Fzkim%2Fnapplelabs%2Fkestrel%2Fivy%2Fivysettings.xml"/>
-	<classpathentry kind="output" path="bin"/>
-</classpath>

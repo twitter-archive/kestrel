@@ -122,7 +122,7 @@ class PersistentQueue(persistencePath: String, val name: String,
   def openTransactionCount = openTransactions.size
   def openTransactionIds = openTransactions.keys.toList.sort(_ - _ > 0)
 
-  def length: Long = synchronized { queueLength + openTransactionCount }
+  def length: Long = synchronized { queueLength }
   def totalItems: Long = synchronized { _totalItems }
   def bytes: Long = synchronized { queueSize }
   def journalSize: Long = synchronized { journal.size }
@@ -189,7 +189,8 @@ class PersistentQueue(persistencePath: String, val name: String,
       ("mem_bytes", memoryBytes.toString),
       ("age", currentAge.toString),
       ("discarded", totalDiscarded.toString),
-      ("waiters", waiterCount.toString)
+      ("waiters", waiterCount.toString),
+      ("open_transactions", openTransactionCount.toString)
     )
   }
 
@@ -266,10 +267,9 @@ class PersistentQueue(persistencePath: String, val name: String,
         if (keepJournal()) {
           if (transaction) journal.removeTentative() else journal.remove()
 
-          if ((queueLength == 0) && (journal.size >= maxJournalSize()) &&
-              (openTransactions.size == 0)) {
+          if ((queueLength == 0) && (journal.size >= maxJournalSize())) {
             log.info("Rolling journal file for '%s'", name)
-            journal.roll(xidCounter, Nil, Nil)
+            journal.roll(xidCounter, openTransactionIds map { openTransactions(_) }, Nil)
           }
         }
         item

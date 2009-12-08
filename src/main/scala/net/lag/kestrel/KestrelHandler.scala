@@ -137,7 +137,7 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
       case "FLUSH_EXPIRED" =>
         flushExpired(request.line(1))
       case "FLUSH_ALL_EXPIRED" =>
-        val flushed = Kestrel.queues.queueNames.foldLeft(0) { (sum, qName) => sum + Kestrel.queues.flushExpired(qName) }
+        val flushed = Kestrel.queues.flushAllExpired()
         writeResponse("%d\r\n".format(flushed))
       case "VERSION" =>
         version()
@@ -184,8 +184,8 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
       } else {
         if (closing) {
           if (!closeTransaction(key)) {
-            log.warning("Attempt to close a non-existent transaction on '%s' (sid %d, %s:%d)",
-                        key, sessionID, remoteAddress.getHostName, remoteAddress.getPort)
+            log.debug("Attempt to close a non-existent transaction on '%s' (sid %d, %s:%d)",
+                      key, sessionID, remoteAddress.getHostName, remoteAddress.getPort)
             // let the client continue. it may be optimistically closing previous transactions as
             // it randomly jumps servers.
           }

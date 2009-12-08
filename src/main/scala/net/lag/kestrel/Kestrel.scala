@@ -19,6 +19,7 @@ package net.lag.kestrel
 
 import java.net.InetSocketAddress
 import java.util.concurrent.{CountDownLatch, Executors, ExecutorService, TimeUnit}
+import java.util.{Timer, TimerTask}
 import scala.actors.{Actor, Scheduler}
 import scala.actors.Actor._
 import scala.collection.mutable
@@ -107,6 +108,21 @@ object Kestrel {
 
     // expose config thru JMX.
     config.registerWithJmx("net.lag.kestrel")
+
+    // optionally, start a periodic timer to clean out expired items.
+    val expirationTimerFrequency = config.getInt("expiration_timer_frequency_seconds", 0)
+    if (expirationTimerFrequency > 0) {
+      val timer = new Timer("Expiration timer", true)
+      val expirationTask = new TimerTask {
+        def run() {
+          val expired = Kestrel.queues.flushAllExpired()
+          if (expired > 0) {
+            log.info("Expired %d item(s) from queues automatically.", expired)
+          }
+        }
+      }
+      timer.schedule(expirationTask, expirationTimerFrequency * 1000, expirationTimerFrequency * 1000)
+    }
 
     log.info("Kestrel started.")
 

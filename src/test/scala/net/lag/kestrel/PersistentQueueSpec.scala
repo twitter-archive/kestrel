@@ -100,6 +100,7 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q.totalItems mustEqual 1
         q.bytes mustEqual 11
         q.journalSize mustEqual 32
+        new File(folderName, "work").length mustEqual 32
 
         new String(q.remove.get.data) mustEqual "hello kitty"
 
@@ -161,42 +162,49 @@ object PersistentQueueSpec extends Specification with TestHelper {
         q.length mustEqual 2
         q.totalItems mustEqual 2
         q.bytes mustEqual 32 + 64
-        q.journalSize mustEqual 32 + 64 + 16 + 16 + 5 + 5
-        new File(folderName, "rolling").length mustEqual 32 + 64 + 16 + 16 + 5 + 5
+        (q.journalSize > 96) mustBe true
 
         q.remove
         q.length mustEqual 1
         q.totalItems mustEqual 2
         q.bytes mustEqual 64
-        q.journalSize mustEqual 32 + 64 + 16 + 16 + 5 + 5 + 1
-        new File(folderName, "rolling").length mustEqual 32 + 64 + 16 + 16 + 5 + 5 + 1
+        (q.journalSize > 96) mustBe true
 
         // now it should rotate:
         q.remove
         q.length mustEqual 0
         q.totalItems mustEqual 2
         q.bytes mustEqual 0
-        q.journalSize mustEqual 5   // saved xid.
-        new File(folderName, "rolling").length mustEqual 5
+        (q.journalSize < 10) mustBe true
       }
     }
 
-    "walk a journal" in {
+    "rotate journals with an open transaction" in {
       withTempFolder {
-        val q = makeQueue("walking")
+        val q = makeQueue("rolling")
         q.setup
+        q.maxJournalSize set Some(64)
 
         q.add(new Array[Byte](32))
         q.add(new Array[Byte](64))
-        q.add(new Array[Byte](10))
+        q.length mustEqual 2
+        q.totalItems mustEqual 2
+        q.bytes mustEqual 32 + 64
+        (q.journalSize > 96) mustBe true
 
-        val j = new Journal(folderName + "/walking", false)
-        j.walk().map {
-          case (item, itemsize) => item match {
-            case JournalItem.Add(qitem) => qitem.data.size.toString
-            case x => ""
-          }
-        }.mkString(",") mustEqual "32,64,10"
+        q.remove
+        q.length mustEqual 1
+        q.totalItems mustEqual 2
+        q.bytes mustEqual 64
+        (q.journalSize > 96) mustBe true
+
+        // now it should rotate:
+        q.remove(true)
+        q.length mustEqual 0
+        q.openTransactionCount mustEqual 1
+        q.totalItems mustEqual 2
+        q.bytes mustEqual 0
+        (q.journalSize < 96) mustBe true
       }
     }
 
@@ -508,12 +516,14 @@ object PersistentQueueSpec extends Specification with TestHelper {
           // last remove will be an incomplete transaction:
           q.remove(i == 4) must beSomeQItem(512)
         }
-        q.length mustEqual 2
+        q.length mustEqual 1
+        q.openTransactionCount mustEqual 1
         q.journalSize mustEqual (512 * 6) + (6 * 21) + 5
 
         // next add should force a recreate.
         q.add(new Array[Byte](512))
-        q.length mustEqual 3
+        q.length mustEqual 2
+        q.openTransactionCount mustEqual 1
         q.journalSize mustEqual ((512 + 16) * 3) + 9 + 1 + 5 + (5 * 2)
 
         // journal should contain exactly: one unfinished transaction, 2 items.
