@@ -188,20 +188,27 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
     val TEN_MB = 10L * 1024 * 1024
     try {
       val in = new FileInputStream(queueFile).getChannel
-      replayer = Some(in)
-      var done = false
-      do {
-        readJournalEntry(in) match {
-          case (JournalItem.EndOfFile, _) => done = true
-          case (x, itemsize) =>
-            size += itemsize
-            f(x)
-            if (size / TEN_MB > lastUpdate) {
-              lastUpdate = size / TEN_MB
-              log.info("Continuing to read '%s' journal; %d MB so far...", name, lastUpdate * 10)
-            }
-        }
-      } while (!done)
+      try {
+        replayer = Some(in)
+        var done = false
+        do {
+          readJournalEntry(in) match {
+            case (JournalItem.EndOfFile, _) => done = true
+            case (x, itemsize) =>
+              size += itemsize
+              f(x)
+              if (size / TEN_MB > lastUpdate) {
+                lastUpdate = size / TEN_MB
+                log.info("Continuing to read '%s' journal; %d MB so far...", name, lastUpdate * 10)
+              }
+          }
+        } while (!done)
+      } catch {
+        case e: BrokenItemException =>
+          log.error(e, "Exception replaying journal for '%s'", name)
+          log.error("DATA MAY HAVE BEEN LOST! Truncated entry will be deleted.")
+          truncateJournal(e.lastValidPosition)
+      }
     } catch {
       case e: FileNotFoundException =>
         log.info("No transaction journal for '%s'; starting with empty queue.", name)
@@ -214,9 +221,19 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
     replayer = None
   }
 
+  private def truncateJournal(position: Long) {
+    val trancateWriter = new FileOutputStream(queueFile, true).getChannel
+    try {
+      trancateWriter.truncate(position)
+    } finally {
+      trancateWriter.close()
+    }
+  }
+
   def readJournalEntry(in: FileChannel): (JournalItem, Int) = {
     byteBuffer.rewind
     byteBuffer.limit(1)
+    val lastPosition = in.position
     var x: Int = 0
     do {
       x = in.read(byteBuffer)
@@ -225,34 +242,39 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
     if (x < 0) {
       (JournalItem.EndOfFile, 0)
     } else {
-      buffer(0) match {
-        case CMD_ADD =>
-          val data = readBlock(in)
-          (JournalItem.Add(QItem.unpackOldAdd(data)), 5 + data.length)
-        case CMD_REMOVE =>
-          (JournalItem.Remove, 1)
-        case CMD_ADDX =>
-          val data = readBlock(in)
-          (JournalItem.Add(QItem.unpack(data)), 5 + data.length)
-        case CMD_REMOVE_TENTATIVE =>
-          (JournalItem.RemoveTentative, 1)
-        case CMD_SAVE_XID =>
-          val xid = readInt(in)
-          (JournalItem.SavedXid(xid), 5)
-        case CMD_UNREMOVE =>
-          val xid = readInt(in)
-          (JournalItem.Unremove(xid), 5)
-        case CMD_CONFIRM_REMOVE =>
-          val xid = readInt(in)
-          (JournalItem.ConfirmRemove(xid), 5)
-        case CMD_ADD_XID =>
-          val xid = readInt(in)
-          val data = readBlock(in)
-          val item = QItem.unpack(data)
-          item.xid = xid
-          (JournalItem.Add(item), 9 + data.length)
-        case n =>
-          throw new IOException("invalid opcode in journal: " + n.toInt + " at position " + in.position)
+      try {
+        buffer(0) match {
+          case CMD_ADD =>
+            val data = readBlock(in)
+            (JournalItem.Add(QItem.unpackOldAdd(data)), 5 + data.length)
+          case CMD_REMOVE =>
+            (JournalItem.Remove, 1)
+          case CMD_ADDX =>
+            val data = readBlock(in)
+            (JournalItem.Add(QItem.unpack(data)), 5 + data.length)
+          case CMD_REMOVE_TENTATIVE =>
+            (JournalItem.RemoveTentative, 1)
+          case CMD_SAVE_XID =>
+            val xid = readInt(in)
+            (JournalItem.SavedXid(xid), 5)
+          case CMD_UNREMOVE =>
+            val xid = readInt(in)
+            (JournalItem.Unremove(xid), 5)
+          case CMD_CONFIRM_REMOVE =>
+            val xid = readInt(in)
+            (JournalItem.ConfirmRemove(xid), 5)
+          case CMD_ADD_XID =>
+            val xid = readInt(in)
+            val data = readBlock(in)
+            val item = QItem.unpack(data)
+            item.xid = xid
+            (JournalItem.Add(item), 9 + data.length)
+          case n =>
+            throw new BrokenItemException(lastPosition, new IOException("invalid opcode in journal: " + n.toInt + " at position " + in.position))
+        }
+      } catch {
+        case ex: IOException =>
+          throw new BrokenItemException(lastPosition, ex)
       }
     }
   }
