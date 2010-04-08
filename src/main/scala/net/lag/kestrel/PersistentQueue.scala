@@ -495,7 +495,7 @@ class PersistentQueue(persistencePath: String, val name: String,
   }
 
   private def _remove(transaction: Boolean): Option[QItem] = {
-    discardExpired
+    discardExpired()
     if (queue.isEmpty) return None
 
     val now = Time.now
