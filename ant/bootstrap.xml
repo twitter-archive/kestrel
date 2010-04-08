@@ -7,7 +7,7 @@
 
   <property environment="env" />
 
-  <property name="ivy.install.version" value="2.1.0-rc1" />
+  <property name="ivy.install.version" value="2.1.0" />
   <property name="ivy.jar.dir" value="${user.home}/.ivy2" />
   <property name="ivy.jar.file" value="${ivy.jar.dir}/ivy-${ivy.install.version}.jar" />
   <property name="jsch.install.version" value="0.1.29" />
