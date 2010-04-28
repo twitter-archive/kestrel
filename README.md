@@ -19,6 +19,9 @@ Shhh!
 For more information about what it is and how to use it, check out
 the included [guide](docs/guide.md).
 
+Kestrel has a mailing list here: <kestrel-talk@googlegroups.com>
+http://groups.google.com/group/kestrel-talk
+
 Features
 --------
 
