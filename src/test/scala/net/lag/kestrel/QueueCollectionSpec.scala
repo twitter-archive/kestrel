@@ -23,7 +23,7 @@ import _root_.net.lag.configgy.Config
 import _root_.org.specs._
 
 
-object QueueCollectionSpec extends Specification with TestHelper {
+class QueueCollectionSpec extends Specification with TestHelper {
 
   private var qc: QueueCollection = null
 
