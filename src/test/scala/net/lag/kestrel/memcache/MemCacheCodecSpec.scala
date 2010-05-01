@@ -24,7 +24,7 @@ import org.apache.mina.filter.codec._
 import org.specs._
 
 
-object MemCacheCodecSpec extends Specification {
+class MemCacheCodecSpec extends Specification {
 
   private val fakeSession = new DummySession
 

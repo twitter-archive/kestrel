@@ -26,7 +26,7 @@ import _root_.org.specs._
 import _root_.org.specs.matcher.Matcher
 
 
-object PersistentQueueSpec extends Specification with TestHelper {
+class PersistentQueueSpec extends Specification with TestHelper {
 
   def dumpJournal(qname: String): String = {
     var rv = new mutable.ListBuffer[JournalItem]

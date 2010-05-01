@@ -21,7 +21,7 @@ import _root_.java.io._
 import _root_.org.specs.Specification
 
 
-object JournalSpec extends Specification with TestHelper {
+class JournalSpec extends Specification with TestHelper {
   "Journal" should {
     "walk" in {
       withTempFolder {

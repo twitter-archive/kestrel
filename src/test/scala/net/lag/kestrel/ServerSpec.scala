@@ -25,7 +25,7 @@ import _root_.net.lag.logging.Logger
 import _root_.org.specs._
 
 
-object ServerSpec extends Specification with TestHelper {
+class ServerSpec extends Specification with TestHelper {
 
   val PORT = 22199
   var config: Config = null

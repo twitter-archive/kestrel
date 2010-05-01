@@ -19,10 +19,18 @@ package net.lag
 
 import _root_.java.io.File
 import _root_.java.util.UUID
+import _root_.net.lag.logging.Logger
+import _root_.org.specs.Specification
 
 
-trait TestHelper {
+trait TestHelper { self: Specification =>
   private val _folderName = new ThreadLocal[File]
+
+  new SpecContext {
+    beforeSpec {
+      Logger.get("").setLevel(Logger.FATAL)
+    }
+  }
 
   /**
    * Recursively delete a folder. Should be built in; bad java.
