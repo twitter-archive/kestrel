@@ -7,7 +7,7 @@ class KestrelProject(info: ProjectInfo) extends StandardProject(info) {
   val xrayspecs = "com.twitter" % "xrayspecs" % "1.0.7"
   val vscaladoc = "org.scala-tools" % "vscaladoc" % "1.1-md-3"
 
-  val configgy = "net.lag" % "configgy" % "1.5.2"
+  val configgy = "net.lag" % "configgy" % "1.5.3"
   val naggati = "net.lag" % "naggati" % "0.7.2"
   val mina = "org.apache.mina" % "mina-core" % "2.0.0-M6"
   val slf4j_api = "org.slf4j" % "slf4j-api" % "1.5.2"
