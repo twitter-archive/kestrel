@@ -23,6 +23,8 @@ import java.nio.ByteOrder
 import scala.actors.Actor
 import scala.actors.Actor._
 import scala.collection.mutable
+import com.twitter.xrayspecs.Time
+import com.twitter.xrayspecs.TimeConversions._
 import net.lag.configgy.{Config, Configgy, RuntimeEnvironment}
 import net.lag.logging.Logger
 import net.lag.naggati.{IoHandlerActorAdapter, MinaMessage, ProtocolError}
@@ -288,7 +290,7 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
   private def stats() = {
     var report = new mutable.ArrayBuffer[(String, String)]
     report += (("uptime", Kestrel.uptime.toString))
-    report += (("time", (Time.now / 1000).toString))
+    report += (("time", (Time.now.inMilliseconds / 1000).toString))
     report += (("version", Kestrel.runtime.jarVersion))
     report += (("curr_items", Kestrel.queues.currentItems.toString))
     report += (("total_items", Kestrel.queues.totalAdded.toString))

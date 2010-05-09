@@ -21,6 +21,8 @@ import _root_.java.io.{File, FileInputStream}
 import _root_.java.util.concurrent.CountDownLatch
 import _root_.scala.actors.Actor.actor
 import _root_.scala.collection.mutable
+import _root_.com.twitter.xrayspecs.Time
+import _root_.com.twitter.xrayspecs.TimeConversions._
 import _root_.net.lag.configgy.Config
 import _root_.org.specs._
 import _root_.org.specs.matcher.Matcher
@@ -239,13 +241,13 @@ class PersistentQueueSpec extends Specification with TestHelper {
         q.setup
         q.add("sunny".getBytes) mustEqual true
         q.length mustEqual 1
-        Time.advance(3000)
+        Time.advance(3.seconds)
         q.remove mustEqual None
 
         q.config("max_age") = 60
         q.add("rainy".getBytes) mustEqual true
         q.config("max_age") = 1
-        Time.advance(5000)
+        Time.advance(5.seconds)
         q.remove mustEqual None
       }
     }
@@ -415,7 +417,7 @@ class PersistentQueueSpec extends Specification with TestHelper {
           var rv: String = null
           val latch = new CountDownLatch(1)
           actor {
-            q.removeReact(Time.now + 250, false) { item =>
+            q.removeReact(Time.now.inMilliseconds + 250, false) { item =>
               rv = new String(item.get.data)
               latch.countDown
             }

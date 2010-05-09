@@ -18,6 +18,7 @@
 package net.lag.kestrel
 
 import java.nio.{ByteBuffer, ByteOrder}
+import com.twitter.xrayspecs.Time
 
 
 case class QItem(addTime: Long, expiry: Long, data: Array[Byte], var xid: Int) {
@@ -49,6 +50,6 @@ object QItem {
     buffer.order(ByteOrder.LITTLE_ENDIAN)
     val expiry = buffer.getInt
     buffer.get(bytes)
-    QItem(Time.now, if (expiry == 0) 0 else expiry * 1000, bytes, 0)
+    QItem(Time.now.inMilliseconds, if (expiry == 0) 0 else expiry * 1000, bytes, 0)
   }
 }

@@ -23,6 +23,7 @@ import java.util.{Timer, TimerTask}
 import scala.actors.{Actor, Scheduler}
 import scala.actors.Actor._
 import scala.collection.mutable
+import com.twitter.xrayspecs.Time
 import org.apache.mina.core.session.IoSession
 import org.apache.mina.filter.codec.ProtocolCodecFilter
 import org.apache.mina.transport.socket.SocketAcceptor
@@ -51,7 +52,7 @@ object Kestrel {
   var queues: QueueCollection = null
 
   private val _expiryStats = new mutable.HashMap[String, Int]
-  private val _startTime = Time.now
+  private val _startTime = Time.now.inMilliseconds
 
   var acceptorExecutor: ExecutorService = null
   var acceptor: SocketAcceptor = null
@@ -154,5 +155,5 @@ object Kestrel {
     deathSwitch.countDown
   }
 
-  def uptime() = (Time.now - _startTime) / 1000
+  def uptime() = (Time.now.inMilliseconds - _startTime) / 1000
 }

@@ -19,6 +19,8 @@ package net.lag.kestrel.tools
 
 import java.io.{FileNotFoundException, IOException}
 import scala.collection.mutable
+import com.twitter.xrayspecs.Time
+
 
 class QueueDumper(filename: String) {
   var offset = 0L
@@ -62,7 +64,7 @@ class QueueDumper(filename: String) {
   }
 
   def dumpItem(item: JournalItem) {
-    val now = Time.now
+    val now = Time.now.inMilliseconds
     if (!QDumper.quiet) print("%08x  ".format(offset & 0xffffffffL))
     item match {
       case JournalItem.Add(qitem) =>

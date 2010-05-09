@@ -20,6 +20,8 @@ package net.lag.kestrel
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import scala.collection.mutable
+import com.twitter.xrayspecs.Time
+import com.twitter.xrayspecs.TimeConversions._
 import net.lag.configgy.{Config, ConfigMap}
 import net.lag.logging.Logger
 
@@ -108,13 +110,13 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
     queue(key) match {
       case None => false
       case Some(q) =>
-        val now = Time.now
+        val now = Time.now.inMilliseconds
         val normalizedExpiry: Long = if (expiry == 0) {
           0
         } else if (expiry < 1000000) {
-          now + expiry * 1000
+          now + expiry
         } else {
-          expiry * 1000
+          expiry
         }
         val result = q.add(item, normalizedExpiry)
         if (result) totalAdded.incr()
@@ -137,7 +139,7 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
         if (peek) {
           f(q.peek())
         } else {
-          q.removeReact(if (timeout == 0) timeout else Time.now + timeout, transaction) {
+          q.removeReact(if (timeout == 0) timeout else Time.now.inMilliseconds + timeout, transaction) {
             case None =>
               queueMisses.incr
               f(None)

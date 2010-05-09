@@ -17,11 +17,12 @@
 
 package net.lag.kestrel
 
-import net.lag.logging.Logger
 import java.io._
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.channels.FileChannel
+import com.twitter.xrayspecs.Time
 import net.lag.configgy.{Config, ConfigMap}
+import net.lag.logging.Logger
 
 
 // returned from journal replay
@@ -76,7 +77,7 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
 
   def roll(xid: Int, openItems: List[QItem], queue: Iterable[QItem]): Unit = {
     writer.close
-    val tmpFile = new File(queuePath + "~~" + Time.now)
+    val tmpFile = new File(queuePath + "~~" + Time.now.inMilliseconds)
     open(tmpFile)
     size = 0
     for (item <- openItems) {
