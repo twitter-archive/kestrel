@@ -6,7 +6,7 @@ Kestrel is based on Blaine Cook's "starling" simple, distributed message
 queue, with added features and bulletproofing, as well as the scalability
 offered by actors and the JVM.
 
-Each server handles a set reliable, ordered message queues. When you put a
+Each server handles a set of reliable, ordered message queues. When you put a
 cluster of these servers together, *with no cross communication*, and pick a
 server at random whenever you do a `set` or `get`, you end up with a reliable,
 *loosely ordered* message queue.
