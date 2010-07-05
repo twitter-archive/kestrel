@@ -21,7 +21,7 @@ import java.io._
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.channels.FileChannel
 import java.util.concurrent.CountDownLatch
-import scala.actors.{Actor, TIMEOUT}
+import com.twitter.actors.{Actor, TIMEOUT}
 import scala.collection.mutable
 import com.twitter.xrayspecs.Time
 import net.lag.configgy.{Config, Configgy, ConfigMap}
