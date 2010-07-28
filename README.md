@@ -6,7 +6,7 @@ Kestrel is based on Blaine Cook's "starling" simple, distributed message
 queue, with added features and bulletproofing, as well as the scalability
 offered by actors and the JVM.
 
-Each server handles a set reliable, ordered message queues. When you put a
+Each server handles a set of reliable, ordered message queues. When you put a
 cluster of these servers together, *with no cross communication*, and pick a
 server at random whenever you do a `set` or `get`, you end up with a reliable,
 *loosely ordered* message queue.
@@ -18,6 +18,9 @@ Shhh!
 
 For more information about what it is and how to use it, check out
 the included [guide](docs/guide.md).
+
+Kestrel has a mailing list here: <kestrel-talk@googlegroups.com>
+http://groups.google.com/group/kestrel-talk
 
 Features
 --------
@@ -70,14 +73,14 @@ Building it
 -----------
 
 Kestrel requires java 6 (for JMX support) and ant 1.7. If you see an error
-about missing JMX classes, it usually means you're building with java 5. On a mac, you may have to hard-code an
-annoying `JAVA_HOME` to use java 6:
+about missing JMX classes, it usually means you're building with java 5. On a
+mac, you may have to hard-code an annoying `JAVA_HOME` to use java 6:
 
     $ export JAVA_HOME=/System/Library/Frameworks/JavaVM.framework/Versions/1.6/Home
 
 Building from source is easy:
 
-    $ ant
+    $ sbt clean update package-dist
 
 Scala libraries and dependencies will be downloaded from maven repositories
 the first time you do a build. The finished distribution will be in `dist`.

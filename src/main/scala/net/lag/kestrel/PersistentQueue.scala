@@ -23,6 +23,7 @@ import java.nio.channels.FileChannel
 import java.util.concurrent.CountDownLatch
 import scala.actors.{Actor, TIMEOUT}
 import scala.collection.mutable
+import com.twitter.xrayspecs.Time
 import net.lag.configgy.{Config, Configgy, ConfigMap}
 import net.lag.logging.Logger
 
@@ -215,7 +216,7 @@ class PersistentQueue(persistencePath: String, val name: String,
       if (keepJournal()) journal.remove()
     }
 
-    val now = Time.now
+    val now = Time.now.inMilliseconds
     val item = QItem(now, adjustExpiry(now, expiry), value, 0)
     if (keepJournal() && !journal.inReadBehind) {
       if (journal.size > maxJournalSize() * maxJournalOverflow() && queueSize < maxJournalSize()) {
@@ -287,7 +288,7 @@ class PersistentQueue(persistencePath: String, val name: String,
       case (item, None) =>
         f(item)
       case (None, Some(w)) =>
-        Actor.self.reactWithin((timeoutAbsolute - Time.now) max 0) {
+        Actor.self.reactWithin((timeoutAbsolute - Time.now.inMilliseconds) max 0) {
           case ItemArrived => operateReact(op, timeoutAbsolute)(f)
           case TIMEOUT => synchronized {
             waiters -= w
@@ -307,7 +308,7 @@ class PersistentQueue(persistencePath: String, val name: String,
       case (item, None) =>
         item
       case (None, Some(w)) =>
-        val gotSomething = Actor.self.receiveWithin((timeoutAbsolute - Time.now) max 0) {
+        val gotSomething = Actor.self.receiveWithin((timeoutAbsolute - Time.now.inMilliseconds) max 0) {
           case ItemArrived => true
           case TIMEOUT => false
         }
@@ -495,10 +496,10 @@ class PersistentQueue(persistencePath: String, val name: String,
   }
 
   private def _remove(transaction: Boolean): Option[QItem] = {
-    discardExpired
+    discardExpired()
     if (queue.isEmpty) return None
 
-    val now = Time.now
+    val now = Time.now.inMilliseconds
     val item = queue.dequeue
     val len = item.data.length
     queueSize -= len
@@ -520,7 +521,7 @@ class PersistentQueue(persistencePath: String, val name: String,
       0
     } else {
       val realExpiry = adjustExpiry(queue.front.addTime, queue.front.expiry)
-      if ((realExpiry != 0) && (realExpiry < Time.now)) {
+      if ((realExpiry != 0) && (realExpiry < Time.now.inMilliseconds)) {
         _totalExpired += 1
         val item = queue.dequeue
         val len = item.data.length

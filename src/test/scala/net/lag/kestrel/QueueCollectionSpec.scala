@@ -19,11 +19,13 @@ package net.lag.kestrel
 
 import _root_.java.io.{File, FileInputStream}
 import _root_.scala.util.Sorting
+import _root_.com.twitter.xrayspecs.Time
+import _root_.com.twitter.xrayspecs.TimeConversions._
 import _root_.net.lag.configgy.Config
 import _root_.org.specs._
 
 
-object QueueCollectionSpec extends Specification with TestHelper {
+class QueueCollectionSpec extends Specification with TestHelper {
 
   private var qc: QueueCollection = null
 
@@ -208,7 +210,7 @@ object QueueCollectionSpec extends Specification with TestHelper {
         qc.queue("jobs").get.length mustEqual 1
         qc.queue("expired").get.length mustEqual 0
 
-        Time.advance(1000)
+        Time.advance(1.second)
         qc.queue("jobs").get.length mustEqual 1
         qc.queue("expired").get.length mustEqual 0
         qc.receive("jobs") mustEqual None

@@ -7,7 +7,7 @@
 #   /var/log/$APP_NAME (chown daemon, chmod 775)
 
 APP_NAME="kestrel"
-VERSION="1.2"
+VERSION="1.2.1"
 APP_HOME="/opt/local/$APP_NAME/current"
 AS_USER="daemon"
 DAEMON="/usr/local/bin/daemon"
@@ -16,7 +16,7 @@ QUEUE_PATH="/var/spool/kestrel"
 HEAP_OPTS="-Xmx2048m -Xms1024m -XX:NewSize=256m"
 JMX_OPTS="-Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.port=22134 -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false"
 # add JMX_OPTS below if you want jmx support.
-JAVA_OPTS="-server -verbosegc -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCDateStamps -XX:+UseConcMarkSweepGC -XX:+UseParNewGC $HEAP_OPTS"
+JAVA_OPTS="-server -verbosegc -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution -XX:+UseConcMarkSweepGC -XX:+UseParNewGC $HEAP_OPTS"
 
 pidfile="/var/run/$APP_NAME.pid"
 daemon_args="--name $APP_NAME --pidfile $pidfile"

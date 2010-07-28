@@ -20,12 +20,14 @@ package net.lag.kestrel
 import _root_.java.io._
 import _root_.java.net.Socket
 import _root_.scala.collection.Map
+import _root_.com.twitter.xrayspecs.Time
+import _root_.com.twitter.xrayspecs.TimeConversions._
 import _root_.net.lag.configgy.Config
 import _root_.net.lag.logging.Logger
 import _root_.org.specs._
 
 
-object ServerSpec extends Specification with TestHelper {
+class ServerSpec extends Specification with TestHelper {
 
   val PORT = 22199
   var config: Config = null
@@ -83,9 +85,9 @@ object ServerSpec extends Specification with TestHelper {
         val v = (Math.random * 0x7fffffff).toInt
         val client = new TestClient("localhost", PORT)
         client.get("test_set_with_expiry") mustEqual ""
-        client.set("test_set_with_expiry", (v + 2).toString, (Time.now / 1000).toInt) mustEqual "STORED"
+        client.set("test_set_with_expiry", (v + 2).toString, Time.now.inSeconds) mustEqual "STORED"
         client.set("test_set_with_expiry", v.toString) mustEqual "STORED"
-        Time.advance(1000)
+        Time.advance(1.second)
         client.get("test_set_with_expiry") mustEqual v.toString
       }
     }
@@ -241,7 +243,7 @@ object ServerSpec extends Specification with TestHelper {
         val client = new TestClient("localhost", PORT)
         client.set("test_age", "nibbler") mustEqual "STORED"
         client.set("test_age", "nibbler2") mustEqual "STORED"
-        Time.advance(1000)
+        Time.advance(1.second)
         client.get("test_age") mustEqual "nibbler"
         client.stats.contains("queue_test_age_age") mustEqual true
         client.stats("queue_test_age_age").toInt >= 1000 mustEqual true
@@ -267,14 +269,14 @@ object ServerSpec extends Specification with TestHelper {
     "rotate logs" in {
       withTempFolder {
         makeServer
-        var v = "x"
-        for (val i <- 1.to(13)) { v = v + v }    // 8192
+        val v = new String(new Array[Byte](8192))
 
         val client = new TestClient("localhost", PORT)
 
         client.set("test_log_rotation", v) mustEqual "STORED"
         new File(folderName + "/test_log_rotation").length mustEqual 8192 + 16 + 5
-        client.get("test_log_rotation") mustEqual v
+        // specs is very slow to compare long strings
+        (client.get("test_log_rotation") == v) must beTrue
         new File(folderName + "/test_log_rotation").length mustEqual 8192 + 16 + 5 + 1
 
         client.get("test_log_rotation") mustEqual ""
@@ -282,7 +284,7 @@ object ServerSpec extends Specification with TestHelper {
 
         client.set("test_log_rotation", v) mustEqual "STORED"
         new File(folderName + "/test_log_rotation").length mustEqual 2 * (8192 + 16 + 5) + 1
-        client.get("test_log_rotation") mustEqual v
+        (client.get("test_log_rotation") == v) must beTrue
         new File(folderName + "/test_log_rotation").length mustEqual 5
         new File(folderName).listFiles.length mustEqual 1
       }
@@ -332,7 +334,7 @@ object ServerSpec extends Specification with TestHelper {
         client.stats("queue_q2_items") mustEqual "2"
         client.stats("queue_q3_items") mustEqual "1"
 
-        Time.advance(5000)
+        Time.advance(5.seconds)
 
         client.out.write("flush_expired q1\n".getBytes)
         client.readline mustEqual "1"

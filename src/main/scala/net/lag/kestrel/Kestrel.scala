@@ -23,6 +23,7 @@ import java.util.{Timer, TimerTask}
 import scala.actors.{Actor, Scheduler}
 import scala.actors.Actor._
 import scala.collection.mutable
+import com.twitter.xrayspecs.Time
 import org.apache.mina.core.session.IoSession
 import org.apache.mina.filter.codec.ProtocolCodecFilter
 import org.apache.mina.transport.socket.SocketAcceptor
@@ -51,7 +52,7 @@ object Kestrel {
   var queues: QueueCollection = null
 
   private val _expiryStats = new mutable.HashMap[String, Int]
-  private val _startTime = Time.now
+  private val _startTime = Time.now.inMilliseconds
 
   var acceptorExecutor: ExecutorService = null
   var acceptor: SocketAcceptor = null
@@ -82,7 +83,15 @@ object Kestrel {
 
   def startup(config: Config): Unit = {
     // this one is used by the actor initialization, so can only be set at startup.
-    val maxThreads = config.getInt("max_threads", Runtime.getRuntime().availableProcessors * 2)
+    var maxThreads = config.getInt("max_threads", Runtime.getRuntime().availableProcessors * 2)
+
+    /* If we don't set this to at least 4, we get an IllegalArgumentException when constructing
+     * the ThreadPoolExecutor from inside FJTaskScheduler2 on a single-processor box.
+     */
+    if (maxThreads < 4) {
+      maxThreads = 4
+    }
+
     System.setProperty("actors.maxPoolSize", maxThreads.toString)
     log.debug("max_threads=%d", maxThreads)
 
@@ -101,8 +110,10 @@ object Kestrel {
     acceptor.setBacklog(1000)
     acceptor.setReuseAddress(true)
     acceptor.getSessionConfig.setTcpNoDelay(true)
-    acceptor.getFilterChain.addLast("codec", new ProtocolCodecFilter(memcache.Codec.encoder,
-      memcache.Codec.decoder))
+    val protocolCodec = config.getString("protocol", "ascii")
+    acceptor.getFilterChain.addLast("codec", new ProtocolCodecFilter(
+      memcache.Codec.encoderFor(protocolCodec),
+      memcache.Codec.decoderFor(protocolCodec)))
     acceptor.setHandler(new IoHandlerActorAdapter(session => new KestrelHandler(session, config)))
     acceptor.bind(new InetSocketAddress(listenAddress, listenPort))
 
@@ -144,5 +155,5 @@ object Kestrel {
     deathSwitch.countDown
   }
 
-  def uptime() = (Time.now - _startTime) / 1000
+  def uptime() = (Time.now.inMilliseconds - _startTime) / 1000
 }

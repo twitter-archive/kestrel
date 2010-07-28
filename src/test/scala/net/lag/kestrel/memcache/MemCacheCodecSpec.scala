@@ -24,7 +24,7 @@ import org.apache.mina.filter.codec._
 import org.specs._
 
 
-object MemCacheCodecSpec extends Specification {
+class MemCacheCodecSpec extends Specification {
 
   private val fakeSession = new DummySession
 
@@ -45,7 +45,7 @@ object MemCacheCodecSpec extends Specification {
 
 
     "'get' request chunked various ways" in {
-      val decoder = memcache.Codec.decoder
+      val decoder = memcache.ASCIICodec.decoder
 
       decoder.decode(fakeSession, IoBuffer.wrap("get foo\r\n".getBytes), fakeDecoderOutput)
       written mustEqual List(Request(List("GET", "foo"), None))
@@ -68,7 +68,7 @@ object MemCacheCodecSpec extends Specification {
     }
 
     "'set' request chunked various ways" in {
-      val decoder = memcache.Codec.decoder
+      val decoder = memcache.ASCIICodec.decoder
 
       decoder.decode(fakeSession, IoBuffer.wrap("set foo 0 0 5\r\nhello\r\n".getBytes), fakeDecoderOutput)
       written.mkString(",") mustEqual "<Request: [SET foo 0 0 5]: 68656c6c6f>"
