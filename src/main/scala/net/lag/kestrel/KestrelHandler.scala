@@ -20,8 +20,8 @@ package net.lag.kestrel
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.nio.ByteOrder
-import scala.actors.Actor
-import scala.actors.Actor._
+import com.twitter.actors.Actor
+import com.twitter.actors.Actor._
 import scala.collection.mutable
 import com.twitter.xrayspecs.Time
 import com.twitter.xrayspecs.TimeConversions._
