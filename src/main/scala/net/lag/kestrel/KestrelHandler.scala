@@ -143,6 +143,8 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
         writeResponse("%d\r\n".format(flushed))
       case "VERSION" =>
         version()
+      case "QUIT" =>
+        session.close(false)
     }
   }
 
