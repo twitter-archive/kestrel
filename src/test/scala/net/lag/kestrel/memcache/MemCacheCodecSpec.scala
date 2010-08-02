@@ -88,5 +88,12 @@ class MemCacheCodecSpec extends Specification {
       written.mkString(",") mustEqual "<Request: [SET foo 0 0 5]: 68656c6c6f>"
       written = Nil
     }
+
+    "'quit' exits the session" in {
+      val decoder = memcache.ASCIICodec.decoder
+
+      decoder.decode(fakeSession, IoBuffer.wrap("QUIT\r\n".getBytes), fakeDecoderOutput)
+      written.mkString(",") mustEqual "<Request: [QUIT]>"
+    }
   }
 }

@@ -144,7 +144,7 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
       case "VERSION" =>
         version()
       case "QUIT" =>
-        session.close(false)
+        quit()
     }
   }
 
@@ -343,5 +343,9 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
 
   private def shutdown() = {
     Kestrel.shutdown
+  }
+
+  private def quit() = {
+    session.close(false)
   }
 }
