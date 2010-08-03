@@ -22,6 +22,7 @@ the included [guide](docs/guide.md).
 Kestrel has a mailing list here: <kestrel-talk@googlegroups.com>
 http://groups.google.com/group/kestrel-talk
 
+
 Features
 --------
 
@@ -50,6 +51,7 @@ Kestrel is:
   client disconnects from kestrel before confirming ownership of the item,
   the item is handed to another client. In this way, crashing clients don't
   cause lost messages.
+
 
 Anti-Features
 -------------
@@ -143,6 +145,14 @@ guide). There are a few global config options that should be self-explanatory:
 - `log`
 
   Logfile configuration, as described in configgy.
+
+- `expiration_timer_frequency_seconds`
+
+  Frequency (in seconds) that a timer thread should scan active queues for
+  expired items. By default, this is off (0) and no automatic expiration
+  scanning happens; instead, items expire when a client does a `SET` or `GET`
+  on a queue. When this is set, a background thread will periodically flush
+  expired items from the head of every queue.
 
 
 Performance
