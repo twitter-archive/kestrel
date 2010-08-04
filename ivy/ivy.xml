@@ -20,10 +20,10 @@
     <dependency org="org.scala-lang" name="scala-library" rev="2.7.7" />
     <dependency org="org.scala-tools.testing" name="specs" rev="1.6.2.1" conf="test->*"/>
     <dependency org="com.twitter" name="xrayspecs" rev="1.0.7" />
-    <dependency org="com.twitter" name="twitterActors" rev="1.0.0" />
+    <dependency org="com.twitter" name="twitteractors" rev="1.0.0" />
 
     <dependency org="net.lag" name="configgy" rev="1.5.3" />
-    <dependency org="net.lag" name="naggati" rev="0.7.2" />
+    <dependency org="net.lag" name="naggati" rev="0.7.3" />
     <dependency org="org.apache.mina" name="mina-core" rev="2.0.0-M6" />
     <dependency org="org.slf4j" name="slf4j-api" rev="1.5.2" />
     <dependency org="org.slf4j" name="slf4j-jdk14" rev="1.5.2" />
