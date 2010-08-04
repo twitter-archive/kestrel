@@ -7,7 +7,7 @@
 #   /var/log/$APP_NAME (chown daemon, chmod 775)
 
 APP_NAME="kestrel"
-VERSION="1.2.1"
+VERSION="@VERSION@"
 APP_HOME="/opt/local/$APP_NAME/current"
 AS_USER="daemon"
 DAEMON="/usr/local/bin/daemon"

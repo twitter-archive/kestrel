@@ -60,6 +60,11 @@ You should immediately see the changes in "dump_config", to confirm.
   queue can hold. When the queue is full, `discard_old_when_full` dictates
   the behavior when a client attempts to add another item.
 
+- `max_item_size` (infinite)
+
+  Set a hard limit on the number of bytes a single queued item can contain.
+  An add request for an item larger than this will be rejected. 
+
 - `discard_old_when_full` (false)
 
   If this is false, when a queue is full, clients attempting to add another
@@ -108,6 +113,13 @@ You should immediately see the changes in "dump_config", to confirm.
   Clients may also attach an expiration time when adding items to a queue,
   but if the expiration time is longer than `max_age`, `max_age` will be
   used instead.
+
+- `move_expired_to` (none)
+
+  Name of a queue to add expired items to. If set, expired items are added to
+  the requested queue as if by a `SET` command. This can be used to implement
+  special processing for expired items, or to implement a simple "delayed
+  processing" queue.
 
 
 The journal file
@@ -164,6 +176,10 @@ default, means an item never expires.
 Expired items are flushed from a queue whenever a new item is added or
 removed. An idle queue won't have any items expired, but you can trigger a
 check by doing a "peek" on it.
+
+The global config option `expiration_timer_frequency_seconds` can be used to
+start a background thread that periodically removes expired items from the
+head of each queue. See the `README.md` file for more.
 
 
 Fanout Queues
@@ -293,6 +309,7 @@ Memcache commands
   Display server stats in a more readable style, grouped by queue. They're
   described below.
 
+
 Reliable reads
 --------------
 
@@ -332,6 +349,7 @@ Example:
     GET dirty_jobs/close/open
     (closes job 1, receives job 2)
     ...etc...
+
 
 Server stats
 ------------
