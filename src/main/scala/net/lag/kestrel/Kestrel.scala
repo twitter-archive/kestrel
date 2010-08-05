@@ -20,8 +20,8 @@ package net.lag.kestrel
 import java.net.InetSocketAddress
 import java.util.concurrent.{CountDownLatch, Executors, ExecutorService, TimeUnit}
 import java.util.{Timer, TimerTask}
-import scala.actors.{Actor, Scheduler}
-import scala.actors.Actor._
+import com.twitter.actors.{Actor, Scheduler}
+import com.twitter.actors.Actor._
 import scala.collection.mutable
 import com.twitter.xrayspecs.Time
 import org.apache.mina.core.session.IoSession
