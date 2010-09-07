@@ -1,7 +1,6 @@
 import sbt._
 import com.twitter.sbt.StandardProject
 
-
 class KestrelProject(info: ProjectInfo) extends StandardProject(info) {
   val specs = "org.scala-tools.testing" % "specs" % "1.6.2.1"
   val xrayspecs = "com.twitter" % "xrayspecs" % "1.0.7"
