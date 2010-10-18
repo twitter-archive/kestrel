@@ -20,8 +20,8 @@ package net.lag.kestrel
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.nio.ByteOrder
-import scala.actors.Actor
-import scala.actors.Actor._
+import com.twitter.actors.Actor
+import com.twitter.actors.Actor._
 import scala.collection.mutable
 import com.twitter.xrayspecs.Time
 import com.twitter.xrayspecs.TimeConversions._
@@ -71,12 +71,12 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
           cause.getCause match {
             case _: ProtocolError => writeResponse("CLIENT_ERROR\r\n")
             case _: IOException =>
-              log.debug("I/O Exception on session %d: %s", sessionID, cause.getMessage)
+              log.debug("I/O Exception on session %d: %s", sessionID, cause.toString)
             case _ =>
-              log.error(cause, "Exception caught on session %d: %s", sessionID, cause.getMessage)
+              log.error(cause, "Exception caught on session %d: %s", sessionID, cause.toString)
               writeResponse("ERROR\r\n")
           }
-          session.close
+          session.close(false)
         }
 
         case MinaMessage.SessionClosed =>
@@ -87,7 +87,7 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
 
         case MinaMessage.SessionIdle(status) =>
           log.debug("Idle timeout on session %s", session)
-          session.close
+          session.close(false)
       }
     }
   }
@@ -143,6 +143,8 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
         writeResponse("%d\r\n".format(flushed))
       case "VERSION" =>
         version()
+      case "QUIT" =>
+        quit()
     }
   }
 
@@ -172,7 +174,7 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
 
     if ((key.length == 0) || ((peeking || aborting) && (opening || closing)) || (peeking && aborting)) {
       writeResponse("CLIENT_ERROR\r\n")
-      session.close
+      session.close(false)
       return
     }
 
@@ -199,7 +201,7 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
                         " '%s' (sid %d, %s:%d)", key, sessionID, remoteAddress.getHostName,
                         remoteAddress.getPort)
             writeResponse("ERROR\r\n")
-            session.close
+            session.close(false)
             return
           }
           if (peeking) {
@@ -222,7 +224,7 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
         log.warning("Attempt to close a transaction on the wrong queue '%s' (sid %d, %s:%d)",
                     key, sessionID, remoteAddress.getHostName, remoteAddress.getPort)
         writeResponse("ERROR\r\n")
-        session.close
+        session.close(false)
     }
   }
 
@@ -341,5 +343,9 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
 
   private def shutdown() = {
     Kestrel.shutdown
+  }
+
+  private def quit() = {
+    session.close(false)
   }
 }

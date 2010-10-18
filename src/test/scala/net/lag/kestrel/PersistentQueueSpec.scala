@@ -19,7 +19,7 @@ package net.lag.kestrel
 
 import _root_.java.io.{File, FileInputStream}
 import _root_.java.util.concurrent.CountDownLatch
-import _root_.scala.actors.Actor.actor
+import _root_.com.twitter.actors.Actor.actor
 import _root_.scala.collection.mutable
 import _root_.com.twitter.xrayspecs.Time
 import _root_.com.twitter.xrayspecs.TimeConversions._

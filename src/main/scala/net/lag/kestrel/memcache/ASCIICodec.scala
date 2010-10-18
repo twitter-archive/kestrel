@@ -10,7 +10,7 @@ import net.lag.naggati.Steps._
 
 object ASCIICodec extends Codec {
   private val KNOWN_COMMANDS = List("GET", "SET", "STATS", "SHUTDOWN", "RELOAD", "FLUSH", "FLUSH_ALL",
-    "DUMP_CONFIG", "DUMP_STATS", "DELETE", "FLUSH_EXPIRED", "FLUSH_ALL_EXPIRED", "VERSION")
+    "DUMP_CONFIG", "DUMP_STATS", "DELETE", "FLUSH_EXPIRED", "FLUSH_ALL_EXPIRED", "VERSION", "QUIT")
   private val DATA_COMMANDS = List("SET")
 
   val encoder = new ProtocolEncoder {
