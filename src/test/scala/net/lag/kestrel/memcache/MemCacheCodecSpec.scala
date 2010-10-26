@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-package net.lag.kestrel.memcache
+package net.lag.kestrel
+package memcache
 
 import org.apache.mina.core.buffer.IoBuffer
 import org.apache.mina.core.filterchain.IoFilter
@@ -45,7 +46,7 @@ class MemCacheCodecSpec extends Specification {
 
 
     "'get' request chunked various ways" in {
-      val decoder = memcache.ASCIICodec.decoder
+      val decoder = ASCIICodec.decoder
 
       decoder.decode(fakeSession, IoBuffer.wrap("get foo\r\n".getBytes), fakeDecoderOutput)
       written mustEqual List(Request(List("GET", "foo"), None))
@@ -68,7 +69,7 @@ class MemCacheCodecSpec extends Specification {
     }
 
     "'set' request chunked various ways" in {
-      val decoder = memcache.ASCIICodec.decoder
+      val decoder = ASCIICodec.decoder
 
       decoder.decode(fakeSession, IoBuffer.wrap("set foo 0 0 5\r\nhello\r\n".getBytes), fakeDecoderOutput)
       written.mkString(",") mustEqual "<Request: [SET foo 0 0 5]: 68656c6c6f>"
@@ -90,7 +91,7 @@ class MemCacheCodecSpec extends Specification {
     }
 
     "'quit' exits the session" in {
-      val decoder = memcache.ASCIICodec.decoder
+      val decoder = ASCIICodec.decoder
 
       decoder.decode(fakeSession, IoBuffer.wrap("QUIT\r\n".getBytes), fakeDecoderOutput)
       written.mkString(",") mustEqual "<Request: [QUIT]>"

@@ -17,9 +17,9 @@
 
 package net.lag.kestrel
 
-import _root_.java.io._
-import _root_.org.specs.Specification
-
+import java.io._
+import net.lag.TestHelper
+import org.specs.Specification
 
 class JournalSpec extends Specification with TestHelper {
   "Journal" should {

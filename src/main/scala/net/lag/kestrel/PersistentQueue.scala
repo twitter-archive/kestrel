@@ -65,10 +65,8 @@ class PersistentQueue(persistencePath: String, val name: String,
   // # of items in the queue (including those not in memory)
   private var queueLength: Long = 0
 
-  private var queue = new mutable.Queue[QItem] {
-    // scala's Queue doesn't (yet?) have a way to put back.
-    def unget(item: QItem) = prependElem(item)
-  }
+  private var queue = new mutable.Queue[QItem]
+
   private var _memoryBytes: Long = 0
 
   private var closed = false
@@ -121,7 +119,7 @@ class PersistentQueue(persistencePath: String, val name: String,
   private var xidCounter: Int = 0
   private val openTransactions = new mutable.HashMap[Int, QItem]
   def openTransactionCount = openTransactions.size
-  def openTransactionIds = openTransactions.keys.toList.sort(_ - _ > 0)
+  def openTransactionIds = openTransactions.keys.toSeq.sorted.reverse
 
   def length: Long = synchronized { queueLength }
   def totalItems: Long = synchronized { _totalItems }
@@ -380,7 +378,7 @@ class PersistentQueue(persistencePath: String, val name: String,
     synchronized {
       if (!closed) {
         if (keepJournal()) journal.confirmRemove(xid)
-        openTransactions.removeKey(xid)
+        openTransactions.remove(xid)
       }
     }
   }
@@ -461,7 +459,7 @@ class PersistentQueue(persistencePath: String, val name: String,
       case JournalItem.RemoveTentative => _remove(true)
       case JournalItem.SavedXid(xid) => xidCounter = xid
       case JournalItem.Unremove(xid) => _unremove(xid)
-      case JournalItem.ConfirmRemove(xid) => openTransactions.removeKey(xid)
+      case JournalItem.ConfirmRemove(xid) => openTransactions.remove(xid)
       case x => log.error("Unexpected item in journal: %s", x)
     }
 
@@ -539,10 +537,10 @@ class PersistentQueue(persistencePath: String, val name: String,
   }
 
   private def _unremove(xid: Int) = {
-    openTransactions.removeKey(xid) map { item =>
+    openTransactions.remove(xid) map { item =>
       queueLength += 1
       queueSize += item.data.length
-      queue unget item
+      item +=: queue
       _memoryBytes += item.data.length
     }
   }
@@ -550,14 +548,14 @@ class PersistentQueue(persistencePath: String, val name: String,
 
 
 object PersistentQueue {
-  @volatile var maxItems: Int = Math.MAX_INT
-  @volatile var maxSize: Long = Math.MAX_LONG
-  @volatile var maxItemSize: Long = Math.MAX_LONG
+  @volatile var maxItems: Int = Int.MaxValue
+  @volatile var maxSize: Long = Long.MaxValue
+  @volatile var maxItemSize: Long = Long.MaxValue
   @volatile var maxAge: Int = 0
   @volatile var maxJournalSize: Long = 16 * 1024 * 1024
   @volatile var maxMemorySize: Long = 128 * 1024 * 1024
   @volatile var maxJournalOverflow: Int = 10
-  @volatile var maxJournalSizeAbsolute: Long = Math.MAX_LONG
+  @volatile var maxJournalSizeAbsolute: Long = Long.MaxValue
   @volatile var discardOldWhenFull: Boolean = false
   @volatile var keepJournal: Boolean = true
   @volatile var syncJournal: Boolean = false

@@ -17,15 +17,16 @@
 
 package net.lag.kestrel
 
-import _root_.java.io.{File, FileInputStream}
-import _root_.java.util.concurrent.CountDownLatch
-import _root_.com.twitter.actors.Actor.actor
-import _root_.scala.collection.mutable
-import _root_.com.twitter.xrayspecs.Time
-import _root_.com.twitter.xrayspecs.TimeConversions._
-import _root_.net.lag.configgy.Config
-import _root_.org.specs._
-import _root_.org.specs.matcher.Matcher
+import java.io.{File, FileInputStream}
+import java.util.concurrent.CountDownLatch
+import com.twitter.actors.Actor.actor
+import scala.collection.mutable
+import com.twitter.xrayspecs.Time
+import com.twitter.xrayspecs.TimeConversions._
+import net.lag.TestHelper
+import net.lag.configgy.Config
+import org.specs._
+import org.specs.matcher.Matcher
 
 
 class PersistentQueueSpec extends Specification with TestHelper {

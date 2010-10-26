@@ -1,4 +1,5 @@
-package net.lag.kestrel.memcache
+package net.lag.kestrel
+package memcache
 
 import scala.collection.mutable
 import org.apache.mina.core.buffer.IoBuffer

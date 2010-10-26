@@ -184,7 +184,7 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
       queues.get(name) map { q =>
         q.close()
         q.destroyJournal()
-        queues.removeKey(name)
+        queues.remove(name)
       }
       if (name contains '+') {
         val master = name.split('+')(0)
@@ -210,7 +210,7 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
     case None => Array[(String, String)]()
     case Some(q) =>
       q.dumpStats() ++
-        fanout_queues.get(key).map { qset => ("children", qset.mkString(",")) }.toList.toArray
+        fanout_queues.get(key).map { qset => ("children", qset.mkString(",")) }.toList
   }
 
   def dumpConfig(key: String): Array[String] = {

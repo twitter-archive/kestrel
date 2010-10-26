@@ -38,7 +38,7 @@ trait TestHelper { self: Specification =>
   def deleteFolder(folder: File): Unit = {
     val files = folder.listFiles
     if (files != null) {
-      for (val f <- files) {
+      for (f <- files) {
         if (f.isDirectory) {
           deleteFolder(f)
         } else {

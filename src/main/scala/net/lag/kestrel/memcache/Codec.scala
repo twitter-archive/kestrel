@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-package net.lag.kestrel.memcache
+package net.lag.kestrel
+package memcache
 
 import org.apache.mina.core.buffer.IoBuffer
 import net.lag.extensions._
@@ -36,16 +37,16 @@ case class Response(data: IoBuffer)
 object Codec {
   def encoderFor(protocol: String) = {
     protocol match {
-      case "ascii" => memcache.ASCIICodec.encoder
-      case "binary" => memcache.BinaryCodec.encoder
+      case "ascii" => ASCIICodec.encoder
+      case "binary" => BinaryCodec.encoder
       case _ => throw new ProtocolError("Invalid protocol: " + protocol)
     }
   }
 
   def decoderFor(protocol: String) = {
     protocol match {
-      case "ascii" => memcache.ASCIICodec.decoder
-      case "binary" => memcache.BinaryCodec.decoder
+      case "ascii" => ASCIICodec.decoder
+      case "binary" => BinaryCodec.decoder
       case _ => throw new ProtocolError("Invalid protocol: " + protocol)
     }
   }

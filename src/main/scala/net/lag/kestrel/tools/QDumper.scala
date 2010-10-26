@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-package net.lag.kestrel.tools
+package net.lag.kestrel
+package tools
 
 import java.io.{FileNotFoundException, IOException}
 import scala.collection.mutable
@@ -96,11 +97,11 @@ class QueueDumper(filename: String) {
         if (!QDumper.quiet) println("XID %d".format(xid))
         currentXid = xid
       case JournalItem.Unremove(xid) =>
-        queue.unget(openTransactions.removeKey(xid).get)
+        queue.unget(openTransactions.remove(xid).get)
         if (!QDumper.quiet) println("CAN %d".format(xid))
       case JournalItem.ConfirmRemove(xid) =>
         if (!QDumper.quiet) println("ACK %d".format(xid))
-        openTransactions.removeKey(xid)
+        openTransactions.remove(xid)
       case x =>
         if (!QDumper.quiet) println(x)
     }
