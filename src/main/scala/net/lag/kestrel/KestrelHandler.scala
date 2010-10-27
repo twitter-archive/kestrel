@@ -63,7 +63,7 @@ class KestrelHandler(val channel: Channel, val config: Config) extends Actor {
         case NettyMessage.MessageReceived(msg) =>
           handle(msg.asInstanceOf[MemcacheRequest])
 
-        case NettyMessage.ExceptionCaught(cause) => {
+        case NettyMessage.ExceptionCaught(cause) =>
           cause.getCause match {
             case _: ProtocolError =>
               new MemcacheResponse("CLIENT_ERROR").writeTo(channel)
@@ -74,9 +74,8 @@ class KestrelHandler(val channel: Channel, val config: Config) extends Actor {
               new MemcacheResponse("ERROR").writeTo(channel)
           }
           channel.close()
-        }
 
-        case NettyMessage.ChannelDisconnected =>
+        case NettyMessage.ChannelDisconnected() =>
           log.debug("End of session %d", sessionID)
           abortAnyTransaction
           KestrelStats.sessions.decr
@@ -127,6 +126,8 @@ class KestrelHandler(val channel: Channel, val config: Config) extends Actor {
         version()
       case "quit" =>
         quit()
+      case x =>
+        new MemcacheResponse("CLIENT_ERROR").writeTo(channel)
     }
   }
 
@@ -295,7 +296,7 @@ class KestrelHandler(val channel: Channel, val config: Config) extends Actor {
 
     val summary = {
       for ((key, value) <- report) yield "STAT %s %s".format(key, value)
-    }.mkString("", "\r\n", "\r\nEND\r\n")
+    }.mkString("", "\r\n", "\r\nEND")
     new MemcacheResponse(summary).writeTo(channel)
   }
 
