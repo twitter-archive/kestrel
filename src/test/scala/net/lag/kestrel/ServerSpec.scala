@@ -53,9 +53,8 @@ class ServerSpec extends Specification with TestHelper {
 
 
   "Server" should {
-    /*
     doAfter {
-      Kestrel.shutdown
+      Kestrel.shutdown()
     }
 
     "configure per-queue" in {
@@ -352,6 +351,5 @@ class ServerSpec extends Specification with TestHelper {
         client.stats("queue_q3_items") mustEqual "0"
       }
     }
-    */
   }
 }

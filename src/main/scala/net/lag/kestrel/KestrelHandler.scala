@@ -92,40 +92,40 @@ class KestrelHandler(val channel: Channel, val config: Config) extends Actor {
   private def handle(request: MemcacheRequest) = {
     KestrelStats.bytesRead.incr(request.bytesRead)
     request.line(0) match {
-      case "GET" => get(request.line(1))
-      case "SET" =>
+      case "get" => get(request.line(1))
+      case "set" =>
         try {
           set(request.line(1), request.line(2).toInt, request.line(3).toInt, request.data.get)
         } catch {
           case e: NumberFormatException =>
             throw new ProtocolError("bad request: " + request)
         }
-      case "STATS" => stats
-      case "SHUTDOWN" => shutdown
-      case "RELOAD" =>
+      case "stats" => stats
+      case "shutdown" => shutdown
+      case "reload" =>
         Configgy.reload
         new MemcacheResponse("Reloaded config.").writeTo(channel)
-      case "FLUSH" =>
+      case "flush" =>
         flush(request.line(1))
-      case "FLUSH_ALL" =>
+      case "flush_all" =>
         for (qName <- Kestrel.queues.queueNames) {
           Kestrel.queues.flush(qName)
         }
         new MemcacheResponse("Flushed all queues.").writeTo(channel)
-      case "DUMP_CONFIG" =>
+      case "dump_config" =>
         dumpConfig()
-      case "DUMP_STATS" =>
+      case "dump_stats" =>
         dumpStats()
-      case "DELETE" =>
+      case "delete" =>
         delete(request.line(1))
-      case "FLUSH_EXPIRED" =>
+      case "flush_expired" =>
         flushExpired(request.line(1))
-      case "FLUSH_ALL_EXPIRED" =>
+      case "flush_all_expired" =>
         val flushed = Kestrel.queues.flushAllExpired()
         new MemcacheResponse(flushed.toString).writeTo(channel)
-      case "VERSION" =>
+      case "version" =>
         version()
-      case "QUIT" =>
+      case "quit" =>
         quit()
     }
   }

@@ -152,10 +152,12 @@ object Kestrel {
     }
 
     log.info("Kestrel started.")
-    deathSwitch.await()
+    actor {
+      deathSwitch.await()
+    }
   }
 
-  def shutdown(): Unit = {
+  def shutdown() {
     log.info("Shutting down!")
     acceptor.foreach { _.close().awaitUninterruptibly() }
     queues.shutdown()
