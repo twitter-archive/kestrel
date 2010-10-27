@@ -17,10 +17,10 @@
 
 package net.lag
 
-import _root_.java.io.File
-import _root_.java.util.UUID
-import _root_.net.lag.logging.Logger
-import _root_.org.specs.Specification
+import java.io.File
+import java.util.UUID
+import net.lag.logging.Logger
+import org.specs.Specification
 
 
 trait TestHelper { self: Specification =>
