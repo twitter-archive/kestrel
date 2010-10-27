@@ -84,6 +84,8 @@ object Kestrel {
   }
 
   def startup(config: Config): Unit = {
+    log.info("Kestrel config: %s", config.toString)
+
     // this one is used by the actor initialization, so can only be set at startup.
     var maxThreads = config.getInt("max_threads", Runtime.getRuntime().availableProcessors * 2)
 
@@ -95,7 +97,6 @@ object Kestrel {
     }
 
     System.setProperty("actors.maxPoolSize", maxThreads.toString)
-    log.debug("max_threads=%d", maxThreads)
 
     val listenAddress = config.getString("host", "0.0.0.0")
     val listenPort = config.getInt("port", DEFAULT_PORT)
@@ -133,7 +134,9 @@ object Kestrel {
     acceptor = Some(bootstrap.bind(new InetSocketAddress(listenAddress, listenPort)))
 
     // expose config thru JMX.
-    config.registerWithJmx("net.lag.kestrel")
+    if (config.getBool("jmx", false)) {
+      config.registerWithJmx("net.lag.kestrel")
+    }
 
     // optionally, start a periodic timer to clean out expired items.
     val expirationTimerFrequency = config.getInt("expiration_timer_frequency_seconds", 0)
