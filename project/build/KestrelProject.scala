@@ -3,7 +3,8 @@ import com.twitter.sbt._
 
 class KestrelProject(info: ProjectInfo) extends StandardProject(info) with SubversionPublisher {
   val configgy = "net.lag" % "configgy" % "2.0.1"
-  val naggati = "net.lag" %% "naggati" % "0.7.4"
+  val naggati = "com.twitter" %% "naggati" % "2.0.0-SNAPSHOT"
+  val xrayspecs = "com.twitter" %% "xrayspecs" % "2.0"
 
   val specs = "org.scala-tools.testing" %% "specs" % "1.6.5" % "test"
 

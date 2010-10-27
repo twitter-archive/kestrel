@@ -224,7 +224,7 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
    * Shutdown this queue collection. All actors are asked to exit, and
    * any future queue requests will fail.
    */
-  def shutdown: Unit = synchronized {
+  def shutdown(): Unit = synchronized {
     if (shuttingDown) {
       return
     }
