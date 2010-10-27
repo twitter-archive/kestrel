@@ -19,7 +19,6 @@ package net.lag.kestrel
 
 import java.net.InetSocketAddress
 import java.util.concurrent.{CountDownLatch, Executors, ExecutorService, TimeUnit}
-import java.util.{Timer, TimerTask}
 import scala.collection.{immutable, mutable}
 import com.twitter.actors.{Actor, Scheduler}
 import com.twitter.actors.Actor._
@@ -32,7 +31,7 @@ import org.jboss.netty.bootstrap.ServerBootstrap
 import org.jboss.netty.channel.{Channel, ChannelFactory, ChannelPipelineFactory, Channels}
 import org.jboss.netty.channel.group.DefaultChannelGroup
 import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory
-import org.jboss.netty.util.HashedWheelTimer
+import org.jboss.netty.util.{HashedWheelTimer, Timeout, Timer, TimerTask}
 
 object KestrelStats {
   val bytesRead = new Counter
@@ -58,7 +57,7 @@ object Kestrel {
   var channelFactory: ChannelFactory = null
   val channels = new DefaultChannelGroup("channels")
   var acceptor: Option[Channel] = None
-  var timer: HashedWheelTimer = null
+  var timer: Timer = null
 
   private val deathSwitch = new CountDownLatch(1)
 
@@ -107,6 +106,7 @@ object Kestrel {
     queues.loadQueues()
 
     // netty setup:
+    timer = new HashedWheelTimer()
     executor = Executors.newCachedThreadPool()
     channelFactory = new NioServerSocketChannelFactory(executor, executor)
     val bootstrap = new ServerBootstrap(channelFactory)
@@ -138,16 +138,17 @@ object Kestrel {
     // optionally, start a periodic timer to clean out expired items.
     val expirationTimerFrequency = config.getInt("expiration_timer_frequency_seconds", 0)
     if (expirationTimerFrequency > 0) {
-      val timer = new Timer("Expiration timer", true)
+      log.info("Starting up background expiration task.")
       val expirationTask = new TimerTask {
-        def run() {
+        def run(timeout: Timeout) {
           val expired = Kestrel.queues.flushAllExpired()
           if (expired > 0) {
             log.info("Expired %d item(s) from queues automatically.", expired)
           }
+          timer.newTimeout(this, expirationTimerFrequency, TimeUnit.SECONDS)
         }
       }
-      timer.schedule(expirationTask, expirationTimerFrequency * 1000, expirationTimerFrequency * 1000)
+      expirationTask.run(null)
     }
 
     log.info("Kestrel started.")
@@ -168,9 +169,7 @@ object Kestrel {
 
     executor.shutdown()
     executor.awaitTermination(5, TimeUnit.SECONDS)
-    // the line below causes a 1 second pause in unit tests. :(
-    //acceptorExecutor.awaitTermination(5, TimeUnit.SECONDS)
-//    timer.stop()
+    timer.stop()
     timer = null
     log.info("Goodbye.")
   }

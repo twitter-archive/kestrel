@@ -48,7 +48,7 @@ class KestrelHandler(val channel: Channel, val config: Config) extends Actor {
   // config can be null in unit tests
   val idleTimeout = if (config == null) IDLE_TIMEOUT else config.getInt("timeout", IDLE_TIMEOUT)
   if (idleTimeout > 0) {
-//    channel.getPipeline.addFirst("idle", new IdleStateHandler(Kestrel.timer, 0, 0, idleTimeout))
+    channel.getPipeline.addFirst("idle", new IdleStateHandler(Kestrel.timer, 0, 0, idleTimeout))
   }
 
   Kestrel.channels.add(channel)
@@ -64,7 +64,7 @@ class KestrelHandler(val channel: Channel, val config: Config) extends Actor {
           handle(msg.asInstanceOf[MemcacheRequest])
 
         case NettyMessage.ExceptionCaught(cause) =>
-          cause.getCause match {
+          cause match {
             case _: ProtocolError =>
               new MemcacheResponse("CLIENT_ERROR").writeTo(channel)
             case _: IOException =>
