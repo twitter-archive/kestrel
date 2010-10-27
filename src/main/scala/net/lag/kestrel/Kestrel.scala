@@ -47,7 +47,7 @@ object KestrelStats {
 
 
 object Kestrel {
-  private val log = Logger.get
+  private val log = Logger.get(getClass.getName)
   val runtime = new RuntimeEnvironment(getClass)
 
   var queues: QueueCollection = null
