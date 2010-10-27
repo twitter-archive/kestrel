@@ -29,7 +29,7 @@ import com.twitter.xrayspecs.Time
 import net.lag.configgy.{Config, ConfigMap, Configgy, RuntimeEnvironment}
 import net.lag.logging.Logger
 import org.jboss.netty.bootstrap.ServerBootstrap
-import org.jboss.netty.channel.{Channel, ChannelFactory}
+import org.jboss.netty.channel.{Channel, ChannelFactory, ChannelPipelineFactory, Channels}
 import org.jboss.netty.channel.group.DefaultChannelGroup
 import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory
 import org.jboss.netty.util.HashedWheelTimer
@@ -45,7 +45,6 @@ object KestrelStats {
   val sessionID = new Counter
 }
 
-
 object Kestrel {
   private val log = Logger.get(getClass.getName)
   val runtime = new RuntimeEnvironment(getClass)
@@ -59,7 +58,7 @@ object Kestrel {
   var channelFactory: ChannelFactory = null
   val channels = new DefaultChannelGroup("channels")
   var acceptor: Option[Channel] = None
-  val timer = new HashedWheelTimer()
+  var timer: HashedWheelTimer = null
 
   private val deathSwitch = new CountDownLatch(1)
 
@@ -159,6 +158,8 @@ object Kestrel {
 
   def shutdown() {
     log.info("Shutting down!")
+    deathSwitch.countDown()
+
     acceptor.foreach { _.close().awaitUninterruptibly() }
     queues.shutdown()
     Scheduler.shutdown
@@ -166,9 +167,12 @@ object Kestrel {
     channelFactory.releaseExternalResources()
 
     executor.shutdown()
+    executor.awaitTermination(5, TimeUnit.SECONDS)
     // the line below causes a 1 second pause in unit tests. :(
     //acceptorExecutor.awaitTermination(5, TimeUnit.SECONDS)
-    deathSwitch.countDown()
+//    timer.stop()
+    timer = null
+    log.info("Goodbye.")
   }
 
   def uptime() = (Time.now.inMilliseconds - _startTime) / 1000
