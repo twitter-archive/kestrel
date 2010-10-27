@@ -96,11 +96,10 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
   }
 
   /**
-   * Add an item to a named queue. Will not return until the item has been
-   * synchronously added and written to the queue journal file.
+   * Add an item to a named queue. Will not return until the item has been synchronously added
+   * and written to the queue journal file.
    *
-   * @return true if the item was added; false if the server is shutting
-   *     down
+   * @return true if the item was added; false if the server is shutting down
    */
   def add(key: String, item: Array[Byte], expiry: Int): Boolean = {
     for (fanouts <- fanout_queues.get(key); name <- fanouts) {
@@ -114,9 +113,9 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
         val normalizedExpiry: Long = if (expiry == 0) {
           0
         } else if (expiry < 1000000) {
-          now + expiry
+          now + (expiry * 1000)
         } else {
-          expiry
+          expiry.toLong * 1000
         }
         val result = q.add(item, normalizedExpiry)
         if (result) totalAdded.incr()

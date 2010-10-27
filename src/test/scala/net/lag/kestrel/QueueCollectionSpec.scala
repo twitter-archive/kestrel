@@ -193,6 +193,29 @@ class QueueCollectionSpec extends Specification with TestHelper {
       }
     }
 
+    "expire items when (and only when) they are expired" in {
+      withTempFolder {
+        new File(folderName + "/expired").createNewFile()
+        qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+        qc.loadQueues()
+
+        Time.freeze
+        qc.add("expired", "hello".getBytes, 5)
+        Time.advance(4.seconds)
+        new String(qc.receive("expired").get) mustEqual "hello"
+        qc.add("expired", "hello".getBytes, 5)
+        Time.advance(6.seconds)
+        qc.receive("expired") mustEqual None
+
+        qc.add("expired", "hello".getBytes, 5.seconds.fromNow.inSeconds)
+        Time.advance(4.seconds)
+        new String(qc.receive("expired").get) mustEqual "hello"
+        qc.add("expired", "hello".getBytes, 5.seconds.fromNow.inSeconds)
+        Time.advance(6.seconds)
+        qc.receive("expired") mustEqual None
+      }
+    }
+
     "move expired items from one queue to another" in {
       withTempFolder {
         new File(folderName + "/jobs").createNewFile()
@@ -204,7 +227,7 @@ class QueueCollectionSpec extends Specification with TestHelper {
         qc.queue("jobs").get.length mustEqual 1
         qc.queue("expired").get.length mustEqual 0
 
-        Time.advance(1.second)
+        Time.advance(2.seconds)
         qc.queue("jobs").get.length mustEqual 1
         qc.queue("expired").get.length mustEqual 0
         qc.receive("jobs") mustEqual None
