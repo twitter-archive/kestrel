@@ -21,6 +21,9 @@ import scala.collection.mutable
 import net.lag.configgy.Config
 import net.lag.logging.Logger
 
+class TooManyOpenTransactionsException extends Exception("Too many open transactions.")
+object TooManyOpenTransactionsException extends TooManyOpenTransactionsException
+
 /**
  * Common implementations of kestrel commands that don't depend on which protocol you're using.
  */
@@ -31,8 +34,9 @@ abstract class KestrelHandler(val config: Config, val queues: QueueCollection) {
   val sessionID = KestrelStats.sessionID.incr
   val pendingTransactions = new mutable.HashMap[String, mutable.ListBuffer[Int]] {
     override def default(key: String) = {
-      this(key) = new mutable.ListBuffer[Int]
-      this(key)
+      val rv = new mutable.ListBuffer[Int]
+      this(key) = rv
+      rv
     }
   }
 
@@ -80,6 +84,10 @@ abstract class KestrelHandler(val config: Config, val queues: QueueCollection) {
   }
 
   def getItem(key: String, timeout: Int, opening: Boolean, peeking: Boolean)(f: Option[QItem] => Unit) {
+    if (opening && pendingTransactions(key).size >= maxOpenTransactions) {
+      throw TooManyOpenTransactionsException
+    }
+
     log.debug("get -> q=%s t=%d open=%s peek=%s", key, timeout, opening, peeking)
     if (peeking) {
       KestrelStats.peekRequests.incr

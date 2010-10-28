@@ -177,17 +177,24 @@ class MemcacheHandler(val channel: Channel, config: Config, queues: QueueCollect
       if (opening || !closing) {
         if (pendingTransactions(key).size > 0 && !peeking && !opening) {
           log.warning("Attempt to perform a non-transactional fetch with an open transaction on " +
-                      " '%s' (sid %d, %s:%d)", key, sessionID, remoteAddress.getHostName,
-                      remoteAddress.getPort)
+                      " '%s' (sid %d, %s)", key, sessionID, clientDescription)
           new MemcacheResponse("ERROR").writeTo(channel)
           channel.close()
           return
         }
-        getItem(key, timeout, opening, peeking) {
-          case None =>
-            new MemcacheResponse("END").writeTo(channel)
-          case Some(item) =>
-            new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), item.data).writeTo(channel)
+        try {
+          getItem(key, timeout, opening, peeking) {
+            case None =>
+              new MemcacheResponse("END").writeTo(channel)
+            case Some(item) =>
+              new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), item.data).writeTo(channel)
+          }
+        } catch {
+          case e: TooManyOpenTransactionsException =>
+            log.warning("Attempt to open too many transactions on '%s' (sid %d, %s)", key, sessionID, clientDescription)
+            new MemcacheResponse("ERROR").writeTo(channel)
+            channel.close()
+            return
         }
       }
     }

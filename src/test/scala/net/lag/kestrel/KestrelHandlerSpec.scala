@@ -31,7 +31,8 @@ class FakeKestrelHandler(config: Config, queues: QueueCollection) extends Kestre
 }
 
 class KestrelHandlerSpec extends Specification with TestHelper {
-  val NO_CONFIG = Config.fromMap(Map.empty)
+  val TINY_CONFIG = Config.fromMap(Map("max_open_transactions" -> "1"))
+  val NORMAL_CONFIG = Config.fromMap(Map("max_open_transactions" -> "10"))
 
   case class beString(expected: String) extends Matcher[Option[QItem]]() {
     def apply(v: => Option[QItem]) = {
@@ -49,8 +50,8 @@ class KestrelHandlerSpec extends Specification with TestHelper {
 
     "set and get" in {
       withTempFolder {
-        queues = new QueueCollection(folderName, NO_CONFIG)
-        val handler = new FakeKestrelHandler(NO_CONFIG, queues)
+        queues = new QueueCollection(folderName, NORMAL_CONFIG)
+        val handler = new FakeKestrelHandler(NORMAL_CONFIG, queues)
         handler.setItem("test", 0, 0, "one".getBytes)
         handler.setItem("test", 0, 0, "two".getBytes)
         handler.getItem("test", 0, false, false) { _ must beString("one") }
@@ -60,8 +61,8 @@ class KestrelHandlerSpec extends Specification with TestHelper {
 
     "abort and confirm a transaction" in {
       withTempFolder {
-        queues = new QueueCollection(folderName, NO_CONFIG)
-        val handler = new FakeKestrelHandler(NO_CONFIG, queues)
+        queues = new QueueCollection(folderName, NORMAL_CONFIG)
+        val handler = new FakeKestrelHandler(NORMAL_CONFIG, queues)
         handler.setItem("test", 0, 0, "one".getBytes)
         handler.getItem("test", 0, true, false) { _ must beString("one") }
         handler.getItem("test", 0, true, false) { _ mustEqual None }
@@ -75,8 +76,8 @@ class KestrelHandlerSpec extends Specification with TestHelper {
     "open several transactions" in {
       "on one queue" in {
         withTempFolder {
-          queues = new QueueCollection(folderName, NO_CONFIG)
-          val handler = new FakeKestrelHandler(NO_CONFIG, queues)
+          queues = new QueueCollection(folderName, NORMAL_CONFIG)
+          val handler = new FakeKestrelHandler(NORMAL_CONFIG, queues)
           handler.setItem("test", 0, 0, "one".getBytes)
           handler.setItem("test", 0, 0, "two".getBytes)
           handler.setItem("test", 0, 0, "three".getBytes)
@@ -93,8 +94,8 @@ class KestrelHandlerSpec extends Specification with TestHelper {
 
       "on several queues" in {
         withTempFolder {
-          queues = new QueueCollection(folderName, NO_CONFIG)
-          val handler = new FakeKestrelHandler(NO_CONFIG, queues)
+          queues = new QueueCollection(folderName, NORMAL_CONFIG)
+          val handler = new FakeKestrelHandler(NORMAL_CONFIG, queues)
           handler.setItem("red", 0, 0, "red1".getBytes)
           handler.setItem("red", 0, 0, "red2".getBytes)
           handler.setItem("green", 0, 0, "green1".getBytes)
@@ -117,6 +118,17 @@ class KestrelHandlerSpec extends Specification with TestHelper {
           handler.abortTransaction("green") mustEqual true
           handler.getItem("blue", 0, true, false) { _ must beString("blue2") }
           handler.getItem("green", 0, true, false) { _ must beString("green1") }
+        }
+      }
+
+      "but not if transactions are limited" in {
+        withTempFolder {
+          queues = new QueueCollection(folderName, TINY_CONFIG)
+          val handler = new FakeKestrelHandler(TINY_CONFIG, queues)
+          handler.setItem("red", 0, 0, "red1".getBytes)
+          handler.setItem("red", 0, 0, "red2".getBytes)
+          handler.getItem("red", 0, true, false) { _ must beString("red1") }
+          handler.getItem("red", 0, true, false) { x => x } must throwA[TooManyOpenTransactionsException]
         }
       }
     }
