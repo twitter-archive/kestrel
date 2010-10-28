@@ -31,8 +31,8 @@ class JournalPacker(filenames: Array[String], newFilename: String) {
   private val log = Logger.get
 
   val journals = filenames.map { filename => new Journal(filename, false) }
-  val remover = Iterator.flatten(journals.map { _.walk() }.elements)
-  val adder = Iterator.flatten(journals.map { _.walk() }.elements)
+  val remover = journals.map { _.walk() }.iterator.flatten
+  val adder = journals.map { _.walk() }.iterator.flatten
   val writer = new FileOutputStream(newFilename, false).getChannel
 
   val adderStack = new mutable.ListBuffer[QItem]
@@ -84,7 +84,7 @@ class JournalPacker(filenames: Array[String], newFilename: String) {
         case JournalItem.SavedXid(xid) =>
           currentXid = xid
         case JournalItem.Unremove(xid) =>
-          adderStack prepend openTransactions.removeKey(xid).get
+          adderStack prepend openTransactions.remove(xid).get
         case JournalItem.ConfirmRemove(xid) =>
           openTransactions -= xid
       }
@@ -98,7 +98,7 @@ class JournalPacker(filenames: Array[String], newFilename: String) {
     // now write the new journal.
     statusCallback(0, 0)
     val remaining = new Iterable[QItem] {
-      def elements = new tools.PythonIterator[QItem] {
+      def iterator = new tools.PythonIterator[QItem] {
         def apply() = advanceAdder()
       }
     }

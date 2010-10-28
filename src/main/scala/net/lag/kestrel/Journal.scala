@@ -85,7 +85,7 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
     open
   }
 
-  def dump(xid: Int, openItems: List[QItem], queue: Iterable[QItem]) {
+  def dump(xid: Int, openItems: Seq[QItem], queue: Iterable[QItem]) {
     size = 0
     for (item <- openItems) {
       addWithXid(item)

@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-package net.lag.kestrel.tools
+package net.lag.kestrel
+package tools
 
 import java.io.{FileNotFoundException, IOException}
 import scala.collection.mutable
