@@ -128,7 +128,7 @@ object Kestrel {
           case "ascii" => MemcacheRequest.asciiDecoder
           case "binary" => throw new Exception("Binary protocol not supported yet.")
         }
-        val actorHandler = new ActorHandler(filter, { channel => new MemcacheHandler(channel, config) })
+        val actorHandler = new ActorHandler(filter, { channel => new MemcacheHandler(channel, config, queues) })
         Channels.pipeline(protocolCodec, actorHandler)
       }
     })

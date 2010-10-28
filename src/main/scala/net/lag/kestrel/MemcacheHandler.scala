@@ -34,8 +34,8 @@ import org.jboss.netty.handler.timeout.IdleStateHandler
 /**
  * Memcache protocol handler for a kestrel connection.
  */
-class MemcacheHandler(val channel: Channel, config: Config)
-      extends KestrelHandler(config) with Actor {
+class MemcacheHandler(val channel: Channel, config: Config, queues: QueueCollection)
+      extends KestrelHandler(config, queues) with Actor {
   private val log = Logger.get
 
   private val IDLE_TIMEOUT = 60
@@ -123,7 +123,7 @@ class MemcacheHandler(val channel: Channel, config: Config)
       case "flush_expired" =>
         new MemcacheResponse(flushExpired(request.line(1)).toString).writeTo(channel)
       case "flush_all_expired" =>
-        val flushed = Kestrel.queues.flushAllExpired()
+        val flushed = queues.flushAllExpired()
         new MemcacheResponse(flushed.toString).writeTo(channel)
       case "roll" =>
         rollJournal(request.line(1))
@@ -166,36 +166,30 @@ class MemcacheHandler(val channel: Channel, config: Config)
       return
     }
 
-    try {
-      if (aborting) {
-        abortTransaction(key)
-        new MemcacheResponse("END").writeTo(channel)
-      } else {
-        if (closing) {
-          closeTransaction(key)
-          if (!opening) new MemcacheResponse("END").writeTo(channel)
+    if (aborting) {
+      abortTransaction(key)
+      new MemcacheResponse("END").writeTo(channel)
+    } else {
+      if (closing) {
+        closeTransaction(key)
+        if (!opening) new MemcacheResponse("END").writeTo(channel)
+      }
+      if (opening || !closing) {
+        if (pendingTransactions(key).size > 0 && !peeking && !opening) {
+          log.warning("Attempt to perform a non-transactional fetch with an open transaction on " +
+                      " '%s' (sid %d, %s:%d)", key, sessionID, remoteAddress.getHostName,
+                      remoteAddress.getPort)
+          new MemcacheResponse("ERROR").writeTo(channel)
+          channel.close()
+          return
         }
-        if (opening || !closing) {
-          if (pendingTransaction.isDefined && !peeking) {
-            log.warning("Attempt to perform a non-transactional fetch with an open transaction on " +
-                        " '%s' (sid %d, %s:%d)", key, sessionID, remoteAddress.getHostName,
-                        remoteAddress.getPort)
-            new MemcacheResponse("ERROR").writeTo(channel)
-            channel.close()
-            return
-          }
-          getItem(key, timeout, opening, peeking) {
-            case None =>
-              new MemcacheResponse("END").writeTo(channel)
-            case Some(item) =>
-              new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), item.data).writeTo(channel)
-          }
+        getItem(key, timeout, opening, peeking) {
+          case None =>
+            new MemcacheResponse("END").writeTo(channel)
+          case Some(item) =>
+            new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), item.data).writeTo(channel)
         }
       }
-    } catch {
-      case e: MismatchedQueueException =>
-        new MemcacheResponse("ERROR").writeTo(channel)
-        channel.close()
     }
   }
 
@@ -204,21 +198,21 @@ class MemcacheHandler(val channel: Channel, config: Config)
     report += (("uptime", Kestrel.uptime.toString))
     report += (("time", (Time.now.inMilliseconds / 1000).toString))
     report += (("version", Kestrel.runtime.jarVersion))
-    report += (("curr_items", Kestrel.queues.currentItems.toString))
-    report += (("total_items", Kestrel.queues.totalAdded.toString))
-    report += (("bytes", Kestrel.queues.currentBytes.toString))
+    report += (("curr_items", queues.currentItems.toString))
+    report += (("total_items", queues.totalAdded.toString))
+    report += (("bytes", queues.currentBytes.toString))
     report += (("curr_connections", KestrelStats.sessions.toString))
     report += (("total_connections", KestrelStats.totalConnections.toString))
     report += (("cmd_get", KestrelStats.getRequests.toString))
     report += (("cmd_set", KestrelStats.setRequests.toString))
     report += (("cmd_peek", KestrelStats.peekRequests.toString))
-    report += (("get_hits", Kestrel.queues.queueHits.toString))
-    report += (("get_misses", Kestrel.queues.queueMisses.toString))
+    report += (("get_hits", queues.queueHits.toString))
+    report += (("get_misses", queues.queueMisses.toString))
     report += (("bytes_read", KestrelStats.bytesRead.toString))
     report += (("bytes_written", KestrelStats.bytesWritten.toString))
 
-    for (qName <- Kestrel.queues.queueNames) {
-      report ++= Kestrel.queues.stats(qName).map { case (k, v) => ("queue_" + qName + "_" + k, v) }
+    for (qName <- queues.queueNames) {
+      report ++= queues.stats(qName).map { case (k, v) => ("queue_" + qName + "_" + k, v) }
     }
 
     val summary = {
@@ -229,9 +223,9 @@ class MemcacheHandler(val channel: Channel, config: Config)
 
   private def dumpConfig() = {
     val dump = new mutable.ListBuffer[String]
-    for (qName <- Kestrel.queues.queueNames) {
+    for (qName <- queues.queueNames) {
       dump += "queue '" + qName + "' {"
-      dump += Kestrel.queues.dumpConfig(qName).mkString("  ", "\r\n  ", "")
+      dump += queues.dumpConfig(qName).mkString("  ", "\r\n  ", "")
       dump += "}"
     }
     new MemcacheResponse(dump.mkString("", "\r\n", "\r\nEND\r\n")).writeTo(channel)
@@ -239,9 +233,9 @@ class MemcacheHandler(val channel: Channel, config: Config)
 
   private def dumpStats() = {
     val dump = new mutable.ListBuffer[String]
-    for (qName <- Kestrel.queues.queueNames) {
+    for (qName <- queues.queueNames) {
       dump += "queue '" + qName + "' {"
-      dump += Kestrel.queues.stats(qName).map { case (k, v) => k + "=" + v }.mkString("  ", "\r\n  ", "")
+      dump += queues.stats(qName).map { case (k, v) => k + "=" + v }.mkString("  ", "\r\n  ", "")
       dump += "}"
     }
     new MemcacheResponse(dump.mkString("", "\r\n", "\r\nEND\r\n")).writeTo(channel)
