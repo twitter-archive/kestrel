@@ -60,6 +60,7 @@ abstract class KestrelHandler(val config: Config) {
                       key, sessionID, clientDescription)
           throw new MismatchedQueueException
         } else {
+          log.debug("abort -> q=%s", key)
           Kestrel.queues.unremove(qname, xid)
           pendingTransaction = None
         }
@@ -78,6 +79,7 @@ abstract class KestrelHandler(val config: Config) {
                       key, sessionID, clientDescription)
           throw new MismatchedQueueException
         } else {
+          log.debug("confirm -> q=%s", key)
           Kestrel.queues.confirmRemove(qname, xid)
           pendingTransaction = None
         }
@@ -86,6 +88,7 @@ abstract class KestrelHandler(val config: Config) {
   }
 
   protected def getItem(key: String, timeout: Int, opening: Boolean, peeking: Boolean)(f: Option[QItem] => Unit) {
+    log.debug("get -> q=%s t=%d open=%s peek=%s", key, timeout, opening, peeking)
     if (peeking) {
       KestrelStats.peekRequests.incr
     } else {

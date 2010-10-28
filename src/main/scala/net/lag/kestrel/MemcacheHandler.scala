@@ -159,7 +159,6 @@ class MemcacheHandler(val channel: Channel, config: Config)
         if (opt == "peek") peeking = true
       }
     }
-    log.debug("get -> q=%s t=%d open=%s close=%s abort=%s peek=%s", key, timeout, opening, closing, aborting, peeking)
 
     if ((key.length == 0) || ((peeking || aborting) && (opening || closing)) || (peeking && aborting)) {
       new MemcacheResponse("CLIENT_ERROR").writeTo(channel)
