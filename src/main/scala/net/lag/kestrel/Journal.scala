@@ -79,6 +79,13 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
     writer.close
     val tmpFile = new File(queuePath + "~~" + Time.now.inMilliseconds)
     open(tmpFile)
+    dump(xid, openItems, queue)
+    writer.close
+    tmpFile.renameTo(queueFile)
+    open
+  }
+
+  def dump(xid: Int, openItems: Seq[QItem], queue: Iterable[QItem]) {
     size = 0
     for (item <- openItems) {
       addWithXid(item)
@@ -89,9 +96,6 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
       add(false, item)
     }
     if (syncJournal) writer.force(false)
-    writer.close
-    tmpFile.renameTo(queueFile)
-    open
   }
 
   def close(): Unit = {
@@ -280,28 +284,17 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
     }
   }
 
-  def walk() = new Iterator[(JournalItem, Int)] {
+  def walk() = new tools.PythonIterator[(JournalItem, Int)] {
     val in = new FileInputStream(queuePath).getChannel
-    var done = false
-    var nextItem: Option[(JournalItem, Int)] = None
-
-    def hasNext = {
-      if (done) {
-        false
-      } else {
-        nextItem = readJournalEntry(in) match {
-          case (JournalItem.EndOfFile, _) =>
-            done = true
-            in.close()
-            None
-          case x =>
-            Some(x)
-        }
-        nextItem.isDefined
+    def apply() = {
+      readJournalEntry(in) match {
+        case (JournalItem.EndOfFile, _) =>
+          in.close()
+          None
+        case x =>
+          Some(x)
       }
     }
-
-    def next() = nextItem.get
   }
 
   private def readBlock(in: FileChannel): Array[Byte] = {
@@ -346,5 +339,15 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
     }
     if (allowSync && syncJournal) writer.force(false)
     byteBuffer.limit
+  }
+}
+
+object Journal {
+  def getQueueNamesFromFolder(path: File): Seq[String] = {
+    path.list().filter { name =>
+      !(name contains "~~")
+    }.map { name =>
+      name.split('~')(0)
+    }
   }
 }

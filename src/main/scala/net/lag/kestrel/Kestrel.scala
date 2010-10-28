@@ -112,19 +112,26 @@ object Kestrel {
     channelFactory = new NioServerSocketChannelFactory(executor, executor)
     val bootstrap = new ServerBootstrap(channelFactory)
     val pipeline = bootstrap.getPipeline()
-    val protocolCodec = config.getString("protocol", "ascii") match {
-      case "ascii" => MemcacheRequest.asciiDecoder
-      case "binary" => throw new Exception("Binary protocol not supported yet.")
-    }
     val filter: NettyMessage.Filter = immutable.Set(
       classOf[NettyMessage.MessageReceived],
       classOf[NettyMessage.ExceptionCaught],
       classOf[NettyMessage.ChannelIdle],
       classOf[NettyMessage.ChannelDisconnected])
-    pipeline.addLast("codec", protocolCodec)
-    pipeline.addLast("handler", new ActorHandler(filter, { channel =>
-      new KestrelHandler(channel, config)
-    }))
+
+    /* while the MemcacheRequest decoder and ActorHandler are both sharable pipelines, the
+     * "FrameDecoder" that MemcacheRequest is based on is NOT. so we need to build a new pipeline
+     * for each connection until this is fixed.
+     */
+    bootstrap.setPipelineFactory(new ChannelPipelineFactory() {
+      def getPipeline() = {
+        val protocolCodec = config.getString("protocol", "ascii") match {
+          case "ascii" => MemcacheRequest.asciiDecoder
+          case "binary" => throw new Exception("Binary protocol not supported yet.")
+        }
+        val actorHandler = new ActorHandler(filter, { channel => new MemcacheHandler(channel, config) })
+        Channels.pipeline(protocolCodec, actorHandler)
+      }
+    })
 
     bootstrap.setOption("backlog", 1000)
     bootstrap.setOption("reuseAddress", true)

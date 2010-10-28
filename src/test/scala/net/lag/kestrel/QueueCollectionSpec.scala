@@ -124,7 +124,8 @@ class QueueCollectionSpec extends Specification with TestHelper {
     "proactively load existing queue files" in {
       withTempFolder {
         new File(folderName + "/apples").createNewFile()
-        new File(folderName + "/oranges").createNewFile()
+        new File(folderName + "/oranges~101").createNewFile()
+        new File(folderName + "/oranges~133").createNewFile()
         qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
         qc.loadQueues()
         qc.queueNames.sorted mustEqual List("apples", "oranges")
