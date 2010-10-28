@@ -123,7 +123,7 @@ object Kestrel {
       classOf[NettyMessage.ChannelDisconnected])
     pipeline.addLast("codec", protocolCodec)
     pipeline.addLast("handler", new ActorHandler(filter, { channel =>
-      new KestrelHandler(channel, config)
+      new MemcacheHandler(channel, config)
     }))
 
     bootstrap.setOption("backlog", 1000)

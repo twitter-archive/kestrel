@@ -21,7 +21,6 @@ import net.lag.logging.Logger
 import java.io.FileOutputStream
 import scala.collection.mutable
 
-
 /**
  * Pack one or more journal files into a single new file that only consists
  * of the queue's current contents, as of the end of the last journal file
