@@ -122,6 +122,8 @@ class KestrelHandler(val channel: Channel, val config: Config) extends Actor {
       case "flush_all_expired" =>
         val flushed = Kestrel.queues.flushAllExpired()
         new MemcacheResponse(flushed.toString).writeTo(channel)
+      case "roll" =>
+        rollJournal(request.line(1))
       case "version" =>
         version()
       case "quit" =>
@@ -258,6 +260,12 @@ class KestrelHandler(val channel: Channel, val config: Config) extends Actor {
   private def flush(name: String) = {
     log.debug("flush -> q=%s", name)
     Kestrel.queues.flush(name)
+    new MemcacheResponse("END").writeTo(channel)
+  }
+
+  private def rollJournal(name: String) {
+    log.debug("roll -> q=%s", name)
+    Kestrel.queues.rollJournal(name)
     new MemcacheResponse("END").writeTo(channel)
   }
 

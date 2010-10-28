@@ -205,6 +205,12 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
     queueNames.foldLeft(0) { (sum, qName) => sum + flushExpired(qName) }
   }
 
+  def rollJournal(name: String) {
+    if (!shuttingDown) {
+      queue(name).foreach { _.rollJournal() }
+    }
+  }
+
   def stats(key: String): Array[(String, String)] = queue(key) match {
     case None => Array[(String, String)]()
     case Some(q) =>

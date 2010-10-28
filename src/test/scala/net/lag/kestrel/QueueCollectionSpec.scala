@@ -82,6 +82,18 @@ class QueueCollectionSpec extends Specification with TestHelper {
       }
     }
 
+    "force-roll a journal" in {
+      withTempFolder {
+        qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+        qc.add("test", "one".getBytes)
+        qc.add("test", "two".getBytes)
+        qc.receive("test")
+        qc.queue("test").get.journalSize mustEqual 49
+        qc.rollJournal("test")
+        qc.queue("test").get.journalSize mustEqual 29
+      }
+    }
+
     "queue hit/miss tracking" in {
       withTempFolder {
         qc = new QueueCollection(folderName, Config.fromMap(Map.empty))

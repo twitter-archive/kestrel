@@ -202,6 +202,15 @@ class PersistentQueue(persistencePath: String, val name: String,
     }
   }
 
+  final def rollJournal() {
+    if (keepJournal()) {
+      synchronized {
+        log.info("Rolling journal file for '%s' (qsize=%d)", name, queueSize)
+        journal.roll(xidCounter, openTransactionIds map { openTransactions(_) }, queue)
+      }
+    }
+  }
+
   /**
    * Add a value to the end of the queue, transactionally.
    */
@@ -219,8 +228,7 @@ class PersistentQueue(persistencePath: String, val name: String,
     if (keepJournal() && !journal.inReadBehind) {
       if (journal.size > maxJournalSize() * maxJournalOverflow() && queueSize < maxJournalSize()) {
         // force re-creation of the journal.
-        log.info("Rolling journal file for '%s' (qsize=%d)", name, queueSize)
-        journal.roll(xidCounter, openTransactionIds map { openTransactions(_) }, queue)
+        rollJournal()
       }
       if (queueSize >= maxMemorySize()) {
         log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
@@ -267,8 +275,7 @@ class PersistentQueue(persistencePath: String, val name: String,
           if (transaction) journal.removeTentative() else journal.remove()
 
           if ((queueLength == 0) && (journal.size >= maxJournalSize())) {
-            log.info("Rolling journal file for '%s'", name)
-            journal.roll(xidCounter, openTransactionIds map { openTransactions(_) }, Nil)
+            rollJournal()
           }
         }
         item
