@@ -17,14 +17,16 @@
 
 package net.lag.kestrel
 
-import _root_.java.io._
-import _root_.java.net.Socket
-import _root_.scala.collection.Map
-import _root_.com.twitter.xrayspecs.Time
-import _root_.com.twitter.xrayspecs.TimeConversions._
-import _root_.net.lag.configgy.Config
-import _root_.net.lag.logging.Logger
-import _root_.org.specs._
+import java.io._
+import java.net.Socket
+import scala.collection.Map
+import scala.util.Random
+import com.twitter.xrayspecs.Time
+import com.twitter.xrayspecs.TimeConversions._
+import net.lag.TestHelper
+import net.lag.configgy.Config
+import net.lag.logging.Logger
+import org.specs._
 
 
 class ServerSpec extends Specification with TestHelper {
@@ -52,13 +54,13 @@ class ServerSpec extends Specification with TestHelper {
 
   "Server" should {
     doAfter {
-      Kestrel.shutdown
+      Kestrel.shutdown()
     }
 
     "configure per-queue" in {
       withTempFolder {
         makeServer
-        Kestrel.queues.queue("starship").map(_.maxItems()) mustEqual Some(Math.MAX_INT)
+        Kestrel.queues.queue("starship").map(_.maxItems()) mustEqual Some(Int.MaxValue)
         Kestrel.queues.queue("starship").map(_.maxAge()) mustEqual Some(0)
         Kestrel.queues.queue("weather_updates").map(_.maxItems()) mustEqual Some(1500000)
         Kestrel.queues.queue("weather_updates").map(_.maxAge()) mustEqual Some(1800)
@@ -70,7 +72,7 @@ class ServerSpec extends Specification with TestHelper {
     "set and get one entry" in {
       withTempFolder {
         makeServer
-        val v = (Math.random * 0x7fffffff).toInt
+        val v = (Random.nextInt * 0x7fffffff).toInt
         val client = new TestClient("localhost", PORT)
         client.get("test_one_entry") mustEqual ""
         client.set("test_one_entry", v.toString) mustEqual "STORED"
@@ -82,7 +84,7 @@ class ServerSpec extends Specification with TestHelper {
     "set with expiry" in {
       withTempFolder {
         makeServer
-        val v = (Math.random * 0x7fffffff).toInt
+        val v = (Random.nextInt * 0x7fffffff).toInt
         val client = new TestClient("localhost", PORT)
         client.get("test_set_with_expiry") mustEqual ""
         client.set("test_set_with_expiry", (v + 2).toString, Time.now.inSeconds) mustEqual "STORED"
@@ -110,7 +112,7 @@ class ServerSpec extends Specification with TestHelper {
     "commit a transactional get" in {
       withTempFolder {
         makeServer
-        val v = (Math.random * 0x7fffffff).toInt
+        val v = (Random.nextInt * 0x7fffffff).toInt
         val client = new TestClient("localhost", PORT)
         client.set("commit", v.toString) mustEqual "STORED"
 
@@ -148,7 +150,7 @@ class ServerSpec extends Specification with TestHelper {
     "abort a transactional get" in {
       withTempFolder {
         makeServer
-        val v = (Math.random * 0x7fffffff).toInt
+        val v = (Random.nextInt * 0x7fffffff).toInt
         val client = new TestClient("localhost", PORT)
         client.set("abort", v.toString) mustEqual "STORED"
 
@@ -179,7 +181,7 @@ class ServerSpec extends Specification with TestHelper {
     "auto-rollback a transaction on disconnect" in {
       withTempFolder {
         makeServer
-        val v = (Math.random * 0x7fffffff).toInt
+        val v = (Random.nextInt * 0x7fffffff).toInt
         val client = new TestClient("localhost", PORT)
         client.set("auto-rollback", v.toString) mustEqual "STORED"
 
@@ -214,7 +216,7 @@ class ServerSpec extends Specification with TestHelper {
     "auto-commit cycles of transactional gets" in {
       withTempFolder {
         makeServer
-        val v = (Math.random * 0x7fffffff).toInt
+        val v = (Random.nextInt * 0x7fffffff).toInt
         val client = new TestClient("localhost", PORT)
         client.set("auto-commit", v.toString) mustEqual "STORED"
         client.set("auto-commit", (v + 1).toString) mustEqual "STORED"
@@ -299,7 +301,7 @@ class ServerSpec extends Specification with TestHelper {
                                "bytes_written", "cmd_set", "get_misses", "total_connections",
                                "curr_connections", "curr_items", "uptime", "get_hits", "total_items",
                                "bytes_read")
-        for (val key <- basicStats) { stats contains key mustEqual true }
+        for (key <- basicStats) { stats contains key mustEqual true }
       }
     }
 
@@ -313,7 +315,7 @@ class ServerSpec extends Specification with TestHelper {
     "disconnect and reconnect correctly" in {
       withTempFolder {
         makeServer
-        val v = (Math.random * 0x7fffffff).toInt
+        val v = (Random.nextInt * 0x7fffffff).toInt
         val client = new TestClient("localhost", PORT)
         client.set("disconnecting", v.toString)
         client.disconnect

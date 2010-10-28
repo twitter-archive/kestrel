@@ -20,42 +20,38 @@ package net.lag.kestrel
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.nio.ByteOrder
+import scala.collection.mutable
 import com.twitter.actors.Actor
 import com.twitter.actors.Actor._
-import scala.collection.mutable
+import com.twitter.naggati.{NettyMessage, ProtocolError}
+import com.twitter.naggati.codec.{MemcacheRequest, MemcacheResponse}
 import com.twitter.xrayspecs.Time
 import com.twitter.xrayspecs.TimeConversions._
 import net.lag.configgy.{Config, Configgy, RuntimeEnvironment}
 import net.lag.logging.Logger
-import net.lag.naggati.{IoHandlerActorAdapter, MinaMessage, ProtocolError}
-import org.apache.mina.core.buffer.IoBuffer
-import org.apache.mina.core.session.{IdleStatus, IoSession}
-import org.apache.mina.transport.socket.SocketSessionConfig
+import org.jboss.netty.buffer.ChannelBuffers
+import org.jboss.netty.channel.Channel
+import org.jboss.netty.handler.timeout.IdleStateHandler
 
-
-class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
+class KestrelHandler(val channel: Channel, val config: Config) extends Actor {
   private val log = Logger.get
 
   private val IDLE_TIMEOUT = 60
   private val sessionID = KestrelStats.sessionID.incr
-  private val remoteAddress = session.getRemoteAddress.asInstanceOf[InetSocketAddress]
+  private val remoteAddress = channel.getRemoteAddress.asInstanceOf[InetSocketAddress]
 
   private var pendingTransaction: Option[(String, Int)] = None
 
   // used internally to indicate a client error: tried to close a transaction on the wrong queue.
   private class MismatchedQueueException extends Exception
 
-
-  session.getConfig.setReadBufferSize(2048)
-  IoHandlerActorAdapter.filter(session) -= MinaMessage.SessionOpened
-  IoHandlerActorAdapter.filter(session) -= classOf[MinaMessage.MessageSent]
-
   // config can be null in unit tests
   val idleTimeout = if (config == null) IDLE_TIMEOUT else config.getInt("timeout", IDLE_TIMEOUT)
   if (idleTimeout > 0) {
-    session.getConfig.setIdleTime(IdleStatus.BOTH_IDLE, idleTimeout)
+    channel.getPipeline.addFirst("idle", new IdleStateHandler(Kestrel.timer, 0, 0, idleTimeout))
   }
 
+  Kestrel.channels.add(channel)
   KestrelStats.sessions.incr
   KestrelStats.totalConnections.incr
   log.debug("New session %d from %s:%d", sessionID, remoteAddress.getHostName, remoteAddress.getPort)
@@ -64,87 +60,76 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
   def act = {
     loop {
       react {
-        case MinaMessage.MessageReceived(msg) =>
-          handle(msg.asInstanceOf[memcache.Request])
+        case NettyMessage.MessageReceived(msg) =>
+          handle(msg.asInstanceOf[MemcacheRequest])
 
-        case MinaMessage.ExceptionCaught(cause) => {
-          cause.getCause match {
-            case _: ProtocolError => writeResponse("CLIENT_ERROR\r\n")
+        case NettyMessage.ExceptionCaught(cause) =>
+          cause match {
+            case _: ProtocolError =>
+              new MemcacheResponse("CLIENT_ERROR").writeTo(channel)
             case _: IOException =>
               log.debug("I/O Exception on session %d: %s", sessionID, cause.toString)
             case _ =>
               log.error(cause, "Exception caught on session %d: %s", sessionID, cause.toString)
-              writeResponse("ERROR\r\n")
+              new MemcacheResponse("ERROR").writeTo(channel)
           }
-          session.close(false)
-        }
+          channel.close()
 
-        case MinaMessage.SessionClosed =>
+        case NettyMessage.ChannelDisconnected() =>
           log.debug("End of session %d", sessionID)
           abortAnyTransaction
           KestrelStats.sessions.decr
           exit()
 
-        case MinaMessage.SessionIdle(status) =>
-          log.debug("Idle timeout on session %s", session)
-          session.close(false)
+        case NettyMessage.ChannelIdle(status) =>
+          log.debug("Idle timeout on session %s", channel)
+          channel.close()
       }
     }
   }
 
-  private def writeResponse(out: String) = {
-    val bytes = out.getBytes
-    session.write(new memcache.Response(IoBuffer.wrap(bytes)))
-  }
-
-  private def writeResponse(out: String, data: Array[Byte]) = {
-    val bytes = out.getBytes
-    val buffer = IoBuffer.allocate(bytes.length + data.length + 7)
-    buffer.put(bytes)
-    buffer.put(data)
-    buffer.put("\r\nEND\r\n".getBytes)
-    buffer.flip
-    KestrelStats.bytesWritten.incr(buffer.capacity)
-    session.write(new memcache.Response(buffer))
-  }
-
-  private def handle(request: memcache.Request) = {
+  private def handle(request: MemcacheRequest) = {
+    KestrelStats.bytesRead.incr(request.bytesRead)
     request.line(0) match {
-      case "GET" => get(request.line(1))
-      case "SET" =>
+      case "get" => get(request.line(1))
+      case "set" =>
         try {
           set(request.line(1), request.line(2).toInt, request.line(3).toInt, request.data.get)
         } catch {
           case e: NumberFormatException =>
             throw new ProtocolError("bad request: " + request)
         }
-      case "STATS" => stats
-      case "SHUTDOWN" => shutdown
-      case "RELOAD" =>
+      case "stats" => stats
+      case "shutdown" => shutdown
+      case "reload" =>
         Configgy.reload
-        writeResponse("Reloaded config.\r\n")
-      case "FLUSH" =>
+        new MemcacheResponse("Reloaded config.").writeTo(channel)
+      case "flush" =>
         flush(request.line(1))
-      case "FLUSH_ALL" =>
+      case "flush_all" =>
         for (qName <- Kestrel.queues.queueNames) {
           Kestrel.queues.flush(qName)
         }
-        writeResponse("Flushed all queues.\r\n")
-      case "DUMP_CONFIG" =>
+        new MemcacheResponse("Flushed all queues.").writeTo(channel)
+      case "dump_config" =>
         dumpConfig()
-      case "DUMP_STATS" =>
+      case "dump_stats" =>
         dumpStats()
-      case "DELETE" =>
+      case "delete" =>
         delete(request.line(1))
-      case "FLUSH_EXPIRED" =>
+      case "flush_expired" =>
         flushExpired(request.line(1))
-      case "FLUSH_ALL_EXPIRED" =>
+      case "flush_all_expired" =>
         val flushed = Kestrel.queues.flushAllExpired()
-        writeResponse("%d\r\n".format(flushed))
-      case "VERSION" =>
+        new MemcacheResponse(flushed.toString).writeTo(channel)
+      case "roll" =>
+        rollJournal(request.line(1))
+      case "version" =>
         version()
-      case "QUIT" =>
+      case "quit" =>
         quit()
+      case x =>
+        new MemcacheResponse("CLIENT_ERROR").writeTo(channel)
     }
   }
 
@@ -173,8 +158,8 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
     log.debug("get -> q=%s t=%d open=%s close=%s abort=%s peek=%s", key, timeout, opening, closing, aborting, peeking)
 
     if ((key.length == 0) || ((peeking || aborting) && (opening || closing)) || (peeking && aborting)) {
-      writeResponse("CLIENT_ERROR\r\n")
-      session.close(false)
+      new MemcacheResponse("CLIENT_ERROR").writeTo(channel)
+      channel.close()
       return
     }
 
@@ -184,7 +169,7 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
           log.warning("Attempt to abort a non-existent transaction on '%s' (sid %d, %s:%d)",
                       key, sessionID, remoteAddress.getHostName, remoteAddress.getPort)
         }
-        writeResponse("END\r\n")
+        new MemcacheResponse("END").writeTo(channel)
       } else {
         if (closing) {
           if (!closeTransaction(key)) {
@@ -193,15 +178,15 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
             // let the client continue. it may be optimistically closing previous transactions as
             // it randomly jumps servers.
           }
-          if (!opening) writeResponse("END\r\n")
+          if (!opening) new MemcacheResponse("END").writeTo(channel)
         }
         if (opening || !closing) {
           if (pendingTransaction.isDefined && !peeking) {
             log.warning("Attempt to perform a non-transactional fetch with an open transaction on " +
                         " '%s' (sid %d, %s:%d)", key, sessionID, remoteAddress.getHostName,
                         remoteAddress.getPort)
-            writeResponse("ERROR\r\n")
-            session.close(false)
+            new MemcacheResponse("ERROR").writeTo(channel)
+            channel.close()
             return
           }
           if (peeking) {
@@ -211,11 +196,11 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
           }
           Kestrel.queues.remove(key, timeout, opening, peeking) {
             case None =>
-              writeResponse("END\r\n")
+              new MemcacheResponse("END").writeTo(channel)
             case Some(item) =>
               log.debug("get <- %s", item)
               if (opening) pendingTransaction = Some((key, item.xid))
-              writeResponse("VALUE %s 0 %d\r\n".format(key, item.data.length), item.data)
+              new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), item.data).writeTo(channel)
           }
         }
       }
@@ -223,8 +208,8 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
       case e: MismatchedQueueException =>
         log.warning("Attempt to close a transaction on the wrong queue '%s' (sid %d, %s:%d)",
                     key, sessionID, remoteAddress.getHostName, remoteAddress.getPort)
-        writeResponse("ERROR\r\n")
-        session.close(false)
+        new MemcacheResponse("ERROR").writeTo(channel)
+        channel.close()
     }
   }
 
@@ -266,27 +251,33 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
     log.debug("set -> q=%s flags=%d expiry=%d size=%d", name, flags, expiry, data.length)
     KestrelStats.setRequests.incr
     if (Kestrel.queues.add(name, data, expiry)) {
-      writeResponse("STORED\r\n")
+      new MemcacheResponse("STORED").writeTo(channel)
     } else {
-      writeResponse("NOT_STORED\r\n")
+      new MemcacheResponse("NOT_STORED").writeTo(channel)
     }
   }
 
   private def flush(name: String) = {
     log.debug("flush -> q=%s", name)
     Kestrel.queues.flush(name)
-    writeResponse("END\r\n")
+    new MemcacheResponse("END").writeTo(channel)
+  }
+
+  private def rollJournal(name: String) {
+    log.debug("roll -> q=%s", name)
+    Kestrel.queues.rollJournal(name)
+    new MemcacheResponse("END").writeTo(channel)
   }
 
   private def delete(name: String) = {
     log.debug("delete -> q=%s", name)
     Kestrel.queues.delete(name)
-    writeResponse("END\r\n")
+    new MemcacheResponse("END").writeTo(channel)
   }
 
   private def flushExpired(name: String) = {
     log.debug("flush_expired -> q=%s", name)
-    writeResponse("%d\r\n".format(Kestrel.queues.flushExpired(name)))
+    new MemcacheResponse(Kestrel.queues.flushExpired(name).toString).writeTo(channel)
   }
 
   private def stats() = {
@@ -313,8 +304,8 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
 
     val summary = {
       for ((key, value) <- report) yield "STAT %s %s".format(key, value)
-    }.mkString("", "\r\n", "\r\nEND\r\n")
-    writeResponse(summary)
+    }.mkString("", "\r\n", "\r\nEND")
+    new MemcacheResponse(summary).writeTo(channel)
   }
 
   private def dumpConfig() = {
@@ -324,7 +315,7 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
       dump += Kestrel.queues.dumpConfig(qName).mkString("  ", "\r\n  ", "")
       dump += "}"
     }
-    writeResponse(dump.mkString("", "\r\n", "\r\nEND\r\n"))
+    new MemcacheResponse(dump.mkString("", "\r\n", "\r\nEND\r\n")).writeTo(channel)
   }
 
   private def dumpStats() = {
@@ -334,11 +325,11 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
       dump += Kestrel.queues.stats(qName).map { case (k, v) => k + "=" + v }.mkString("  ", "\r\n  ", "")
       dump += "}"
     }
-    writeResponse(dump.mkString("", "\r\n", "\r\nEND\r\n"))
+    new MemcacheResponse(dump.mkString("", "\r\n", "\r\nEND\r\n")).writeTo(channel)
   }
 
   private def version() = {
-    writeResponse("VERSION " + Kestrel.runtime.jarVersion + "\r\n")
+    new MemcacheResponse("VERSION " + Kestrel.runtime.jarVersion + "\r\n").writeTo(channel)
   }
 
   private def shutdown() = {
@@ -346,6 +337,6 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
   }
 
   private def quit() = {
-    session.close(false)
+    channel.close()
   }
 }

@@ -26,7 +26,7 @@ import net.lag.logging.Logger
 
 
 // returned from journal replay
-abstract case class JournalItem()
+abstract class JournalItem()
 object JournalItem {
   case class Add(item: QItem) extends JournalItem
   case object Remove extends JournalItem
@@ -75,7 +75,7 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
     open(queueFile)
   }
 
-  def roll(xid: Int, openItems: List[QItem], queue: Iterable[QItem]) {
+  def roll(xid: Int, openItems: Seq[QItem], queue: Iterable[QItem]): Unit = {
     writer.close
     val tmpFile = new File(queuePath + "~~" + Time.now.inMilliseconds)
     open(tmpFile)

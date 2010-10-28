@@ -19,19 +19,19 @@ package net.lag.kestrel
 
 import java.net.InetSocketAddress
 import java.util.concurrent.{CountDownLatch, Executors, ExecutorService, TimeUnit}
-import java.util.{Timer, TimerTask}
+import scala.collection.{immutable, mutable}
 import com.twitter.actors.{Actor, Scheduler}
 import com.twitter.actors.Actor._
-import scala.collection.mutable
+import com.twitter.naggati.{ActorHandler, NettyMessage}
+import com.twitter.naggati.codec.MemcacheRequest
 import com.twitter.xrayspecs.Time
-import org.apache.mina.core.session.IoSession
-import org.apache.mina.filter.codec.ProtocolCodecFilter
-import org.apache.mina.transport.socket.SocketAcceptor
-import org.apache.mina.transport.socket.nio.{NioProcessor, NioSocketAcceptor}
-import _root_.net.lag.configgy.{Config, ConfigMap, Configgy, RuntimeEnvironment}
-import _root_.net.lag.logging.Logger
-import _root_.net.lag.naggati.IoHandlerActorAdapter
-
+import net.lag.configgy.{Config, ConfigMap, Configgy, RuntimeEnvironment}
+import net.lag.logging.Logger
+import org.jboss.netty.bootstrap.ServerBootstrap
+import org.jboss.netty.channel.{Channel, ChannelFactory, ChannelPipelineFactory, Channels}
+import org.jboss.netty.channel.group.DefaultChannelGroup
+import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory
+import org.jboss.netty.util.{HashedWheelTimer, Timeout, Timer, TimerTask}
 
 object KestrelStats {
   val bytesRead = new Counter
@@ -44,9 +44,8 @@ object KestrelStats {
   val sessionID = new Counter
 }
 
-
 object Kestrel {
-  private val log = Logger.get
+  private val log = Logger.get(getClass.getName)
   val runtime = new RuntimeEnvironment(getClass)
 
   var queues: QueueCollection = null
@@ -54,8 +53,11 @@ object Kestrel {
   private val _expiryStats = new mutable.HashMap[String, Int]
   private val _startTime = Time.now.inMilliseconds
 
-  var acceptorExecutor: ExecutorService = null
-  var acceptor: SocketAcceptor = null
+  var executor: ExecutorService = null
+  var channelFactory: ChannelFactory = null
+  val channels = new DefaultChannelGroup("channels")
+  var acceptor: Option[Channel] = None
+  var timer: Timer = null
 
   private val deathSwitch = new CountDownLatch(1)
 
@@ -69,9 +71,9 @@ object Kestrel {
 
   def configure(config: ConfigMap): Unit = {
     // fill in defaults for all queues
-    PersistentQueue.maxItems = config.getInt("max_items", Math.MAX_INT)
-    PersistentQueue.maxSize = config.getLong("max_size", Math.MAX_LONG)
-    PersistentQueue.maxItemSize = config.getLong("max_item_size", Math.MAX_LONG)
+    PersistentQueue.maxItems = config.getInt("max_items", Int.MaxValue)
+    PersistentQueue.maxSize = config.getLong("max_size", Long.MaxValue)
+    PersistentQueue.maxItemSize = config.getLong("max_item_size", Long.MaxValue)
     PersistentQueue.maxAge = config.getInt("max_age", 0)
     PersistentQueue.maxJournalSize = config.getInt("max_journal_size", 16 * 1024 * 1024)
     PersistentQueue.maxMemorySize = config.getInt("max_memory_size", 128 * 1024 * 1024)
@@ -82,6 +84,8 @@ object Kestrel {
   }
 
   def startup(config: Config): Unit = {
+    log.info("Kestrel config: %s", config.toString)
+
     // this one is used by the actor initialization, so can only be set at startup.
     var maxThreads = config.getInt("max_threads", Runtime.getRuntime().availableProcessors * 2)
 
@@ -93,7 +97,6 @@ object Kestrel {
     }
 
     System.setProperty("actors.maxPoolSize", maxThreads.toString)
-    log.debug("max_threads=%d", maxThreads)
 
     val listenAddress = config.getString("host", "0.0.0.0")
     val listenPort = config.getInt("port", DEFAULT_PORT)
@@ -103,56 +106,75 @@ object Kestrel {
 
     queues.loadQueues()
 
-    acceptorExecutor = Executors.newCachedThreadPool()
-    acceptor = new NioSocketAcceptor(acceptorExecutor, new NioProcessor(acceptorExecutor))
+    // netty setup:
+    timer = new HashedWheelTimer()
+    executor = Executors.newCachedThreadPool()
+    channelFactory = new NioServerSocketChannelFactory(executor, executor)
+    val bootstrap = new ServerBootstrap(channelFactory)
+    val pipeline = bootstrap.getPipeline()
+    val protocolCodec = config.getString("protocol", "ascii") match {
+      case "ascii" => MemcacheRequest.asciiDecoder
+      case "binary" => throw new Exception("Binary protocol not supported yet.")
+    }
+    val filter: NettyMessage.Filter = immutable.Set(
+      classOf[NettyMessage.MessageReceived],
+      classOf[NettyMessage.ExceptionCaught],
+      classOf[NettyMessage.ChannelIdle],
+      classOf[NettyMessage.ChannelDisconnected])
+    pipeline.addLast("codec", protocolCodec)
+    pipeline.addLast("handler", new ActorHandler(filter, { channel =>
+      new KestrelHandler(channel, config)
+    }))
 
-    // mina setup:
-    acceptor.setBacklog(1000)
-    acceptor.setReuseAddress(true)
-    acceptor.getSessionConfig.setTcpNoDelay(true)
-    val protocolCodec = config.getString("protocol", "ascii")
-    acceptor.getFilterChain.addLast("codec", new ProtocolCodecFilter(
-      memcache.Codec.encoderFor(protocolCodec),
-      memcache.Codec.decoderFor(protocolCodec)))
-    acceptor.setHandler(new IoHandlerActorAdapter(session => new KestrelHandler(session, config)))
-    acceptor.bind(new InetSocketAddress(listenAddress, listenPort))
+    bootstrap.setOption("backlog", 1000)
+    bootstrap.setOption("reuseAddress", true)
+    bootstrap.setOption("child.keepAlive", true)
+    bootstrap.setOption("child.tcpNoDelay", true)
+    bootstrap.setOption("child.receiveBufferSize", 2048)
+    acceptor = Some(bootstrap.bind(new InetSocketAddress(listenAddress, listenPort)))
 
     // expose config thru JMX.
-    config.registerWithJmx("net.lag.kestrel")
+    if (config.getBool("jmx", false)) {
+      config.registerWithJmx("net.lag.kestrel")
+    }
 
     // optionally, start a periodic timer to clean out expired items.
     val expirationTimerFrequency = config.getInt("expiration_timer_frequency_seconds", 0)
     if (expirationTimerFrequency > 0) {
-      val timer = new Timer("Expiration timer", true)
+      log.info("Starting up background expiration task.")
       val expirationTask = new TimerTask {
-        def run() {
+        def run(timeout: Timeout) {
           val expired = Kestrel.queues.flushAllExpired()
           if (expired > 0) {
             log.info("Expired %d item(s) from queues automatically.", expired)
           }
+          timer.newTimeout(this, expirationTimerFrequency, TimeUnit.SECONDS)
         }
       }
-      timer.schedule(expirationTask, expirationTimerFrequency * 1000, expirationTimerFrequency * 1000)
+      expirationTask.run(null)
     }
 
     log.info("Kestrel started.")
-
-    // make sure there's always one actor running so scala 2.7.2 doesn't kill off the actors library.
     actor {
-      deathSwitch.await
+      deathSwitch.await()
     }
   }
 
-  def shutdown(): Unit = {
+  def shutdown() {
     log.info("Shutting down!")
-    queues.shutdown
-    acceptor.unbind
-    acceptor.dispose
+    deathSwitch.countDown()
+
+    acceptor.foreach { _.close().awaitUninterruptibly() }
+    queues.shutdown()
     Scheduler.shutdown
-    acceptorExecutor.shutdown
-    // the line below causes a 1 second pause in unit tests. :(
-    //acceptorExecutor.awaitTermination(5, TimeUnit.SECONDS)
-    deathSwitch.countDown
+    channels.close().awaitUninterruptibly()
+    channelFactory.releaseExternalResources()
+
+    executor.shutdown()
+    executor.awaitTermination(5, TimeUnit.SECONDS)
+    timer.stop()
+    timer = null
+    log.info("Goodbye.")
   }
 
   def uptime() = (Time.now.inMilliseconds - _startTime) / 1000

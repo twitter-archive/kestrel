@@ -17,23 +17,18 @@
 
 package net.lag.kestrel
 
-import _root_.java.io.{File, FileInputStream}
-import _root_.scala.util.Sorting
-import _root_.com.twitter.xrayspecs.Time
-import _root_.com.twitter.xrayspecs.TimeConversions._
-import _root_.net.lag.configgy.Config
-import _root_.org.specs._
+import java.io.{File, FileInputStream}
+import scala.util.Sorting
+import com.twitter.xrayspecs.Time
+import com.twitter.xrayspecs.TimeConversions._
+import net.lag.TestHelper
+import net.lag.configgy.Config
+import org.specs._
 
 
 class QueueCollectionSpec extends Specification with TestHelper {
 
   private var qc: QueueCollection = null
-
-  private def sorted[T <% Ordered[T]](list: List[T]): List[T] = {
-    val dest = list.toArray
-    Sorting.quickSort(dest)
-    dest.toList
-  }
 
 
   "QueueCollection" should {
@@ -51,7 +46,7 @@ class QueueCollectionSpec extends Specification with TestHelper {
         qc.add("work1", "stuff".getBytes)
         qc.add("work2", "other stuff".getBytes)
 
-        sorted(qc.queueNames) mustEqual List("work1", "work2")
+        qc.queueNames.sorted mustEqual List("work1", "work2")
         qc.currentBytes mustEqual 16
         qc.currentItems mustEqual 2
         qc.totalAdded() mustEqual 2
@@ -84,6 +79,18 @@ class QueueCollectionSpec extends Specification with TestHelper {
         // now the queue should be suddenly instantiated:
         qc.currentBytes mustEqual 10
         qc.currentItems mustEqual 2
+      }
+    }
+
+    "force-roll a journal" in {
+      withTempFolder {
+        qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+        qc.add("test", "one".getBytes)
+        qc.add("test", "two".getBytes)
+        qc.receive("test")
+        qc.queue("test").get.journalSize mustEqual 49
+        qc.rollJournal("test")
+        qc.queue("test").get.journalSize mustEqual 29
       }
     }
 
@@ -121,7 +128,7 @@ class QueueCollectionSpec extends Specification with TestHelper {
         new File(folderName + "/oranges~133").createNewFile()
         qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
         qc.loadQueues()
-        sorted(qc.queueNames) mustEqual List("apples", "oranges")
+        qc.queueNames.sorted mustEqual List("apples", "oranges")
       }
     }
 
@@ -132,7 +139,7 @@ class QueueCollectionSpec extends Specification with TestHelper {
         new File(folderName + "/oranges~~900").createNewFile()
         qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
         qc.loadQueues()
-        sorted(qc.queueNames) mustEqual List("apples", "oranges")
+        qc.queueNames.sorted mustEqual List("apples", "oranges")
       }
     }
 
@@ -144,8 +151,8 @@ class QueueCollectionSpec extends Specification with TestHelper {
         qc.loadQueues()
         qc.delete("oranges")
 
-        sorted(new File(folderName).list().toList) mustEqual List("apples")
-        sorted(qc.queueNames) mustEqual List("apples")
+        new File(folderName).list().toList.sorted mustEqual List("apples")
+        qc.queueNames.sorted mustEqual List("apples")
       }
     }
 
@@ -189,13 +196,36 @@ class QueueCollectionSpec extends Specification with TestHelper {
 
           qc.delete("jobs+client1")
 
-          sorted(new File(folderName).list().toList) mustEqual List("jobs")
+          new File(folderName).list().toList.sorted mustEqual List("jobs")
           new String(qc.receive("jobs").get) mustEqual "job1"
 
           qc.add("jobs", "job2".getBytes)
-          sorted(new File(folderName).list().toList) mustEqual List("jobs")
+          new File(folderName).list().toList.sorted mustEqual List("jobs")
           new String(qc.receive("jobs").get) mustEqual "job2"
         }
+      }
+    }
+
+    "expire items when (and only when) they are expired" in {
+      withTempFolder {
+        new File(folderName + "/expired").createNewFile()
+        qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+        qc.loadQueues()
+
+        Time.freeze
+        qc.add("expired", "hello".getBytes, 5)
+        Time.advance(4.seconds)
+        new String(qc.receive("expired").get) mustEqual "hello"
+        qc.add("expired", "hello".getBytes, 5)
+        Time.advance(6.seconds)
+        qc.receive("expired") mustEqual None
+
+        qc.add("expired", "hello".getBytes, 5.seconds.fromNow.inSeconds)
+        Time.advance(4.seconds)
+        new String(qc.receive("expired").get) mustEqual "hello"
+        qc.add("expired", "hello".getBytes, 5.seconds.fromNow.inSeconds)
+        Time.advance(6.seconds)
+        qc.receive("expired") mustEqual None
       }
     }
 
@@ -210,7 +240,7 @@ class QueueCollectionSpec extends Specification with TestHelper {
         qc.queue("jobs").get.length mustEqual 1
         qc.queue("expired").get.length mustEqual 0
 
-        Time.advance(1.second)
+        Time.advance(2.seconds)
         qc.queue("jobs").get.length mustEqual 1
         qc.queue("expired").get.length mustEqual 0
         qc.receive("jobs") mustEqual None

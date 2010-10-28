@@ -96,11 +96,10 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
   }
 
   /**
-   * Add an item to a named queue. Will not return until the item has been
-   * synchronously added and written to the queue journal file.
+   * Add an item to a named queue. Will not return until the item has been synchronously added
+   * and written to the queue journal file.
    *
-   * @return true if the item was added; false if the server is shutting
-   *     down
+   * @return true if the item was added; false if the server is shutting down
    */
   def add(key: String, item: Array[Byte], expiry: Int): Boolean = {
     for (fanouts <- fanout_queues.get(key); name <- fanouts) {
@@ -114,9 +113,9 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
         val normalizedExpiry: Long = if (expiry == 0) {
           0
         } else if (expiry < 1000000) {
-          now + expiry
+          now + (expiry * 1000)
         } else {
-          expiry
+          expiry.toLong * 1000
         }
         val result = q.add(item, normalizedExpiry)
         if (result) totalAdded.incr()
@@ -184,7 +183,7 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
       queues.get(name) map { q =>
         q.close()
         q.destroyJournal()
-        queues.removeKey(name)
+        queues.remove(name)
       }
       if (name contains '+') {
         val master = name.split('+')(0)
@@ -206,11 +205,17 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
     queueNames.foldLeft(0) { (sum, qName) => sum + flushExpired(qName) }
   }
 
+  def rollJournal(name: String) {
+    if (!shuttingDown) {
+      queue(name).foreach { _.rollJournal() }
+    }
+  }
+
   def stats(key: String): Array[(String, String)] = queue(key) match {
     case None => Array[(String, String)]()
     case Some(q) =>
       q.dumpStats() ++
-        fanout_queues.get(key).map { qset => ("children", qset.mkString(",")) }.toList.toArray
+        fanout_queues.get(key).map { qset => ("children", qset.mkString(",")) }.toList
   }
 
   def dumpConfig(key: String): Array[String] = {
@@ -224,7 +229,7 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
    * Shutdown this queue collection. All actors are asked to exit, and
    * any future queue requests will fail.
    */
-  def shutdown: Unit = synchronized {
+  def shutdown(): Unit = synchronized {
     if (shuttingDown) {
       return
     }
