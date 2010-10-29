@@ -107,13 +107,16 @@ class PersistentQueue(persistencePath: String, val name: String,
   // whether to sync the journal after each transaction
   val syncJournal = overlay(PersistentQueue.syncJournal)
 
+  // (optional) use multi-file journaling (experimental)
+  val multifile = overlay(PersistentQueue.multifile)
+
   // (optional) move expired items over to this queue
   val expiredQueue = overlay(PersistentQueue.expiredQueue)
 
   // clients waiting on an item in this queue
   private val waiters = new mutable.ArrayBuffer[Waiter]
 
-  private var journal = new Journal(new File(persistencePath).getCanonicalPath, name, syncJournal())
+  private var journal = new Journal(new File(persistencePath).getCanonicalPath, name, syncJournal(), multifile())
 
   // track tentative removals
   private var xidCounter: Int = 0
@@ -152,6 +155,7 @@ class PersistentQueue(persistencePath: String, val name: String,
     discardOldWhenFull set config.getBool("discard_old_when_full")
     keepJournal set config.getBool("journal")
     syncJournal set config.getBool("sync_journal")
+    multifile set config.getBool("multifile")
     expiredQueue set config.getString("move_expired_to").map { qname => Kestrel.queues.queue(qname) }
     log.info("Configuring queue %s: journal=%s, max_items=%d, max_size=%d, max_age=%d, max_journal_size=%d, " +
              "max_memory_size=%d, max_journal_overflow=%d, max_journal_size_absolute=%d, " +
@@ -567,4 +571,5 @@ object PersistentQueue {
   @volatile var keepJournal: Boolean = true
   @volatile var syncJournal: Boolean = false
   @volatile var expiredQueue: Option[PersistentQueue] = None
+  @volatile var multifile: Boolean = false
 }

@@ -41,7 +41,7 @@ object JournalItem {
 /**
  * Codes for working with the journal file for a PersistentQueue.
  */
-class Journal(queuePath: String, queueName: String, syncJournal: => Boolean) {
+class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, multifile: => Boolean) {
   private val log = Logger.get
 
   private val queueFile = new File(queuePath, queueName)
@@ -68,7 +68,8 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean) {
   private val CMD_ADD_XID = 7
 
 
-  def this(fullPath: String, syncJournal: => Boolean) = this(new File(fullPath).getParent(), new File(fullPath).getName(), syncJournal)
+  def this(fullPath: String, syncJournal: => Boolean) =
+    this(new File(fullPath).getParent(), new File(fullPath).getName(), syncJournal, false)
 
   private def open(file: File): Unit = {
     writer = new FileOutputStream(file, true).getChannel
@@ -368,6 +369,8 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean) {
     if (size > desiredSize) {
       make new file
     }
+
+    possibly set readerFilename to the rotated file.
 */
   }
 }
