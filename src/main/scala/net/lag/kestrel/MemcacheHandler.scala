@@ -89,6 +89,14 @@ class MemcacheHandler(val channel: Channel, config: Config, queues: QueueCollect
     request.line(0) match {
       case "get" =>
         get(request.line(1))
+      case "monitor" =>
+        monitor(request.line(1), request.line(2).toInt)
+      case "confirm" =>
+        if (closeTransactions(request.line(1), request.line(2).toInt)) {
+          new MemcacheResponse("END").writeTo(channel)
+        } else {
+          new MemcacheResponse("ERROR").writeTo(channel)
+        }
       case "set" =>
         try {
           if (setItem(request.line(1), request.line(2).toInt, request.line(3).toInt, request.data.get)) {
@@ -175,7 +183,7 @@ class MemcacheHandler(val channel: Channel, config: Config, queues: QueueCollect
         if (!opening) new MemcacheResponse("END").writeTo(channel)
       }
       if (opening || !closing) {
-        if (pendingTransactions(key).size > 0 && !peeking && !opening) {
+        if (pendingTransactions.size(key) > 0 && !peeking && !opening) {
           log.warning("Attempt to perform a non-transactional fetch with an open transaction on " +
                       " '%s' (sid %d, %s)", key, sessionID, clientDescription)
           new MemcacheResponse("ERROR").writeTo(channel)
@@ -197,6 +205,15 @@ class MemcacheHandler(val channel: Channel, config: Config, queues: QueueCollect
             return
         }
       }
+    }
+  }
+
+  private def monitor(key: String, timeout: Int) {
+    monitorUntil(key, Time.now + timeout.seconds) {
+      case None =>
+        new MemcacheResponse("END").writeTo(channel)
+      case Some(item) =>
+        new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), item.data).writeTo(channel)
     }
   }
 

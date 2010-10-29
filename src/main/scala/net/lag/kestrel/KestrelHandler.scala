@@ -18,6 +18,7 @@
 package net.lag.kestrel
 
 import scala.collection.mutable
+import com.twitter.xrayspecs.Time
 import net.lag.configgy.Config
 import net.lag.logging.Logger
 
@@ -32,11 +33,44 @@ abstract class KestrelHandler(val config: Config, val queues: QueueCollection) {
   val maxOpenTransactions = config.getInt("max_open_transactions", 1)
 
   val sessionID = KestrelStats.sessionID.incr
-  val pendingTransactions = new mutable.HashMap[String, mutable.ListBuffer[Int]] {
-    override def default(key: String) = {
-      val rv = new mutable.ListBuffer[Int]
-      this(key) = rv
+
+  object pendingTransactions {
+    private val transactions = new mutable.HashMap[String, mutable.ListBuffer[Int]] {
+      override def default(key: String) = {
+        val rv = new mutable.ListBuffer[Int]
+        this(key) = rv
+        rv
+      }
+    }
+
+    def pop(name: String): Option[Int] = synchronized {
+      // i admit to being a bit boggled that scala Queue doesn't have a pop() method.
+      val rv = transactions(name).headOption
+      rv.foreach { x => transactions(name).remove(0) }
       rv
+    }
+
+    def popN(name: String, count: Int): Option[Seq[Int]] = synchronized {
+      if (transactions(name).size < count) {
+        None
+      } else {
+        Some((0 until count).map { x => transactions(name).remove(0) })
+      }
+    }
+
+    def add(name: String, xid: Int) = synchronized {
+      transactions(name) += xid
+    }
+
+    def size(name: String): Int = synchronized { transactions(name).size }
+
+    def cancelAll() {
+      synchronized {
+        transactions.foreach { case (name, xids) =>
+          xids.foreach { xid => queues.unremove(name, xid) }
+        }
+        transactions.clear()
+      }
     }
   }
 
@@ -56,8 +90,9 @@ abstract class KestrelHandler(val config: Config, val queues: QueueCollection) {
     queues.queueNames.foreach { qName => queues.flush(qName) }
   }
 
+  // returns true if a transaction was actually aborted.
   def abortTransaction(key: String): Boolean = {
-    pendingTransactions(key).headOption match {
+    pendingTransactions.pop(key) match {
       case None =>
         log.warning("Attempt to abort a non-existent transaction on '%s' (sid %d, %s)",
                     key, sessionID, clientDescription)
@@ -65,26 +100,52 @@ abstract class KestrelHandler(val config: Config, val queues: QueueCollection) {
       case Some(xid) =>
         log.debug("abort -> q=%s", key)
         queues.unremove(key, xid)
-        pendingTransactions(key).remove(0)
         true
     }
   }
 
   // returns true if a transaction was actually closed.
   def closeTransaction(key: String): Boolean = {
-    pendingTransactions(key).headOption match {
+    pendingTransactions.pop(key) match {
       case None =>
         false
       case Some(xid) =>
         log.debug("confirm -> q=%s", key)
         queues.confirmRemove(key, xid)
-        pendingTransactions(key).remove(0)
         true
     }
   }
 
+  def closeTransactions(key: String, count: Int): Boolean = {
+    pendingTransactions.popN(key, count) match {
+      case None =>
+        false
+      case Some(xids) =>
+        xids.foreach { xid => queues.confirmRemove(key, xid) }
+        true
+    }
+  }
+
+  // will do a continuous transactional fetch on a queue until time runs out or transactions are
+  // full.
+  final def monitorUntil(key: String, timeLimit: Time)(f: Option[QItem] => Unit) {
+    val remaining = (timeLimit - Time.now).inMillis.toInt
+    if (remaining <= 0 || pendingTransactions.size(key) >= maxOpenTransactions) {
+      f(None)
+    } else {
+      queues.remove(key, remaining, true, false) {
+        case None =>
+          f(None)
+        case x @ Some(item) =>
+          pendingTransactions.add(key, item.xid)
+          f(x)
+          monitorUntil(key, timeLimit)(f)
+      }
+    }
+  }
+
   def getItem(key: String, timeout: Int, opening: Boolean, peeking: Boolean)(f: Option[QItem] => Unit) {
-    if (opening && pendingTransactions(key).size >= maxOpenTransactions) {
+    if (opening && pendingTransactions.size(key) >= maxOpenTransactions) {
       throw TooManyOpenTransactionsException
     }
 
@@ -99,16 +160,13 @@ abstract class KestrelHandler(val config: Config, val queues: QueueCollection) {
         f(None)
       case Some(item) =>
         log.debug("get <- %s", item)
-        if (opening) pendingTransactions(key) += item.xid
+        if (opening) pendingTransactions.add(key, item.xid)
         f(Some(item))
     }
   }
 
   protected def abortAnyTransaction() = {
-    pendingTransactions.foreach { case (qname, xidList) =>
-      xidList.foreach { xid => queues.unremove(qname, xid) }
-    }
-    pendingTransactions.clear()
+    pendingTransactions.cancelAll()
   }
 
   def setItem(key: String, flags: Int, expiry: Int, data: Array[Byte]) = {
