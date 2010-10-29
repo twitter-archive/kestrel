@@ -350,4 +350,25 @@ object Journal {
       name.split('~')(0)
     }
   }
+
+  def journalsForQueue(path: File, queueName: String): Seq[String] = {
+    val totalFiles = path.list()
+    val timedFiles = totalFiles.filter { _ startsWith (queueName + "~~") }.sortBy { name =>
+      name.split("~~")(1).toInt
+    }.toList
+    val fixedTimedFiles: List[String] = if (timedFiles.exists { _ endsWith "~~pack" }) {
+      // incomplete migration died after creating the combined file, before erasing the others.
+      // finish the job.
+      val doomed = timedFiles.takeWhile { f => !(f endsWith "~~pack") }
+      doomed.foreach { f => new File(path, f).delete() }
+      val packedFile = timedFiles.find { _ endsWith "~~pack" }.get
+      val postPackedFile = packedFile.substring(0, packedFile.length - 6)
+      new File(path, packedFile) renameTo new File(path, postPackedFile)
+      List(postPackedFile) ++ (timedFiles.dropWhile { f => !(f endsWith "~~pack") }.drop(1))
+    } else {
+      timedFiles
+    }
+    val currentFile = totalFiles.filter { _ == queueName }
+    fixedTimedFiles ++ currentFile
+  }
 }
