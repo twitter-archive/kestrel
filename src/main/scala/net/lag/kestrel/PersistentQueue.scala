@@ -113,7 +113,7 @@ class PersistentQueue(persistencePath: String, val name: String,
   // clients waiting on an item in this queue
   private val waiters = new mutable.ArrayBuffer[Waiter]
 
-  private var journal = new Journal(new File(persistencePath, name).getCanonicalPath, syncJournal())
+  private var journal = new Journal(new File(persistencePath).getCanonicalPath, name, syncJournal())
 
   // track tentative removals
   private var xidCounter: Int = 0

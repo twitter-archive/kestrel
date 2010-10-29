@@ -41,10 +41,10 @@ object JournalItem {
 /**
  * Codes for working with the journal file for a PersistentQueue.
  */
-class Journal(queuePath: String, syncJournal: => Boolean) {
+class Journal(queuePath: String, queueName: String, syncJournal: => Boolean) {
   private val log = Logger.get
 
-  private val queueFile = new File(queuePath)
+  private val queueFile = new File(queuePath, queueName)
 
   private var writer: FileChannel = null
   private var reader: Option[FileChannel] = None
@@ -66,6 +66,8 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
   private val CMD_CONFIRM_REMOVE = 6
   private val CMD_ADD_XID = 7
 
+
+  def this(fullPath: String, syncJournal: => Boolean) = this(new File(fullPath).getParent(), new File(fullPath).getName(), syncJournal)
 
   private def open(file: File): Unit = {
     writer = new FileOutputStream(file, true).getChannel
@@ -188,11 +190,17 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
   }
 
   def replay(name: String)(f: JournalItem => Unit): Unit = {
+    Journal.journalsForQueue(new File(queuePath), queueName).foreach { filename =>
+      replayFile(name, new File(queuePath, filename).getCanonicalPath)(f)
+    }
+  }
+
+  def replayFile(name: String, filename: String)(f: JournalItem => Unit): Unit = {
     size = 0
     var lastUpdate = 0L
     val TEN_MB = 10L * 1024 * 1024
     try {
-      val in = new FileInputStream(queueFile).getChannel
+      val in = new FileInputStream(filename).getChannel
       try {
         replayer = Some(in)
         var done = false
@@ -204,13 +212,13 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
               f(x)
               if (size / TEN_MB > lastUpdate) {
                 lastUpdate = size / TEN_MB
-                log.info("Continuing to read '%s' journal; %d MB so far...", name, lastUpdate * 10)
+                log.info("Continuing to read '%s' journal (%s); %d MB so far...", name, filename, lastUpdate * 10)
               }
           }
         } while (!done)
       } catch {
         case e: BrokenItemException =>
-          log.error(e, "Exception replaying journal for '%s'", name)
+          log.error(e, "Exception replaying journal for '%s': %s", name, filename)
           log.error("DATA MAY HAVE BEEN LOST! Truncated entry will be deleted.")
           truncateJournal(e.lastValidPosition)
       }
@@ -218,7 +226,7 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
       case e: FileNotFoundException =>
         log.info("No transaction journal for '%s'; starting with empty queue.", name)
       case e: IOException =>
-        log.error(e, "Exception replaying journal for '%s'", name)
+        log.error(e, "Exception replaying journal for '%s': %s", name, filename)
         log.error("DATA MAY HAVE BEEN LOST!")
         // this can happen if the server hardware died abruptly in the middle
         // of writing a journal. not awesome but we should recover.
@@ -285,7 +293,8 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
   }
 
   def walk() = new tools.PythonIterator[(JournalItem, Int)] {
-    val in = new FileInputStream(queuePath).getChannel
+// FIXME
+    val in = new FileInputStream(new File(queuePath, queueName)).getChannel
     def apply() = {
       readJournalEntry(in) match {
         case (JournalItem.EndOfFile, _) =>
@@ -347,28 +356,37 @@ object Journal {
     path.list().filter { name =>
       !(name contains "~~")
     }.map { name =>
-      name.split('~')(0)
+      name.split('.')(0)
     }
   }
 
-  def journalsForQueue(path: File, queueName: String): Seq[String] = {
+  def orderedFilesForQueue(path: File, queueName: String): List[String] = {
     val totalFiles = path.list()
-    val timedFiles = totalFiles.filter { _ startsWith (queueName + "~~") }.sortBy { name =>
-      name.split("~~")(1).toInt
+    totalFiles.filter { _ startsWith (queueName + ".") }.sortBy { name =>
+      name.split('.')(1).toInt
     }.toList
-    val fixedTimedFiles: List[String] = if (timedFiles.exists { _ endsWith "~~pack" }) {
+  }
+
+  def journalsForQueue(path: File, queueName: String): Seq[String] = {
+    val timedFiles = orderedFilesForQueue(path, queueName)
+    val fixedTimedFiles: List[String] = if (timedFiles.exists { _ endsWith ".pack" }) {
       // incomplete migration died after creating the combined file, before erasing the others.
       // finish the job.
-      val doomed = timedFiles.takeWhile { f => !(f endsWith "~~pack") }
+      val doomed = timedFiles.takeWhile { f => !(f endsWith ".pack") }
       doomed.foreach { f => new File(path, f).delete() }
-      val packedFile = timedFiles.find { _ endsWith "~~pack" }.get
-      val postPackedFile = packedFile.substring(0, packedFile.length - 6)
+      val packedFile = timedFiles.find { _ endsWith ".pack" }.get
+      val postPackedFile = packedFile.substring(0, packedFile.length - 5)
       new File(path, packedFile) renameTo new File(path, postPackedFile)
-      List(postPackedFile) ++ (timedFiles.dropWhile { f => !(f endsWith "~~pack") }.drop(1))
+      List(postPackedFile) ++ (timedFiles.dropWhile { f => !(f endsWith ".pack") }.drop(1))
     } else {
       timedFiles
     }
-    val currentFile = totalFiles.filter { _ == queueName }
-    fixedTimedFiles ++ currentFile
+    val currentFile = path.list().filter { _ == queueName }
+    val rv = fixedTimedFiles ++ currentFile
+    if (rv.size == 0) {
+      List(queueName)
+    } else {
+      rv
+    }
   }
 }

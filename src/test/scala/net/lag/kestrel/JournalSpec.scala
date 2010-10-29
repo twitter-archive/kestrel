@@ -61,30 +61,46 @@ class JournalSpec extends Specification with TestHelper {
     "identify valid journal files" in {
       "simple" in {
         withTempFolder {
-          new FileOutputStream(folderName + "/test~~50")
-          new FileOutputStream(folderName + "/test~~100")
-          new FileOutputStream(folderName + "/test~~3000")
+          new FileOutputStream(folderName + "/test.50")
+          new FileOutputStream(folderName + "/test.100")
+          new FileOutputStream(folderName + "/test.3000")
           new FileOutputStream(folderName + "/test")
           Journal.journalsForQueue(new File(folderName), "test").toList mustEqual
-            List("test~~50", "test~~100", "test~~3000", "test")
+            List("test.50", "test.100", "test.3000", "test")
         }
       }
 
       "half-finished pack" in {
         withTempFolder {
-          new FileOutputStream(folderName + "/test~~50")
-          new FileOutputStream(folderName + "/test~~100")
-          new FileOutputStream(folderName + "/test~~100~~pack")
-          new FileOutputStream(folderName + "/test~~3000")
+          new FileOutputStream(folderName + "/test.50")
+          new FileOutputStream(folderName + "/test.100")
+          new FileOutputStream(folderName + "/test.100.pack")
+          new FileOutputStream(folderName + "/test.3000")
           new FileOutputStream(folderName + "/test")
           Journal.journalsForQueue(new File(folderName), "test").toList mustEqual
-            List("test~~100", "test~~3000", "test")
+            List("test.100", "test.3000", "test")
 
           // and it should clean up after itself:
           new File(folderName + "/test").exists() mustEqual true
-          new File(folderName + "/test~~100~~pack").exists() mustEqual false
-          new File(folderName + "/test~~100").exists() mustEqual true
-          new File(folderName + "/test~~50").exists() mustEqual false
+          new File(folderName + "/test.100.pack").exists() mustEqual false
+          new File(folderName + "/test.100").exists() mustEqual true
+          new File(folderName + "/test.50").exists() mustEqual false
+        }
+      }
+
+      "missing last file" in {
+        withTempFolder {
+          new FileOutputStream(folderName + "/test.50")
+          new FileOutputStream(folderName + "/test.100")
+          Journal.journalsForQueue(new File(folderName), "test").toList mustEqual
+            List("test.50", "test.100")
+        }
+      }
+
+      "missing any files" in {
+        withTempFolder {
+          Journal.journalsForQueue(new File(folderName), "test").toList mustEqual
+            List("test")
         }
       }
     }
