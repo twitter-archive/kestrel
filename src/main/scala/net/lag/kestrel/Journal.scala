@@ -48,6 +48,7 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean) {
 
   private var writer: FileChannel = null
   private var reader: Option[FileChannel] = None
+  private var readerFilename: Option[String] = None
   private var replayer: Option[FileChannel] = None
 
   var size: Long = 0
@@ -102,8 +103,9 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean) {
 
   def close(): Unit = {
     writer.close
-    for (r <- reader) r.close
+    reader.foreach { _.close }
     reader = None
+    readerFilename = None
   }
 
   def erase(): Unit = {
@@ -127,6 +129,7 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean) {
     } while (blob.position < blob.limit)
     if (allowSync && syncJournal) writer.force(false)
     size += blob.limit
+    checkRotate()
   }
 
   def add(item: QItem): Unit = add(true, item)
@@ -171,18 +174,28 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean) {
     val rj = new FileInputStream(queueFile).getChannel
     rj.position(pos)
     reader = Some(rj)
+    readerFilename = Some(queueName)
   }
 
+  // not tail recursive, but should only recurse once.
   def fillReadBehind(f: QItem => Unit): Unit = {
     val pos = if (replayer.isDefined) replayer.get.position else writer.position
-    for (rj <- reader) {
-      if (rj.position == pos) {
+    reader.foreach { rj =>
+      if (rj.position == pos && readerFilename.get == queueName) {
         // we've caught up.
         rj.close
         reader = None
+        readerFilename = None
       } else {
         readJournalEntry(rj) match {
-          case (JournalItem.Add(item), _) => f(item)
+          case (JournalItem.Add(item), _) =>
+            f(item)
+          case (JournalItem.EndOfFile, _) =>
+            // move to next file and try again.
+            readerFilename = Journal.journalAfter(new File(queuePath), queueName, readerFilename.get)
+            reader = Some(new FileInputStream(new File(queuePath, readerFilename.get)).getChannel)
+            fillReadBehind(f)
+            // FIXME: send actor signal to pack queue files!
           case (_, _) =>
         }
       }
@@ -349,6 +362,14 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean) {
     if (allowSync && syncJournal) writer.force(false)
     byteBuffer.limit
   }
+
+  def checkRotate() {
+/*
+    if (size > desiredSize) {
+      make new file
+    }
+*/
+  }
 }
 
 object Journal {
@@ -367,7 +388,7 @@ object Journal {
     }.toList
   }
 
-  def journalsForQueue(path: File, queueName: String): Seq[String] = {
+  def journalsForQueue(path: File, queueName: String): List[String] = {
     val timedFiles = orderedFilesForQueue(path, queueName)
     val fixedTimedFiles: List[String] = if (timedFiles.exists { _ endsWith ".pack" }) {
       // incomplete migration died after creating the combined file, before erasing the others.
@@ -388,5 +409,13 @@ object Journal {
     } else {
       rv
     }
+  }
+
+  def journalsBefore(path: File, queueName: String, filename: String): Seq[String] = {
+    journalsForQueue(path, queueName).takeWhile { _ != filename }
+  }
+
+  def journalAfter(path: File, queueName: String, filename: String): Option[String] = {
+    journalsForQueue(path, queueName).dropWhile { _ != filename }.drop(1).headOption
   }
 }

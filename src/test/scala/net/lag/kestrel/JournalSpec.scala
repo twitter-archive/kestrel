@@ -103,6 +103,23 @@ class JournalSpec extends Specification with TestHelper {
             List("test")
         }
       }
+
+      "journalsBefore and journalAfter" in {
+        withTempFolder {
+          new FileOutputStream(folderName + "/test.50")
+          new FileOutputStream(folderName + "/test.100")
+          new FileOutputStream(folderName + "/test.999")
+          new FileOutputStream(folderName + "/test.3000")
+          new FileOutputStream(folderName + "/test")
+
+          Journal.journalsBefore(new File(folderName), "test", "test.3000").toList mustEqual
+            List("test.50", "test.100", "test.999")
+          Journal.journalsBefore(new File(folderName), "test", "test.50").toList mustEqual Nil
+          Journal.journalAfter(new File(folderName), "test", "test.100") mustEqual Some("test.999")
+          Journal.journalAfter(new File(folderName), "test", "test.3000") mustEqual Some("test")
+          Journal.journalAfter(new File(folderName), "test", "test") mustEqual None
+        }
+      }
     }
   }
 }
