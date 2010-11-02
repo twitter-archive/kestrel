@@ -20,6 +20,7 @@ package net.lag.kestrel
 import java.io._
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.channels.FileChannel
+import com.twitter.actors.Actor._
 import com.twitter.xrayspecs.Time
 import net.lag.configgy.{Config, ConfigMap}
 import net.lag.logging.Logger
@@ -79,9 +80,9 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
     open(queueFile)
   }
 
-  def roll(xid: Int, openItems: Seq[QItem], queue: Iterable[QItem]): Unit = {
+  def roll(xid: Int, openItems: Seq[QItem], queue: Iterable[QItem]) {
     writer.close
-    val tmpFile = new File(queuePath + "~~" + Time.now.inMilliseconds)
+    val tmpFile = new File(queuePath, queueName + "~~" + Time.now.inMilliseconds)
     open(tmpFile)
     dump(xid, openItems, queue)
     writer.close
@@ -130,7 +131,6 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
     } while (blob.position < blob.limit)
     if (allowSync && syncJournal) writer.force(false)
     size += blob.limit
-    checkRotate()
   }
 
   def add(item: QItem): Unit = add(true, item)
@@ -364,14 +364,51 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
     byteBuffer.limit
   }
 
-  def checkRotate() {
-/*
-    if (size > desiredSize) {
-      make new file
-    }
+  def rotate() {
+    writer.close
+    val rotatedFile = queueName + "." + Time.now.inMilliseconds
+    new File(queuePath, queueName).renameTo(new File(queuePath, rotatedFile))
+    size = 0
+    open
 
-    possibly set readerFilename to the rotated file.
-*/
+    if (readerFilename == Some(queueName)) {
+      readerFilename = Some(rotatedFile)
+    }
+    packer ! "pack"
+  }
+
+  val packer = actor {
+    loop {
+      react {
+        case "pack" =>
+          pack()
+      }
+    }
+  }
+  packer.start()
+
+  private def pack() {
+    val filenames = Journal.journalsBefore(new File(queuePath), queueName, readerFilename.getOrElse(queueName))
+    if (filenames.size > 1) {
+      log.info("Packing journals for '%s' ...", queueName)
+      val tmpFile = new File(queuePath, queueName + "~~" + Time.now.inMilliseconds)
+      val packer = new JournalPacker(filenames.map { new File(queuePath, _).getAbsolutePath },
+                                     tmpFile.getAbsolutePath)
+
+      val journal = packer { (bytes1, bytes2) =>
+        if (bytes1 == 0 && bytes2 == 0) {
+          log.info("Packing '%s' into new journal.", queueName)
+        } else {
+          log.info("Packing '%s' -> %d / %d", queueName, bytes1, bytes2)
+        }
+      }
+
+      log.info("Packing '%s' -- erasing old files.", queueName)
+      val packFile = new File(queuePath, queueName + ".0.pack")
+      tmpFile.renameTo(packFile)
+      Journal.cleanUpFinishedPack(new File(queuePath), filenames, packFile.getAbsolutePath)
+      log.info("Packing '%s' done.", queueName)
+    }
   }
 }
 
@@ -387,20 +424,25 @@ object Journal {
   def orderedFilesForQueue(path: File, queueName: String): List[String] = {
     val totalFiles = path.list()
     totalFiles.filter { _ startsWith (queueName + ".") }.sortBy { name =>
-      name.split('.')(1).toInt
+      name.split('.')(1).toLong
     }.toList
+  }
+
+  def cleanUpFinishedPack(path: File, oldFiles: Seq[String], packedFile: String) = {
+    oldFiles.foreach { f => new File(path, f).delete() }
+    val postPackedFile = packedFile.substring(0, packedFile.length - 5)
+    new File(path, packedFile) renameTo new File(path, postPackedFile)
+    postPackedFile
   }
 
   def journalsForQueue(path: File, queueName: String): List[String] = {
     val timedFiles = orderedFilesForQueue(path, queueName)
     val fixedTimedFiles: List[String] = if (timedFiles.exists { _ endsWith ".pack" }) {
-      // incomplete migration died after creating the combined file, before erasing the others.
+      // incomplete packing job died after creating the combined file, before erasing the others.
       // finish the job.
       val doomed = timedFiles.takeWhile { f => !(f endsWith ".pack") }
-      doomed.foreach { f => new File(path, f).delete() }
       val packedFile = timedFiles.find { _ endsWith ".pack" }.get
-      val postPackedFile = packedFile.substring(0, packedFile.length - 5)
-      new File(path, packedFile) renameTo new File(path, postPackedFile)
+      val postPackedFile = cleanUpFinishedPack(path, doomed, packedFile)
       List(postPackedFile) ++ (timedFiles.dropWhile { f => !(f endsWith ".pack") }.drop(1))
     } else {
       timedFiles

@@ -207,10 +207,19 @@ class PersistentQueue(persistencePath: String, val name: String,
   }
 
   final def rollJournal() {
-    if (keepJournal()) {
+    if (keepJournal() && !multifile()) {
       synchronized {
         log.info("Rolling journal file for '%s' (qsize=%d)", name, queueSize)
         journal.roll(xidCounter, openTransactionIds map { openTransactions(_) }, queue)
+      }
+    }
+  }
+
+  final def checkRotateJournal() {
+    if (keepJournal() && multifile() && journal.size > maxJournalSize()) {
+      synchronized {
+        log.info("Rotating journal file for '%s'", name)
+        journal.rotate()
       }
     }
   }
@@ -239,6 +248,7 @@ class PersistentQueue(persistencePath: String, val name: String,
         journal.startReadBehind
       }
     }
+    checkRotateJournal()
     _add(item)
     if (keepJournal()) journal.add(item)
     if (waiters.size > 0) {
@@ -281,6 +291,7 @@ class PersistentQueue(persistencePath: String, val name: String,
           if ((queueLength == 0) && (journal.size >= maxJournalSize())) {
             rollJournal()
           }
+          checkRotateJournal()
         }
         item
       }
