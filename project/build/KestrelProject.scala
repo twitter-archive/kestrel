@@ -26,4 +26,5 @@ class KestrelProject(info: ProjectInfo) extends StandardProject(info) with Subve
   // 100 times: 10,000 items of 1024 bytes each.
   override def fork = forkRun
   lazy val putMany = runTask(Some("net.lag.kestrel.load.PutMany"), testClasspath, "100", "10000", "1024").dependsOn(testCompile) describedAs "Run a load test."
+  lazy val manyClients = runTask(Some("net.lag.kestrel.load.ManyClients"), testClasspath).dependsOn(testCompile)
 }
