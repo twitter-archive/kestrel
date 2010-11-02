@@ -22,11 +22,10 @@ import java.io.FileOutputStream
 import scala.collection.mutable
 
 /**
- * Pack one or more journal files into a single new file that only consists
- * of the queue's current contents, as of the end of the last journal file
- * processed.
+ * Pack one or more journal files into a single new file that only consists of the queue's current
+ * contents, as of the end of the last journal file processed.
  */
-class JournalPacker(filenames: Array[String], newFilename: String) {
+class JournalPacker(filenames: Seq[String], newFilename: String) {
   private val log = Logger.get
 
   val journals = filenames.map { filename => new Journal(filename, false) }

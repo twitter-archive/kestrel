@@ -61,7 +61,7 @@ object QPacker {
     }
 
     println("Packing journals...")
-    val packer = new JournalPacker(filenames.toArray, newFilename)
+    val packer = new JournalPacker(filenames, newFilename)
     val journal = packer { (bytes1, bytes2) =>
       if (bytes1 == 0 && bytes2 == 0) {
         println("\rWriting new journal..." + (" " * 40))
