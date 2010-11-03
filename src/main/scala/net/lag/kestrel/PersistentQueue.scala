@@ -114,7 +114,7 @@ class PersistentQueue(persistencePath: String, val name: String,
   val expiredQueue = overlay(PersistentQueue.expiredQueue)
 
   // clients waiting on an item in this queue
-  private val waiters = new mutable.ArrayBuffer[Waiter]
+  private val waiters = new mutable.ListBuffer[Waiter]
 
   private var journal = new Journal(new File(persistencePath).getCanonicalPath, name, syncJournal(), multifile())
 
