@@ -97,15 +97,38 @@ object Flood {
     misses
   }
 
-  def main(args: Array[String]) = {
-    if (args.length > 0) {
-      Console.println("usage: flood")
-      Console.println("    spin up a producer and consumer and flood N items through kestrel")
-      System.exit(1)
-    }
+  var totalItems = 10000
+  var kilobytes = 1
 
-    val totalItems = System.getProperty("items", "10000").toInt
-    val kilobytes = System.getProperty("k", "1").toInt
+  def usage() {
+    Console.println("usage: flood [options]")
+    Console.println("    spin up a producer and consumer and flood N items through kestrel")
+    Console.println()
+    Console.println("options:")
+    Console.println("    -n ITEMS")
+    Console.println("        put ITEMS items into the queue (default: %d)".format(totalItems))
+    Console.println("    -k KILOBYTES")
+    Console.println("        put KILOBYTES per queue item (default: %d)".format(kilobytes))
+  }
+
+  def parseArgs(args: List[String]): Unit = args match {
+    case Nil =>
+    case "--help" :: xs =>
+      usage()
+      System.exit(0)
+    case "-n" :: x :: xs =>
+      totalItems = x.toInt
+      parseArgs(xs)
+    case "-k" :: x :: xs =>
+      kilobytes = x.toInt
+      parseArgs(xs)
+    case _ =>
+      usage()
+      System.exit(1)
+  }
+
+  def main(args: Array[String]) = {
+    parseArgs(args.toList)
     val data = DATA * kilobytes
 
     println("flood: " + totalItems + " items of " + kilobytes + "kB")
