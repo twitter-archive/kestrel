@@ -161,7 +161,7 @@ object Kestrel {
       expirationTask.run(null)
     }
 
-    log.info("Kestrel started.")
+    log.info("Kestrel %s started.", runtime.jarVersion)
     actor {
       deathSwitch.await()
     }
