@@ -198,7 +198,7 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
     if (shuttingDown) {
       0
     } else {
-      queue(name) map { q => q.discardExpired() } getOrElse(0)
+      queue(name) map { q => q.discardExpired(q.maxExpireSweep) } getOrElse(0)
     }
   }
 
