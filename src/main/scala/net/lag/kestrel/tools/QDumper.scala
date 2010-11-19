@@ -83,6 +83,9 @@ class QueueDumper(filename: String) {
           }
           println()
         }
+        if (QDumper.dump) {
+          println("    " + new String(qitem.data, "ISO-8859-1"))
+        }
         queue += qitem.data.size
       case JournalItem.Remove =>
         if (!QDumper.quiet) println("REM")
@@ -112,6 +115,7 @@ class QueueDumper(filename: String) {
 object QDumper {
   val filenames = new mutable.ListBuffer[String]
   var quiet = false
+  var dump = false
 
   def usage() {
     println()
@@ -120,6 +124,7 @@ object QDumper {
     println()
     println("options:")
     println("    -q      quiet: don't describe every line, just the summary")
+    println("    -d      dump contents of added items")
     println()
   }
 
@@ -130,6 +135,9 @@ object QDumper {
       System.exit(0)
     case "-q" :: xs =>
       quiet = true
+      parseArgs(xs)
+    case "-d" :: xs =>
+      dump = true
       parseArgs(xs)
     case x :: xs =>
       filenames += x
