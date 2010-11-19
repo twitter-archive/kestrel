@@ -113,6 +113,9 @@ class PersistentQueue(persistencePath: String, val name: String,
   // (optional) move expired items over to this queue
   val expiredQueue = overlay(PersistentQueue.expiredQueue)
 
+  // maximum number of items to expire at once
+  var maxExpireSweep = Math.MAX_INT
+
   // clients waiting on an item in this queue
   private val waiters = new mutable.ListBuffer[Waiter]
 
@@ -500,7 +503,7 @@ class PersistentQueue(persistencePath: String, val name: String,
   //  -----  internal implementations
 
   private def _add(item: QItem): Unit = {
-    discardExpired
+    discardExpired(maxExpireSweep)
     if (!journal.inReadBehind) {
       queue += item
       _memoryBytes += item.data.length
@@ -511,12 +514,12 @@ class PersistentQueue(persistencePath: String, val name: String,
   }
 
   private def _peek(): Option[QItem] = {
-    discardExpired
+    discardExpired(maxExpireSweep)
     if (queue.isEmpty) None else Some(queue.front)
   }
 
   private def _remove(transaction: Boolean): Option[QItem] = {
-    discardExpired()
+    discardExpired(maxExpireSweep)
     if (queue.isEmpty) return None
 
     val now = Time.now.inMilliseconds
@@ -536,8 +539,8 @@ class PersistentQueue(persistencePath: String, val name: String,
     Some(item)
   }
 
-  final def discardExpired(): Int = {
-    if (queue.isEmpty || journal.isReplaying) {
+  final def discardExpired(max: Int): Int = {
+    if (queue.isEmpty || journal.isReplaying || max <= 0) {
       0
     } else {
       val realExpiry = adjustExpiry(queue.front.addTime, queue.front.expiry)
@@ -551,7 +554,7 @@ class PersistentQueue(persistencePath: String, val name: String,
         fillReadBehind
         if (keepJournal()) journal.remove()
         expiredQueue().map { _.add(item.data, 0) }
-        1 + discardExpired()
+        1 + discardExpired(max - 1)
       } else {
         0
       }
