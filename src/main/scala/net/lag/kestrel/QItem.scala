@@ -22,14 +22,20 @@ import com.twitter.xrayspecs.Time
 
 
 case class QItem(addTime: Long, expiry: Long, data: Array[Byte], var xid: Int) {
-  def pack(): Array[Byte] = {
-    val bytes = new Array[Byte](data.length + 16)
-    val buffer = ByteBuffer.wrap(bytes)
+  def pack(opcode: Byte, withXid: Boolean): ByteBuffer = {
+    val headerSize = if (withXid) 9 else 5
+    val buffer = ByteBuffer.allocate(data.length + 16 + headerSize)
     buffer.order(ByteOrder.LITTLE_ENDIAN)
+    buffer.put(opcode)
+    if (withXid) {
+      buffer.putInt(xid)
+    }
+    buffer.putInt(data.length + 16)
     buffer.putLong(addTime)
     buffer.putLong(expiry)
     buffer.put(data)
-    bytes
+    buffer.flip()
+    buffer
   }
 }
 
