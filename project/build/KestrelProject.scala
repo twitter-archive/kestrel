@@ -1,8 +1,8 @@
 import sbt._
 import com.twitter.sbt._
 
-class KestrelProject(info: ProjectInfo) extends StandardProject(info) with SubversionPublisher {
-  val configgy = "net.lag" % "configgy" % "1.6.4"
+class KestrelProject(info: ProjectInfo) extends StandardProject(info) with SubversionPublisher with InlineDependencies {
+  inline("net.lag" % "configgy" % "1.6.4")
   val naggati = "net.lag" %% "naggati" % "0.7.4"
   val twitterActors = "com.twitter" % "twitteractors" % "1.1.0"
   val mina = "org.apache.mina" % "mina-core" % "2.0.0-M6"
