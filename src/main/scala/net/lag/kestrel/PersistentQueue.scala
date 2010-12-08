@@ -565,4 +565,54 @@ object PersistentQueue {
   @volatile var keepJournal: Boolean = true
   @volatile var syncJournal: Boolean = false
   @volatile var expiredQueue: Option[PersistentQueue] = None
+
+  // constructor for people who don't want to use ConfigMap.
+  def apply(path: String, name: String, maxItems: Int, maxSize: Long, maxItemSize: Long,
+            maxAge: Int, maxJournalSize: Long, maxMemorySize: Long, maxJournalOverflow: Int,
+            discardOldWhenFull: Boolean, keepJournal: Boolean, syncJournal: Boolean,
+            maxExpireSweep: Int) = {
+    val queue = new PersistentQueue(path, name, Config.fromMap(Map.empty))
+    queue.maxItems.set(Some(maxItems))
+    queue.maxSize.set(Some(maxSize))
+    queue.maxItemSize.set(Some(maxItemSize))
+    queue.maxAge.set(Some(maxAge))
+    queue.maxJournalSize.set(Some(maxJournalSize))
+    queue.maxMemorySize.set(Some(maxMemorySize))
+    queue.maxJournalOverflow.set(Some(maxJournalOverflow))
+    queue.discardOldWhenFull.set(Some(discardOldWhenFull))
+    queue.keepJournal.set(Some(keepJournal))
+    queue.syncJournal.set(Some(syncJournal))
+    queue.expiredQueue.set(Some(expiredQueue))
+    queue.maxExpireSweep = maxExpireSweep
+
+    val log = Logger.get(getClass.getName)
+    log.info("Configuring queue %s: journal=%s, max_items=%d, max_size=%d, max_age=%d, max_journal_size=%d, " +
+             "max_memory_size=%d, max_journal_overflow=%d, max_journal_size_absolute=%d, " +
+             "discard_old_when_full=%s, sync_journal=%s",
+             name, keepJournal, maxItems, maxSize, maxAge, maxJournalSize, maxMemorySize,
+             maxJournalOverflow, maxJournalSizeAbsolute, discardOldWhenFull, syncJournal)
+    queue
+  }
+}
+
+class PersistentQueueConfig {
+  var path: String = "/tmp"
+  var name: String = null
+  var maxItems: Int = Math.MAX_INT
+  var maxSize: Long = Math.MAX_LONG
+  var maxItemSize: Long = Math.MAX_LONG
+  var maxAge: Int = 0
+  var maxJournalSize: Long = 16 * 1024 * 1024
+  var maxMemorySize: Long = 128 * 1024 * 1024
+  var maxJournalOverflow: Int = 10
+  var discardOldWhenFull: Boolean = false
+  var keepJournal: Boolean = true
+  var syncJournal: Boolean = false
+  var maxExpireSweep: Int = Math.MAX_INT
+
+  def apply(): PersistentQueue = {
+    PersistentQueue(path, name, maxItems, maxSize, maxItemSize, maxAge, maxJournalSize,
+                    maxMemorySize, maxJournalOverflow, discardOldWhenFull, keepJournal,
+                    syncJournal, maxExpireSweep)
+  }
 }
