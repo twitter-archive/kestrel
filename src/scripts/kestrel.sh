@@ -104,7 +104,7 @@ case "$1" in
           hardtries=$((hardtries + 1))
           if [ $hardtries -ge 5 ]; then
             echo "FAILED HARD SHUTDOWN, TRY KILL -9 MANUALLY"
-            exit 1
+            kill -9 $(cat $pidfile)
           fi
           sleep 1
         done
