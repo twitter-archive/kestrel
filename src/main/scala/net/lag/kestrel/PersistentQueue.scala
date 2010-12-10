@@ -114,7 +114,7 @@ class PersistentQueue(persistencePath: String, val name: String,
   val expiredQueue = overlay(PersistentQueue.expiredQueue)
 
   // maximum number of items to expire at once
-  var maxExpireSweep = Math.MAX_INT
+  var maxExpireSweep = Int.MaxValue
 
   // clients waiting on an item in this queue
   private val waiters = new mutable.ListBuffer[Waiter]
