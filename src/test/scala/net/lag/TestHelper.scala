@@ -19,9 +19,8 @@ package net.lag
 
 import java.io.File
 import java.util.UUID
-import net.lag.logging.Logger
+import com.twitter.logging.Logger
 import org.specs.Specification
-
 
 trait TestHelper { self: Specification =>
   private val _folderName = new ThreadLocal[File]

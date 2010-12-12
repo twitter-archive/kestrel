@@ -20,8 +20,7 @@ package tools
 
 import java.io.{FileNotFoundException, IOException}
 import scala.collection.mutable
-import com.twitter.xrayspecs.Time
-
+import com.twitter.Time
 
 class QueueDumper(filename: String) {
   var offset = 0L

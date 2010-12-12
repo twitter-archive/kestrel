@@ -21,51 +21,46 @@ import java.io._
 import java.net.Socket
 import scala.collection.Map
 import scala.util.Random
-import com.twitter.xrayspecs.Time
-import com.twitter.xrayspecs.TimeConversions._
+import com.twitter.Time
+import com.twitter.conversions.si._
+import com.twitter.conversions.time._
+import com.twitter.logging.Logger
 import net.lag.TestHelper
-import net.lag.configgy.Config
-import net.lag.logging.Logger
-import org.specs._
-
+import org.specs.Specification
+import config._
 
 class ServerSpec extends Specification with TestHelper {
-
   val PORT = 22199
-  var config: Config = null
 
   def makeServer = {
-    config = new Config
-    config("host") = "localhost"
-    config("port") = PORT
-    config("queue_path") = canonicalFolderName
-    config("max_journal_size") = 16 * 1024
-    config("log.console") = true
-    config("log.level") = "debug"
-    config("log.filename") = "/tmp/foo"
-
+    val defaultConfig = new QueueConfig("") {
+      maxJournalSize = 16.kilo
+    }
     // make a queue specify max_items and max_age
-    config("queues.weather_updates.max_items") = 1500000
-    config("queues.weather_updates.max_age") = 1800
-
-    Kestrel.startup(config)
+    val weatherUpdatesConfig = new QueueConfig("weather_updates") {
+      maxItems = 1500000
+      maxAge = 1800.seconds
+    }
+    val kestrel = new Kestrel(new QueueConfig(null), List(weatherUpdatesConfig), 4, "localhost",
+                              PORT, canonicalFolderName, Protocol.Ascii, Time.never, Time.never, 1)
+    kestrel.start(null)
   }
 
 
   "Server" should {
     doAfter {
-      Kestrel.shutdown()
+      Kestrel.kestrel.shutdown()
     }
 
     "configure per-queue" in {
       withTempFolder {
         makeServer
-        Kestrel.queues.queue("starship").map(_.maxItems()) mustEqual Some(Int.MaxValue)
-        Kestrel.queues.queue("starship").map(_.maxAge()) mustEqual Some(0)
-        Kestrel.queues.queue("weather_updates").map(_.maxItems()) mustEqual Some(1500000)
-        Kestrel.queues.queue("weather_updates").map(_.maxAge()) mustEqual Some(1800)
-        config("queues.starship.max_items") = 9999
-        Kestrel.queues.queue("starship").map(_.maxItems()) mustEqual Some(9999)
+        val starship = Kestrel.kestrel.queueCollection("starship").get
+        val weatherUpdates = Kestrel.kestrel.queueCollection("weather_updates").get
+        starship.config.maxItems mustEqual Some(Int.MaxValue)
+        starship.config.maxAge mustEqual Some(0)
+        weatherUpdates.config.maxItems mustEqual Some(1500000)
+        weatherUpdates.config.maxAge mustEqual Some(1800.seconds)
       }
     }
 
@@ -83,14 +78,16 @@ class ServerSpec extends Specification with TestHelper {
 
     "set with expiry" in {
       withTempFolder {
-        makeServer
-        val v = (Random.nextInt * 0x7fffffff).toInt
-        val client = new TestClient("localhost", PORT)
-        client.get("test_set_with_expiry") mustEqual ""
-        client.set("test_set_with_expiry", (v + 2).toString, Time.now.inSeconds) mustEqual "STORED"
-        client.set("test_set_with_expiry", v.toString) mustEqual "STORED"
-        Time.advance(1.second)
-        client.get("test_set_with_expiry") mustEqual v.toString
+        Time.withCurrentTimeFrozen { time =>
+          makeServer
+          val v = (Random.nextInt * 0x7fffffff).toInt
+          val client = new TestClient("localhost", PORT)
+          client.get("test_set_with_expiry") mustEqual ""
+          client.set("test_set_with_expiry", (v + 2).toString, Time.now.inSeconds) mustEqual "STORED"
+          client.set("test_set_with_expiry", v.toString) mustEqual "STORED"
+          time.advance(1.second)
+          client.get("test_set_with_expiry") mustEqual v.toString
+        }
       }
     }
 
@@ -241,14 +238,16 @@ class ServerSpec extends Specification with TestHelper {
 
     "age" in {
       withTempFolder {
-        makeServer
-        val client = new TestClient("localhost", PORT)
-        client.set("test_age", "nibbler") mustEqual "STORED"
-        client.set("test_age", "nibbler2") mustEqual "STORED"
-        Time.advance(1.second)
-        client.get("test_age") mustEqual "nibbler"
-        client.stats.contains("queue_test_age_age") mustEqual true
-        client.stats("queue_test_age_age").toInt >= 1000 mustEqual true
+        Time.withCurrentTimeFrozen { time =>
+          makeServer
+          val client = new TestClient("localhost", PORT)
+          client.set("test_age", "nibbler") mustEqual "STORED"
+          client.set("test_age", "nibbler2") mustEqual "STORED"
+          time.advance(1.second)
+          client.get("test_age") mustEqual "nibbler"
+          client.stats.contains("queue_test_age_age") mustEqual true
+          client.stats("queue_test_age_age").toInt >= 1000 mustEqual true
+        }
       }
     }
 
@@ -326,29 +325,31 @@ class ServerSpec extends Specification with TestHelper {
 
     "flush expired items" in {
       withTempFolder {
-        makeServer
-        val client = new TestClient("localhost", PORT)
-        client.set("q1", "1", 1)
-        client.set("q2", "2", 1)
-        client.set("q2", "2", 1)
-        client.set("q3", "3", 1)
-        client.stats("queue_q1_items") mustEqual "1"
-        client.stats("queue_q2_items") mustEqual "2"
-        client.stats("queue_q3_items") mustEqual "1"
+        Time.withCurrentTimeFrozen { time =>
+          makeServer
+          val client = new TestClient("localhost", PORT)
+          client.set("q1", "1", 1)
+          client.set("q2", "2", 1)
+          client.set("q2", "2", 1)
+          client.set("q3", "3", 1)
+          client.stats("queue_q1_items") mustEqual "1"
+          client.stats("queue_q2_items") mustEqual "2"
+          client.stats("queue_q3_items") mustEqual "1"
 
-        Time.advance(5.seconds)
+          time.advance(5.seconds)
 
-        client.out.write("flush_expired q1\n".getBytes)
-        client.readline mustEqual "1"
-        client.stats("queue_q1_items") mustEqual "0"
-        client.stats("queue_q2_items") mustEqual "2"
-        client.stats("queue_q3_items") mustEqual "1"
+          client.out.write("flush_expired q1\n".getBytes)
+          client.readline mustEqual "1"
+          client.stats("queue_q1_items") mustEqual "0"
+          client.stats("queue_q2_items") mustEqual "2"
+          client.stats("queue_q3_items") mustEqual "1"
 
-        client.out.write("flush_all_expired\n".getBytes)
-        client.readline mustEqual "3"
-        client.stats("queue_q1_items") mustEqual "0"
-        client.stats("queue_q2_items") mustEqual "0"
-        client.stats("queue_q3_items") mustEqual "0"
+          client.out.write("flush_all_expired\n".getBytes)
+          client.readline mustEqual "3"
+          client.stats("queue_q1_items") mustEqual "0"
+          client.stats("queue_q2_items") mustEqual "0"
+          client.stats("queue_q3_items") mustEqual "0"
+        }
       }
     }
   }

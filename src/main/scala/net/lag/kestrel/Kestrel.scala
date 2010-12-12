@@ -20,18 +20,20 @@ package net.lag.kestrel
 import java.net.InetSocketAddress
 import java.util.concurrent.{CountDownLatch, Executors, ExecutorService, TimeUnit}
 import scala.collection.{immutable, mutable}
+import com.twitter.{Duration, Time}
 import com.twitter.actors.{Actor, Scheduler}
 import com.twitter.actors.Actor._
+import com.twitter.eval.Eval
+import com.twitter.logging.Logger
 import com.twitter.naggati.{ActorHandler, NettyMessage}
 import com.twitter.naggati.codec.MemcacheRequest
-import com.twitter.xrayspecs.Time
-import net.lag.configgy.{Config, ConfigMap, Configgy, RuntimeEnvironment}
-import net.lag.logging.Logger
+import com.twitter.ostrich.{RuntimeEnvironment, Service, ServiceTracker}
 import org.jboss.netty.bootstrap.ServerBootstrap
 import org.jboss.netty.channel.{Channel, ChannelFactory, ChannelPipelineFactory, Channels}
 import org.jboss.netty.channel.group.DefaultChannelGroup
 import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory
 import org.jboss.netty.util.{HashedWheelTimer, Timeout, Timer, TimerTask}
+import config._
 
 object KestrelStats {
   val bytesRead = new Counter
@@ -44,67 +46,32 @@ object KestrelStats {
   val sessionID = new Counter
 }
 
-object Kestrel {
+class Kestrel(defaultQueueConfig: QueueConfig, queues: List[QueueConfig], maxThreads: Int,
+              listenAddress: String, listenPort: Int, queuePath: String, protocol: config.Protocol,
+              expirationTimerFrequency: Duration, clientTimeout: Duration, maxOpenTransactions: Int)
+      extends Service {
   private val log = Logger.get(getClass.getName)
-  val runtime = new RuntimeEnvironment(getClass)
 
-  var queues: QueueCollection = null
-
-  private val _expiryStats = new mutable.HashMap[String, Int]
-  private val _startTime = Time.now.inMilliseconds
-
+  var queueCollection: QueueCollection = null
+  var timer: Timer = null
   var executor: ExecutorService = null
   var channelFactory: ChannelFactory = null
-  val channels = new DefaultChannelGroup("channels")
   var acceptor: Option[Channel] = None
-  var timer: Timer = null
+  val channelGroup = new DefaultChannelGroup("channels")
 
   private val deathSwitch = new CountDownLatch(1)
 
-  val DEFAULT_PORT = 22133
-
-
-  def main(args: Array[String]): Unit = {
-    runtime.load(args)
-    startup(Configgy.config)
-  }
-
-  def configure(config: ConfigMap): Unit = {
-    // fill in defaults for all queues
-    PersistentQueue.maxItems = config.getInt("max_items", Int.MaxValue)
-    PersistentQueue.maxSize = config.getLong("max_size", Long.MaxValue)
-    PersistentQueue.maxItemSize = config.getLong("max_item_size", Long.MaxValue)
-    PersistentQueue.maxAge = config.getInt("max_age", 0)
-    PersistentQueue.maxJournalSize = config.getInt("max_journal_size", 16 * 1024 * 1024)
-    PersistentQueue.maxMemorySize = config.getInt("max_memory_size", 128 * 1024 * 1024)
-    PersistentQueue.maxJournalOverflow = config.getInt("max_journal_overflow", 10)
-    PersistentQueue.discardOldWhenFull = config.getBool("discard_old_when_full", false)
-    PersistentQueue.keepJournal = config.getBool("journal", true)
-    PersistentQueue.syncJournal = config.getBool("sync_journal", false)
-  }
-
-  def startup(config: Config): Unit = {
-    log.info("Kestrel config: %s", config.toString)
-
-    // this one is used by the actor initialization, so can only be set at startup.
-    var maxThreads = config.getInt("max_threads", Runtime.getRuntime().availableProcessors * 2)
-
-    /* If we don't set this to at least 4, we get an IllegalArgumentException when constructing
-     * the ThreadPoolExecutor from inside FJTaskScheduler2 on a single-processor box.
-     */
-    if (maxThreads < 4) {
-      maxThreads = 4
-    }
+  def start(runtime: RuntimeEnvironment) {
+    log.info("Kestrel config: maxThreads=%d listenAddress=%s port=%d queuePath=%s protocol=%s " +
+             "expirationTimerFrequency=%s clientTimeout=%s maxOpenTransactions=%d",
+             maxThreads, listenAddress, listenPort, queuePath, protocol, expirationTimerFrequency,
+             clientTimeout, maxOpenTransactions)
 
     System.setProperty("actors.maxPoolSize", maxThreads.toString)
 
-    val listenAddress = config.getString("host", "0.0.0.0")
-    val listenPort = config.getInt("port", DEFAULT_PORT)
-    queues = new QueueCollection(config.getString("queue_path", "/tmp"), config.configMap("queues"))
-    configure(config)
-    config.subscribe { c => configure(c.getOrElse(new Config)) }
-
-    queues.loadQueues()
+    queueCollection = new QueueCollection(queuePath, defaultQueueConfig, queues)
+    queueCollection.loadQueues()
+    // FIXME: reload?
 
     // netty setup:
     timer = new HashedWheelTimer()
@@ -124,11 +91,13 @@ object Kestrel {
      */
     bootstrap.setPipelineFactory(new ChannelPipelineFactory() {
       def getPipeline() = {
-        val protocolCodec = config.getString("protocol", "ascii") match {
-          case "ascii" => MemcacheRequest.asciiDecoder
-          case "binary" => throw new Exception("Binary protocol not supported yet.")
+        val protocolCodec = protocol match {
+          case Protocol.Ascii => MemcacheRequest.asciiDecoder
+          case Protocol.Binary => throw new Exception("Binary protocol not supported yet.")
         }
-        val actorHandler = new ActorHandler(filter, { channel => new MemcacheHandler(channel, config, queues) })
+        val actorHandler = new ActorHandler(filter, { channel =>
+          new MemcacheHandler(channel, channelGroup, queueCollection, maxOpenTransactions, clientTimeout)
+        })
         Channels.pipeline(protocolCodec, actorHandler)
       }
     })
@@ -140,31 +109,26 @@ object Kestrel {
     bootstrap.setOption("child.receiveBufferSize", 2048)
     acceptor = Some(bootstrap.bind(new InetSocketAddress(listenAddress, listenPort)))
 
-    // expose config thru JMX.
-    if (config.getBool("jmx", false)) {
-      config.registerWithJmx("net.lag.kestrel")
-    }
-
     // optionally, start a periodic timer to clean out expired items.
-    val expirationTimerFrequency = config.getInt("expiration_timer_frequency_seconds", 0)
-    if (expirationTimerFrequency > 0) {
+    if (expirationTimerFrequency > Time.never) {
       log.info("Starting up background expiration task.")
       val expirationTask = new TimerTask {
         def run(timeout: Timeout) {
-          val expired = Kestrel.queues.flushAllExpired()
+          val expired = Kestrel.this.queueCollection.flushAllExpired()
           if (expired > 0) {
             log.info("Expired %d item(s) from queues automatically.", expired)
           }
-          timer.newTimeout(this, expirationTimerFrequency, TimeUnit.SECONDS)
+          timer.newTimeout(this, expirationTimerFrequency.inMilliseconds, TimeUnit.MILLISECONDS)
         }
       }
       expirationTask.run(null)
     }
 
-    log.info("Kestrel %s started.", runtime.jarVersion)
     actor {
       deathSwitch.await()
     }
+
+    log.info("Kestrel %s started.", runtime.jarVersion)
   }
 
   def shutdown() {
@@ -172,9 +136,9 @@ object Kestrel {
     deathSwitch.countDown()
 
     acceptor.foreach { _.close().awaitUninterruptibly() }
-    queues.shutdown()
+    queueCollection.shutdown()
     Scheduler.shutdown
-    channels.close().awaitUninterruptibly()
+    channelGroup.close().awaitUninterruptibly()
     channelFactory.releaseExternalResources()
 
     executor.shutdown()
@@ -184,5 +148,31 @@ object Kestrel {
     log.info("Goodbye.")
   }
 
-  def uptime() = (Time.now.inMilliseconds - _startTime) / 1000
+  def quiesce() {
+    shutdown()
+  }
+
+  override def reload() {
+    // FIXME
+  }
+}
+
+object Kestrel {
+  var kestrel: Kestrel = null
+  var runtime: RuntimeEnvironment = null
+
+  private val _expiryStats = new mutable.HashMap[String, Int]
+  private val startTime = Time.now
+
+  def main(args: Array[String]): Unit = {
+    runtime = RuntimeEnvironment(this, args)
+    Logger.configure(runtime.loggingConfigFile)
+    kestrel = Eval[KestrelConfig](runtime.configFile)()
+    ServiceTracker.register(kestrel)
+    kestrel.start(runtime)
+
+    // AdminServiceConfig.apply().apply(runtime) => blah.
+  }
+
+  def uptime() = Time.now - startTime
 }

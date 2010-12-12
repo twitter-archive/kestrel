@@ -18,8 +18,7 @@
 package net.lag.kestrel
 
 import java.nio.{ByteBuffer, ByteOrder}
-import com.twitter.xrayspecs.Time
-
+import com.twitter.Time
 
 case class QItem(addTime: Long, expiry: Long, data: Array[Byte], var xid: Int) {
   def pack(): Array[Byte] = {

@@ -24,30 +24,29 @@ import com.twitter.actors.Actor
 import com.twitter.actors.Actor._
 import com.twitter.naggati.{NettyMessage, ProtocolError}
 import com.twitter.naggati.codec.{MemcacheRequest, MemcacheResponse}
-import com.twitter.xrayspecs.Time
-import com.twitter.xrayspecs.TimeConversions._
-import net.lag.configgy.{Config, Configgy}
-import net.lag.logging.Logger
+import com.twitter.{Duration, Time}
+import com.twitter.conversions.time._
+import com.twitter.logging.Logger
 import org.jboss.netty.channel.Channel
+import org.jboss.netty.channel.group.ChannelGroup
 import org.jboss.netty.handler.timeout.IdleStateHandler
 
 /**
  * Memcache protocol handler for a kestrel connection.
  */
-class MemcacheHandler(val channel: Channel, config: Config, queues: QueueCollection)
-      extends KestrelHandler(config, queues) with Actor {
+class MemcacheHandler(val channel: Channel, val channelGroup: ChannelGroup,
+                      queueCollection: QueueCollection, maxOpenTransactions: Int,
+                      clientTimeout: Duration)
+      extends KestrelHandler(queueCollection, maxOpenTransactions) with Actor {
   private val log = Logger.get
 
-  private val IDLE_TIMEOUT = 60
   private val remoteAddress = channel.getRemoteAddress.asInstanceOf[InetSocketAddress]
 
-  // config can be null in unit tests
-  val idleTimeout = if (config == null) IDLE_TIMEOUT else config.getInt("timeout", IDLE_TIMEOUT)
-  if (idleTimeout > 0) {
-    channel.getPipeline.addFirst("idle", new IdleStateHandler(Kestrel.timer, 0, 0, idleTimeout))
+  if (clientTimeout > 0.milliseconds) {
+    channel.getPipeline.addFirst("idle", new IdleStateHandler(Kestrel.kestrel.timer, 0, 0, clientTimeout.inSeconds.toInt))
   }
 
-  Kestrel.channels.add(channel)
+  channelGroup.add(channel)
   log.debug("New session %d from %s:%d", sessionID, remoteAddress.getHostName, remoteAddress.getPort)
   start
 
@@ -113,7 +112,7 @@ class MemcacheHandler(val channel: Channel, config: Config, queues: QueueCollect
       case "shutdown" =>
         shutdown()
       case "reload" =>
-        Configgy.reload()
+        Kestrel.kestrel.reload()
         new MemcacheResponse("Reloaded config.").writeTo(channel)
       case "flush" =>
         flush(request.line(1))

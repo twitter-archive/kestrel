@@ -19,17 +19,16 @@ package net.lag.kestrel
 
 import java.io.{File, FileInputStream}
 import scala.util.Sorting
-import com.twitter.xrayspecs.Time
-import com.twitter.xrayspecs.TimeConversions._
+import com.twitter.Time
+import com.twitter.conversions.time._
 import net.lag.TestHelper
-import net.lag.configgy.Config
-import org.specs._
-
+import org.specs.Specification
+import config._
 
 class QueueCollectionSpec extends Specification with TestHelper {
-
   private var qc: QueueCollection = null
 
+  val config = new QueueConfig(null)
 
   "QueueCollection" should {
     doAfter {
@@ -40,7 +39,7 @@ class QueueCollectionSpec extends Specification with TestHelper {
 
     "create a queue" in {
       withTempFolder {
-        qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+        qc = new QueueCollection(folderName, config, Nil)
         qc.queueNames mustEqual Nil
 
         qc.add("work1", "stuff".getBytes)
@@ -64,7 +63,7 @@ class QueueCollectionSpec extends Specification with TestHelper {
 
     "load from journal" in {
       withTempFolder {
-        qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+        qc = new QueueCollection(folderName, config, Nil)
         qc.add("ducklings", "huey".getBytes)
         qc.add("ducklings", "dewey".getBytes)
         qc.add("ducklings", "louie".getBytes)
@@ -73,7 +72,7 @@ class QueueCollectionSpec extends Specification with TestHelper {
         qc.currentItems mustEqual 3
         qc.shutdown
 
-        qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+        qc = new QueueCollection(folderName, config, Nil)
         qc.queueNames mustEqual Nil
         new String(qc.receive("ducklings").get) mustEqual "huey"
         // now the queue should be suddenly instantiated:
@@ -84,7 +83,7 @@ class QueueCollectionSpec extends Specification with TestHelper {
 
     "force-roll a journal" in {
       withTempFolder {
-        qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+        qc = new QueueCollection(folderName, config, Nil)
         qc.add("test", "one".getBytes)
         qc.add("test", "two".getBytes)
         qc.receive("test")
@@ -96,7 +95,7 @@ class QueueCollectionSpec extends Specification with TestHelper {
 
     "queue hit/miss tracking" in {
       withTempFolder {
-        qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+        qc = new QueueCollection(folderName, config, Nil)
         qc.add("ducklings", "ugly1".getBytes)
         qc.add("ducklings", "ugly2".getBytes)
         qc.queueHits() mustEqual 0
@@ -126,7 +125,7 @@ class QueueCollectionSpec extends Specification with TestHelper {
         new File(folderName + "/apples").createNewFile()
         new File(folderName + "/oranges.101").createNewFile()
         new File(folderName + "/oranges.133").createNewFile()
-        qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+        qc = new QueueCollection(folderName, config, Nil)
         qc.loadQueues()
         qc.queueNames.sorted mustEqual List("apples", "oranges")
       }
@@ -137,7 +136,7 @@ class QueueCollectionSpec extends Specification with TestHelper {
         new File(folderName + "/apples").createNewFile()
         new File(folderName + "/oranges").createNewFile()
         new File(folderName + "/oranges~~900").createNewFile()
-        qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+        qc = new QueueCollection(folderName, config, Nil)
         qc.loadQueues()
         qc.queueNames.sorted mustEqual List("apples", "oranges")
       }
@@ -147,7 +146,7 @@ class QueueCollectionSpec extends Specification with TestHelper {
       withTempFolder {
         new File(folderName + "/apples").createNewFile()
         new File(folderName + "/oranges").createNewFile()
-        qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+        qc = new QueueCollection(folderName, config, Nil)
         qc.loadQueues()
         qc.delete("oranges")
 
@@ -159,7 +158,7 @@ class QueueCollectionSpec extends Specification with TestHelper {
     "fanout queues" in {
       "generate on the fly" in {
         withTempFolder {
-          qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+          qc = new QueueCollection(folderName, config, Nil)
           qc.add("jobs", "job1".getBytes)
           qc.receive("jobs+client1") mustEqual None
           qc.add("jobs", "job2".getBytes)
@@ -174,7 +173,7 @@ class QueueCollectionSpec extends Specification with TestHelper {
         withTempFolder {
           new File(folderName + "/jobs").createNewFile()
           new File(folderName + "/jobs+client1").createNewFile()
-          qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+          qc = new QueueCollection(folderName, config, Nil)
           qc.loadQueues()
           qc.add("jobs", "job1".getBytes)
           new String(qc.receive("jobs+client1").get) mustEqual "job1"
@@ -190,7 +189,7 @@ class QueueCollectionSpec extends Specification with TestHelper {
         withTempFolder {
           new File(folderName + "/jobs").createNewFile()
           new File(folderName + "/jobs+client1").createNewFile()
-          qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+          qc = new QueueCollection(folderName, config, Nil)
           qc.loadQueues()
           qc.add("jobs", "job1".getBytes)
 
@@ -208,45 +207,51 @@ class QueueCollectionSpec extends Specification with TestHelper {
 
     "expire items when (and only when) they are expired" in {
       withTempFolder {
-        new File(folderName + "/expired").createNewFile()
-        qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
-        qc.loadQueues()
+        Time.withCurrentTimeFrozen { time =>
+          new File(folderName + "/expired").createNewFile()
+          qc = new QueueCollection(folderName, config, Nil)
+          qc.loadQueues()
 
-        Time.freeze
-        qc.add("expired", "hello".getBytes, 5)
-        Time.advance(4.seconds)
-        new String(qc.receive("expired").get) mustEqual "hello"
-        qc.add("expired", "hello".getBytes, 5)
-        Time.advance(6.seconds)
-        qc.receive("expired") mustEqual None
+          qc.add("expired", "hello".getBytes, 5)
+          time.advance(4.seconds)
+          new String(qc.receive("expired").get) mustEqual "hello"
+          qc.add("expired", "hello".getBytes, 5)
+          time.advance(6.seconds)
+          qc.receive("expired") mustEqual None
 
-        qc.add("expired", "hello".getBytes, 5.seconds.fromNow.inSeconds)
-        Time.advance(4.seconds)
-        new String(qc.receive("expired").get) mustEqual "hello"
-        qc.add("expired", "hello".getBytes, 5.seconds.fromNow.inSeconds)
-        Time.advance(6.seconds)
-        qc.receive("expired") mustEqual None
+          qc.add("expired", "hello".getBytes, 5.seconds.fromNow.inSeconds)
+          time.advance(4.seconds)
+          new String(qc.receive("expired").get) mustEqual "hello"
+          qc.add("expired", "hello".getBytes, 5.seconds.fromNow.inSeconds)
+          time.advance(6.seconds)
+          qc.receive("expired") mustEqual None
+        }
       }
     }
 
     "move expired items from one queue to another" in {
       withTempFolder {
-        new File(folderName + "/jobs").createNewFile()
-        new File(folderName + "/expired").createNewFile()
-        qc = new QueueCollection(folderName, Config.fromMap(Map("jobs.move_expired_to" -> "expired")))
-        Kestrel.queues = qc
-        qc.loadQueues()
-        qc.add("jobs", "hello".getBytes, 1)
-        qc.queue("jobs").get.length mustEqual 1
-        qc.queue("expired").get.length mustEqual 0
+        Time.withCurrentTimeFrozen { time =>
+          new File(folderName + "/jobs").createNewFile()
+          new File(folderName + "/expired").createNewFile()
+          val expireConfig = new QueueConfig("jobs") {
+            expireToQueue = "expired"
+          }
+          qc = new QueueCollection(folderName, config, List(expireConfig))
+          Kestrel.kestrel.queueCollection = qc
+          qc.loadQueues()
+          qc.add("jobs", "hello".getBytes, 1)
+          qc.queue("jobs").get.length mustEqual 1
+          qc.queue("expired").get.length mustEqual 0
 
-        Time.advance(2.seconds)
-        qc.queue("jobs").get.length mustEqual 1
-        qc.queue("expired").get.length mustEqual 0
-        qc.receive("jobs") mustEqual None
-        qc.queue("jobs").get.length mustEqual 0
-        qc.queue("expired").get.length mustEqual 1
-        new String(qc.receive("expired").get) mustEqual "hello"
+          time.advance(2.seconds)
+          qc.queue("jobs").get.length mustEqual 1
+          qc.queue("expired").get.length mustEqual 0
+          qc.receive("jobs") mustEqual None
+          qc.queue("jobs").get.length mustEqual 0
+          qc.queue("expired").get.length mustEqual 1
+          new String(qc.receive("expired").get) mustEqual "hello"
+        }
       }
     }
   }

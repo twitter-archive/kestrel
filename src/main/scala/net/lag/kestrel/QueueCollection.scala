@@ -20,17 +20,16 @@ package net.lag.kestrel
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import scala.collection.mutable
-import com.twitter.xrayspecs.Time
-import com.twitter.xrayspecs.TimeConversions._
-import net.lag.configgy.{Config, ConfigMap}
-import net.lag.logging.Logger
-
+import com.twitter.Time
+import com.twitter.conversions.time._
+import com.twitter.logging.Logger
+import config._
 
 class InaccessibleQueuePath extends Exception("Inaccessible queue path: Must be a directory and writable")
 
-
-class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) {
-  private val log = Logger.get
+class QueueCollection(queueFolder: String, private var defaultQueueConfig: QueueConfig,
+                      private var queueConfigs: List[QueueConfig]) {
+  private val log = Logger.get(getClass.getName)
 
   private val path = new File(queueFolder)
 
@@ -45,18 +44,20 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
   private val fanout_queues = new mutable.HashMap[String, mutable.HashSet[String]]
   private var shuttingDown = false
 
+  private val queueConfigMap = Map(queueConfigs.map { config => (config.name, config) }: _*)
+
+  private def buildQueue(name: String, realName: String, path: String) = {
+    val config = queueConfigMap.getOrElse(name, defaultQueueConfig)
+    log.info("Setting up queue %s: %s", realName, config)
+    config()(realName, path)
+  }
+
   // total items added since the server started up.
   val totalAdded = new Counter()
 
   // hits/misses on removing items from the queue
   val queueHits = new Counter()
   val queueMisses = new Counter()
-
-  queueConfigs.subscribe { c =>
-    synchronized {
-      queueConfigs = c.getOrElse(new Config)
-    }
-  }
 
   // preload any queues
   def loadQueues() {
@@ -72,9 +73,8 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
 
   /**
    * Get a named queue, creating it if necessary.
-   * Exposed only to unit tests.
    */
-  private[kestrel] def queue(name: String): Option[PersistentQueue] = synchronized {
+  def queue(name: String): Option[PersistentQueue] = synchronized {
     if (shuttingDown) {
       None
     } else {
@@ -84,9 +84,9 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
           val master = name.split('+')(0)
           fanout_queues.getOrElseUpdate(master, new mutable.HashSet[String]) += name
           log.info("Fanout queue %s added to %s", name, master)
-          new PersistentQueue(path.getPath, name, queueConfigs.configMap(master))
+          buildQueue(master, name, path.getPath)
         } else {
-          new PersistentQueue(path.getPath, name, queueConfigs.configMap(name))
+          buildQueue(name, name, path.getPath)
         }
         q.setup
         queues(name) = q
@@ -94,6 +94,8 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
       })
     }
   }
+
+  def apply(name: String) = queue(name)
 
   /**
    * Add an item to a named queue. Will not return until the item has been synchronously added
@@ -197,7 +199,7 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
     if (shuttingDown) {
       0
     } else {
-      queue(name) map { q => q.discardExpired(q.maxExpireSweep) } getOrElse(0)
+      queue(name) map { q => q.discardExpired(q.config.maxExpireSweep) } getOrElse(0)
     }
   }
 

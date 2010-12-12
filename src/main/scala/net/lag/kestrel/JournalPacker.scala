@@ -17,9 +17,9 @@
 
 package net.lag.kestrel
 
-import net.lag.logging.Logger
 import java.io.FileOutputStream
 import scala.collection.mutable
+import com.twitter.logging.Logger
 
 /**
  * Pack one or more journal files into a single new file that only consists of the queue's current

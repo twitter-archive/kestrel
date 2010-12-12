@@ -19,20 +19,20 @@ package net.lag.kestrel
 
 import java.io.{File, FileInputStream}
 import scala.util.Sorting
-import com.twitter.xrayspecs.Time
-import com.twitter.xrayspecs.TimeConversions._
+import com.twitter.Time
+import com.twitter.conversions.time._
 import net.lag.TestHelper
-import net.lag.configgy.Config
-import org.specs._
+import org.specs.Specification
 import org.specs.matcher.Matcher
+import config._
 
-class FakeKestrelHandler(config: Config, queues: QueueCollection) extends KestrelHandler(config, queues) {
+class FakeKestrelHandler(queues: QueueCollection, maxOpenTransactions: Int)
+      extends KestrelHandler(queues, maxOpenTransactions) {
   protected def clientDescription: String = "none"
 }
 
 class KestrelHandlerSpec extends Specification with TestHelper {
-  val TINY_CONFIG = Config.fromMap(Map("max_open_transactions" -> "1"))
-  val NORMAL_CONFIG = Config.fromMap(Map("max_open_transactions" -> "10"))
+  val config = new QueueConfig(null)
 
   case class beString(expected: String) extends Matcher[Option[QItem]]() {
     def apply(v: => Option[QItem]) = {
@@ -50,8 +50,8 @@ class KestrelHandlerSpec extends Specification with TestHelper {
 
     "set and get" in {
       withTempFolder {
-        queues = new QueueCollection(folderName, NORMAL_CONFIG)
-        val handler = new FakeKestrelHandler(NORMAL_CONFIG, queues)
+        queues = new QueueCollection(folderName, config, Nil)
+        val handler = new FakeKestrelHandler(queues, 10)
         handler.setItem("test", 0, 0, "one".getBytes)
         handler.setItem("test", 0, 0, "two".getBytes)
         handler.getItem("test", 0, false, false) { _ must beString("one") }
@@ -61,8 +61,8 @@ class KestrelHandlerSpec extends Specification with TestHelper {
 
     "abort and confirm a transaction" in {
       withTempFolder {
-        queues = new QueueCollection(folderName, NORMAL_CONFIG)
-        val handler = new FakeKestrelHandler(NORMAL_CONFIG, queues)
+        queues = new QueueCollection(folderName, config, Nil)
+        val handler = new FakeKestrelHandler(queues, 10)
         handler.setItem("test", 0, 0, "one".getBytes)
         handler.getItem("test", 0, true, false) { _ must beString("one") }
         handler.getItem("test", 0, true, false) { _ mustEqual None }
@@ -76,8 +76,8 @@ class KestrelHandlerSpec extends Specification with TestHelper {
     "open several transactions" in {
       "on one queue" in {
         withTempFolder {
-          queues = new QueueCollection(folderName, NORMAL_CONFIG)
-          val handler = new FakeKestrelHandler(NORMAL_CONFIG, queues)
+          queues = new QueueCollection(folderName, config, Nil)
+          val handler = new FakeKestrelHandler(queues, 10)
           handler.setItem("test", 0, 0, "one".getBytes)
           handler.setItem("test", 0, 0, "two".getBytes)
           handler.setItem("test", 0, 0, "three".getBytes)
@@ -94,8 +94,8 @@ class KestrelHandlerSpec extends Specification with TestHelper {
 
       "on several queues" in {
         withTempFolder {
-          queues = new QueueCollection(folderName, NORMAL_CONFIG)
-          val handler = new FakeKestrelHandler(NORMAL_CONFIG, queues)
+          queues = new QueueCollection(folderName, config, Nil)
+          val handler = new FakeKestrelHandler(queues, 1)
           handler.setItem("red", 0, 0, "red1".getBytes)
           handler.setItem("red", 0, 0, "red2".getBytes)
           handler.setItem("green", 0, 0, "green1".getBytes)
@@ -123,8 +123,8 @@ class KestrelHandlerSpec extends Specification with TestHelper {
 
       "but not if transactions are limited" in {
         withTempFolder {
-          queues = new QueueCollection(folderName, TINY_CONFIG)
-          val handler = new FakeKestrelHandler(TINY_CONFIG, queues)
+          queues = new QueueCollection(folderName, config, Nil)
+          val handler = new FakeKestrelHandler(queues, 1)
           handler.setItem("red", 0, 0, "red1".getBytes)
           handler.setItem("red", 0, 0, "red2".getBytes)
           handler.getItem("red", 0, true, false) { _ must beString("red1") }

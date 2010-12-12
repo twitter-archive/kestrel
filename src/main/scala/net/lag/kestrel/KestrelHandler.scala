@@ -18,9 +18,8 @@
 package net.lag.kestrel
 
 import scala.collection.mutable
-import com.twitter.xrayspecs.Time
-import net.lag.configgy.Config
-import net.lag.logging.Logger
+import com.twitter.Time
+import com.twitter.logging.Logger
 
 class TooManyOpenTransactionsException extends Exception("Too many open transactions.")
 object TooManyOpenTransactionsException extends TooManyOpenTransactionsException
@@ -28,9 +27,8 @@ object TooManyOpenTransactionsException extends TooManyOpenTransactionsException
 /**
  * Common implementations of kestrel commands that don't depend on which protocol you're using.
  */
-abstract class KestrelHandler(val config: Config, val queues: QueueCollection) {
-  private val log = Logger.get
-  val maxOpenTransactions = config.getInt("max_open_transactions", 1)
+abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactions: Int) {
+  private val log = Logger.get(getClass.getName)
 
   val sessionID = KestrelStats.sessionID.incr
 
@@ -196,6 +194,6 @@ abstract class KestrelHandler(val config: Config, val queues: QueueCollection) {
   }
 
   protected def shutdown() = {
-    Kestrel.shutdown
+    Kestrel.kestrel.shutdown()
   }
 }

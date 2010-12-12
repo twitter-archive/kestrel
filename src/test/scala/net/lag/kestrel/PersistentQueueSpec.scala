@@ -19,15 +19,15 @@ package net.lag.kestrel
 
 import java.io.{File, FileInputStream}
 import java.util.concurrent.CountDownLatch
-import com.twitter.actors.Actor.actor
 import scala.collection.mutable
-import com.twitter.xrayspecs.Time
-import com.twitter.xrayspecs.TimeConversions._
+import com.twitter.Time
+import com.twitter.actors.Actor.actor
+import com.twitter.conversions.si._
+import com.twitter.conversions.time._
 import net.lag.TestHelper
-import net.lag.configgy.Config
 import org.specs._
 import org.specs.matcher.Matcher
-
+import config._
 
 class PersistentQueueSpec extends Specification with TestHelper {
 
@@ -49,11 +49,6 @@ class PersistentQueueSpec extends Specification with TestHelper {
     } mkString ", "
   }
 
-  // convenience
-  def makeQueue(name: String, options: (String, String)*) = {
-    new PersistentQueue(folderName, name, Config.fromMap(Map(options: _*)))
-  }
-
   def beSomeQItem(s: String) = new Matcher[Option[QItem]] {
     def apply(qitemEval: => Option[QItem]) = {
       val qitem = qitemEval
@@ -68,28 +63,16 @@ class PersistentQueueSpec extends Specification with TestHelper {
     }
   }
 
-  def withMaxMemorySize(newLimit: Long)(f: => Unit) = {
-    val oldLimit = PersistentQueue.maxMemorySize
-    PersistentQueue.maxMemorySize = newLimit
-    try {
-      f
-    } finally {
-      PersistentQueue.maxMemorySize = oldLimit
-    }
-  }
-
   def put(q: PersistentQueue, bytes: Int, n: Int) {
     val data = new Array[Byte](bytes)
     data(0) = n.toByte
     q.add(data)
   }
 
-
-
   "PersistentQueue" should {
     "add and remove one item" in {
       withTempFolder {
-        val q = new PersistentQueue(folderName, "work", Config.fromMap(Map.empty))
+        val q = new QueueConfig("work")()("work", folderName)
         q.setup
 
         q.length mustEqual 0
@@ -119,7 +102,9 @@ class PersistentQueueSpec extends Specification with TestHelper {
 
     "resist adding an item that's too large" in {
       withTempFolder {
-        val q = new PersistentQueue(folderName, "work", Config.fromMap(Map("max_item_size" -> "128")))
+        val q = new QueueConfig("work") {
+          maxItemSize = 128
+        }.apply()("work", folderName)
         q.setup
         q.length mustEqual 0
         q.add(new Array[Byte](127)) mustEqual true
@@ -131,7 +116,7 @@ class PersistentQueueSpec extends Specification with TestHelper {
 
     "flush all items" in {
       withTempFolder {
-        val q = makeQueue("work")
+        val q = new QueueConfig("work")()("work", folderName)
         q.setup
 
         q.length mustEqual 0
@@ -156,9 +141,10 @@ class PersistentQueueSpec extends Specification with TestHelper {
 
     "rotate journals" in {
       withTempFolder {
-        val q = makeQueue("rolling")
+        val q = new QueueConfig("rolling") {
+          maxJournalSize = 64
+        }.apply()("rolling", folderName)
         q.setup
-        q.maxJournalSize set Some(64)
 
         q.add(new Array[Byte](32))
         q.add(new Array[Byte](64))
@@ -184,9 +170,10 @@ class PersistentQueueSpec extends Specification with TestHelper {
 
     "rotate journals with an open transaction" in {
       withTempFolder {
-        val q = makeQueue("rolling")
+        val q = new QueueConfig("rolling") {
+          maxJournalSize = 64
+        }.apply()("rolling", folderName)
         q.setup
-        q.maxJournalSize set Some(64)
 
         q.add(new Array[Byte](32))
         q.add(new Array[Byte](64))
@@ -213,7 +200,7 @@ class PersistentQueueSpec extends Specification with TestHelper {
 
     "recover the journal after a restart" in {
       withTempFolder {
-        val q = makeQueue("rolling")
+        val q = new QueueConfig("rolling")()("rolling", folderName)
         q.setup
         q.add("first".getBytes)
         q.add("second".getBytes)
@@ -221,7 +208,7 @@ class PersistentQueueSpec extends Specification with TestHelper {
         q.journalSize mustEqual 5 + 6 + 16 + 16 + 5 + 5 + 1
         q.close
 
-        val q2 = makeQueue("rolling")
+        val q2 = new QueueConfig("rolling")()("rolling", folderName)
         q2.setup
         q2.journalSize mustEqual 5 + 6 + 16 + 16 + 5 + 5 + 1
         new String(q2.remove.get.data) mustEqual "second"
@@ -229,7 +216,7 @@ class PersistentQueueSpec extends Specification with TestHelper {
         q2.length mustEqual 0
         q2.close
 
-        val q3 = makeQueue("rolling")
+        val q3 = new QueueConfig("rolling")()("rolling", folderName)
         q3.setup
         q3.journalSize mustEqual 5 + 6 + 16 + 16 + 5 + 5 + 1 + 1
         q3.length mustEqual 0
@@ -238,244 +225,266 @@ class PersistentQueueSpec extends Specification with TestHelper {
 
     "honor max_age" in {
       withTempFolder {
-        val q = makeQueue("weather_updates", "max_age" -> "3")
-        q.setup
-        q.add("sunny".getBytes) mustEqual true
-        q.length mustEqual 1
-        Time.advance(3.seconds)
-        q.remove mustEqual None
+        Time.withCurrentTimeFrozen { time =>
+          val q = new QueueConfig("weather_updates") {
+            maxAge = 3.seconds
+          }.apply()("weather_updates", folderName)
+          q.setup()
+          q.add("sunny".getBytes) mustEqual true
+          q.length mustEqual 1
+          time.advance(3.seconds)
+          q.remove mustEqual None
 
-        q.config("max_age") = 60
-        q.add("rainy".getBytes) mustEqual true
-        q.config("max_age") = 1
-        Time.advance(5.seconds)
-        q.remove mustEqual None
+          q.config = new QueueConfig("weather_updates") {
+            maxAge = 60.seconds
+          }
+          q.add("rainy".getBytes) mustEqual true
+          q.config = new QueueConfig("weather_updates") {
+            maxAge = 1.seconds
+          }
+          time.advance(5.seconds)
+          q.remove mustEqual None
+        }
       }
     }
 
     "allow max_journal_size and max_memory_size to be overridden per queue" in {
       withTempFolder {
-        val q1 = makeQueue("test1", "max_memory_size" -> "123")
-        q1.maxJournalSize() mustEqual PersistentQueue.maxJournalSize
-        q1.maxMemorySize() mustEqual 123
-        val q2 = makeQueue("test2", "max_journal_size" -> "123")
-        q2.maxJournalSize() mustEqual 123
-        q2.maxMemorySize() mustEqual PersistentQueue.maxMemorySize
+        val q1 = new QueueConfig("test1") {
+          maxMemorySize = 123
+        }.apply()("test1", folderName)
+        q1.config.maxJournalSize mustEqual new QueueConfig(null).maxJournalSize
+        q1.config.maxMemorySize mustEqual 123
+        val q2 = new QueueConfig("test1") {
+          maxJournalSize = 123
+        }.apply()("test1", folderName)
+        q2.config.maxJournalSize mustEqual 123
+        q2.config.maxMemorySize mustEqual new QueueConfig(null).maxMemorySize
       }
     }
 
     "drop into read-behind mode" in {
       "on insert" in {
         withTempFolder {
-          withMaxMemorySize(1024) {
-            val q = makeQueue("things")
-            q.setup
-            for (i <- 0 until 10) {
-              put(q, 128, i)
-              q.inReadBehind mustEqual (i >= 8)
-            }
-            q.inReadBehind mustBe true
-            q.length mustEqual 10
-            q.bytes mustEqual 1280
-            q.memoryLength mustEqual 8
-            q.memoryBytes mustEqual 1024
+          val q = new QueueConfig("things") {
+            maxMemorySize = 1.kilo
+          }.apply()("things", folderName)
 
-            // read 1 item. queue should pro-actively read the next item in from disk.
-            val d0 = q.remove.get.data
-            d0(0) mustEqual 0
-            q.inReadBehind mustBe true
-            q.length mustEqual 9
-            q.bytes mustEqual 1152
-            q.memoryLength mustEqual 8
-            q.memoryBytes mustEqual 1024
+          q.setup
+          for (i <- 0 until 10) {
+            put(q, 128, i)
+            q.inReadBehind mustEqual (i >= 8)
+          }
+          q.inReadBehind mustBe true
+          q.length mustEqual 10
+          q.bytes mustEqual 1280
+          q.memoryLength mustEqual 8
+          q.memoryBytes mustEqual 1024
 
-            // adding a new item should be ok
-            put(q, 128, 10)
-            q.inReadBehind mustBe true
-            q.length mustEqual 10
-            q.bytes mustEqual 1280
-            q.memoryLength mustEqual 8
-            q.memoryBytes mustEqual 1024
+          // read 1 item. queue should pro-actively read the next item in from disk.
+          val d0 = q.remove.get.data
+          d0(0) mustEqual 0
+          q.inReadBehind mustBe true
+          q.length mustEqual 9
+          q.bytes mustEqual 1152
+          q.memoryLength mustEqual 8
+          q.memoryBytes mustEqual 1024
 
-            // read again.
-            val d1 = q.remove.get.data
-            d1(0) mustEqual 1
-            q.inReadBehind mustBe true
-            q.length mustEqual 9
-            q.bytes mustEqual 1152
-            q.memoryLength mustEqual 8
-            q.memoryBytes mustEqual 1024
+          // adding a new item should be ok
+          put(q, 128, 10)
+          q.inReadBehind mustBe true
+          q.length mustEqual 10
+          q.bytes mustEqual 1280
+          q.memoryLength mustEqual 8
+          q.memoryBytes mustEqual 1024
 
-            // and again.
-            val d2 = q.remove.get.data
-            d2(0) mustEqual 2
-            q.inReadBehind mustBe true
-            q.length mustEqual 8
-            q.bytes mustEqual 1024
-            q.memoryLength mustEqual 8
-            q.memoryBytes mustEqual 1024
+          // read again.
+          val d1 = q.remove.get.data
+          d1(0) mustEqual 1
+          q.inReadBehind mustBe true
+          q.length mustEqual 9
+          q.bytes mustEqual 1152
+          q.memoryLength mustEqual 8
+          q.memoryBytes mustEqual 1024
 
-            for (i <- 3 until 11) {
-              val d = q.remove.get.data
-              d(0) mustEqual i
-              q.inReadBehind mustBe false
-              q.length mustEqual 10 - i
-              q.bytes mustEqual 128 * (10 - i)
-              q.memoryLength mustEqual 10 - i
-              q.memoryBytes mustEqual 128 * (10 - i)
-            }
+          // and again.
+          val d2 = q.remove.get.data
+          d2(0) mustEqual 2
+          q.inReadBehind mustBe true
+          q.length mustEqual 8
+          q.bytes mustEqual 1024
+          q.memoryLength mustEqual 8
+          q.memoryBytes mustEqual 1024
+
+          for (i <- 3 until 11) {
+            val d = q.remove.get.data
+            d(0) mustEqual i
+            q.inReadBehind mustBe false
+            q.length mustEqual 10 - i
+            q.bytes mustEqual 128 * (10 - i)
+            q.memoryLength mustEqual 10 - i
+            q.memoryBytes mustEqual 128 * (10 - i)
           }
         }
       }
 
       "on startup" in {
         withTempFolder {
-          withMaxMemorySize(1024) {
-            val q = makeQueue("things")
-            q.setup
-            for (i <- 0 until 10) {
-              put(q, 128, i)
-              q.inReadBehind mustEqual (i >= 8)
-            }
-            q.inReadBehind mustBe true
-            q.length mustEqual 10
-            q.bytes mustEqual 1280
-            q.memoryLength mustEqual 8
-            q.memoryBytes mustEqual 1024
-            q.close
+          val q = new QueueConfig("things") {
+            maxMemorySize = 1.kilo
+          }.apply()("things", folderName)
 
-            val q2 = makeQueue("things")
-            q2.setup
+          q.setup
+          for (i <- 0 until 10) {
+            put(q, 128, i)
+            q.inReadBehind mustEqual (i >= 8)
+          }
+          q.inReadBehind mustBe true
+          q.length mustEqual 10
+          q.bytes mustEqual 1280
+          q.memoryLength mustEqual 8
+          q.memoryBytes mustEqual 1024
+          q.close
 
-            q2.inReadBehind mustBe true
-            q2.length mustEqual 10
-            q2.bytes mustEqual 1280
-            q2.memoryLength mustEqual 8
-            q2.memoryBytes mustEqual 1024
+          val q2 = new QueueConfig("things") {
+            maxMemorySize = 1.kilo
+          }.apply()("things", folderName)
+          q2.setup
 
-            for (i <- 0 until 10) {
-              val d = q2.remove.get.data
-              d(0) mustEqual i
-              q2.inReadBehind mustEqual (i < 2)
-              q2.length mustEqual 9 - i
-              q2.bytes mustEqual 128 * (9 - i)
-              q2.memoryLength mustEqual (if (i < 2) 8 else 9 - i)
-              q2.memoryBytes mustEqual (if (i < 2) 1024 else 128 * (9 - i))
-            }
+          q2.inReadBehind mustBe true
+          q2.length mustEqual 10
+          q2.bytes mustEqual 1280
+          q2.memoryLength mustEqual 8
+          q2.memoryBytes mustEqual 1024
+
+          for (i <- 0 until 10) {
+            val d = q2.remove.get.data
+            d(0) mustEqual i
+            q2.inReadBehind mustEqual (i < 2)
+            q2.length mustEqual 9 - i
+            q2.bytes mustEqual 128 * (9 - i)
+            q2.memoryLength mustEqual (if (i < 2) 8 else 9 - i)
+            q2.memoryBytes mustEqual (if (i < 2) 1024 else 128 * (9 - i))
           }
         }
       }
 
       "during journal processing, then return to ordinary times" in {
         withTempFolder {
-          withMaxMemorySize(1024) {
-            val q = makeQueue("things")
-            q.setup
-            for (i <- 0 until 10) {
-              val data = new Array[Byte](128)
-              data(0) = i.toByte
-              q.add(data)
-              q.inReadBehind mustEqual (i >= 8)
-            }
-            q.inReadBehind mustBe true
-            q.length mustEqual 10
-            q.bytes mustEqual 1280
-            q.memoryLength mustEqual 8
-            q.memoryBytes mustEqual 1024
-            for (i <- 0 until 10) {
-              q.remove
-            }
-            q.inReadBehind mustBe false
-            q.length mustEqual 0
-            q.bytes mustEqual 0
-            q.memoryLength mustEqual 0
-            q.memoryBytes mustEqual 0
-            q.close
+          val q = new QueueConfig("things") {
+            maxMemorySize = 1.kilo
+          }.apply()("things", folderName)
 
-            val q2 = makeQueue("things")
-            q2.setup
-            q2.inReadBehind mustBe false
-            q2.length mustEqual 0
-            q2.bytes mustEqual 0
-            q2.memoryLength mustEqual 0
-            q2.memoryBytes mustEqual 0
+          q.setup
+          for (i <- 0 until 10) {
+            val data = new Array[Byte](128)
+            data(0) = i.toByte
+            q.add(data)
+            q.inReadBehind mustEqual (i >= 8)
           }
+          q.inReadBehind mustBe true
+          q.length mustEqual 10
+          q.bytes mustEqual 1280
+          q.memoryLength mustEqual 8
+          q.memoryBytes mustEqual 1024
+          for (i <- 0 until 10) {
+            q.remove
+          }
+          q.inReadBehind mustBe false
+          q.length mustEqual 0
+          q.bytes mustEqual 0
+          q.memoryLength mustEqual 0
+          q.memoryBytes mustEqual 0
+          q.close
+
+          val q2 = new QueueConfig("things")()("things", folderName)
+          q2.setup
+          q2.inReadBehind mustBe false
+          q2.length mustEqual 0
+          q2.bytes mustEqual 0
+          q2.memoryLength mustEqual 0
+          q2.memoryBytes mustEqual 0
         }
       }
     }
 
     "handle timeout reads" in {
       withTempFolder {
-        withMaxMemorySize(1024) {
-          val q = makeQueue("things")
-          q.setup
+        val q = new QueueConfig("things") {
+          maxMemorySize = 1.kilo
+        }.apply()("things", folderName)
 
-          actor {
-            Thread.sleep(100)
-            q.add("hello".getBytes)
-          }
+        q.setup
 
-          var rv: String = null
-          val latch = new CountDownLatch(1)
-          actor {
-            q.removeReact(Time.now.inMilliseconds + 250, false) { item =>
-              rv = new String(item.get.data)
-              latch.countDown
-            }
-          }
-          latch.await
-          rv mustEqual "hello"
+        actor {
+          Thread.sleep(100)
+          q.add("hello".getBytes)
         }
+
+        var rv: String = null
+        val latch = new CountDownLatch(1)
+        actor {
+          q.removeReact(Time.now.inMilliseconds + 250, false) { item =>
+            rv = new String(item.get.data)
+            latch.countDown
+          }
+        }
+        latch.await
+        rv mustEqual "hello"
       }
     }
 
     "correctly interleave transactions in the journal" in {
       withTempFolder {
-        withMaxMemorySize(1024) {
-          val q = makeQueue("things")
-          q.setup
-          q.add("house".getBytes)
-          q.add("cat".getBytes)
-          q.journalSize mustEqual 2 * 21 + 8
+        val q = new QueueConfig("things") {
+          maxMemorySize = 1.kilo
+        }.apply()("things", folderName)
 
-          val house = q.remove(true).get
-          new String(house.data) mustEqual "house"
-          house.xid mustEqual 1
-          q.journalSize mustEqual 2 * 21 + 8 + 1
+        q.setup
+        q.add("house".getBytes)
+        q.add("cat".getBytes)
+        q.journalSize mustEqual 2 * 21 + 8
 
-          val cat = q.remove(true).get
-          new String(cat.data) mustEqual "cat"
-          cat.xid mustEqual 2
-          q.journalSize mustEqual 2 * 21 + 8 + 1 + 1
+        val house = q.remove(true).get
+        new String(house.data) mustEqual "house"
+        house.xid mustEqual 1
+        q.journalSize mustEqual 2 * 21 + 8 + 1
 
-          q.unremove(house.xid)
-          q.journalSize mustEqual 2 * 21 + 8 + 1 + 1 + 5
+        val cat = q.remove(true).get
+        new String(cat.data) mustEqual "cat"
+        cat.xid mustEqual 2
+        q.journalSize mustEqual 2 * 21 + 8 + 1 + 1
 
-          q.confirmRemove(cat.xid)
-          q.journalSize mustEqual 2 * 21 + 8 + 1 + 1 + 5 + 5
-          q.length mustEqual 1
-          q.bytes mustEqual 5
+        q.unremove(house.xid)
+        q.journalSize mustEqual 2 * 21 + 8 + 1 + 1 + 5
 
-          new String(q.remove.get.data) mustEqual "house"
-          q.length mustEqual 0
-          q.bytes mustEqual 0
+        q.confirmRemove(cat.xid)
+        q.journalSize mustEqual 2 * 21 + 8 + 1 + 1 + 5 + 5
+        q.length mustEqual 1
+        q.bytes mustEqual 5
 
-          q.close
-          dumpJournal("things") mustEqual
-            "add(5:0:house), add(3:0:cat), remove-tentative, remove-tentative, unremove(1), confirm-remove(2), remove"
+        new String(q.remove.get.data) mustEqual "house"
+        q.length mustEqual 0
+        q.bytes mustEqual 0
 
-          // and journal is replayed correctly.
-          val q2 = makeQueue("things")
-          q2.setup
-          q2.length mustEqual 0
-          q2.bytes mustEqual 0
-        }
+        q.close
+        dumpJournal("things") mustEqual
+          "add(5:0:house), add(3:0:cat), remove-tentative, remove-tentative, unremove(1), confirm-remove(2), remove"
+
+        // and journal is replayed correctly.
+        val q2 = new QueueConfig("things") {
+          maxMemorySize = 1.kilo
+        }.apply()("things", folderName)
+
+        q2.setup
+        q2.length mustEqual 0
+        q2.bytes mustEqual 0
       }
     }
 
     "recover a journal with open transactions" in {
       withTempFolder {
-        val q = new PersistentQueue(folderName, "things", Config.fromMap(Map.empty))
+        val q = new QueueConfig("things")()("things", folderName)
         q.setup
         q.add("one".getBytes)
         q.add("two".getBytes)
@@ -497,7 +506,7 @@ class PersistentQueueSpec extends Specification with TestHelper {
         q.confirmRemove(item4.get.xid)
         q.close
 
-        val q2 = new PersistentQueue(folderName, "things", Config.fromMap(Map.empty))
+        val q2 = new QueueConfig("things")()("things", folderName)
         q2.setup
         q2.length mustEqual 3
         q2.openTransactionCount mustEqual 0
@@ -510,7 +519,10 @@ class PersistentQueueSpec extends Specification with TestHelper {
 
     "recreate the journal file when it gets too big" in {
       withTempFolder {
-        val q = makeQueue("things", "max_journal_size" -> "1024", "max_journal_overflow" -> "3")
+        val q = new QueueConfig("things") {
+          maxJournalSize = 1.kilo
+          maxJournalOverflow = 3
+        }.apply()("things", folderName)
         q.setup
         q.add(new Array[Byte](512))
         // can't roll the journal normally, cuz there's always one item left.
@@ -537,7 +549,10 @@ class PersistentQueueSpec extends Specification with TestHelper {
 
     "don't recreate the journal file if the queue itself is still huge" in {
       withTempFolder {
-        val q = makeQueue("things", "max_journal_size" -> "1024", "max_journal_overflow" -> "3")
+        val q = new QueueConfig("things") {
+          maxJournalSize = 1.kilo
+          maxJournalOverflow = 3
+        }.apply()("things", folderName)
         q.setup
         for (i <- 0 until 8) {
           q.add(new Array[Byte](512))
@@ -551,7 +566,7 @@ class PersistentQueueSpec extends Specification with TestHelper {
 
     "report an age of zero on an empty queue" in {
       withTempFolder {
-        val q = makeQueue("things")
+        val q = new QueueConfig("things")()("things", folderName)
         q.setup
         put(q, 128, 0)
         Thread.sleep(10)
@@ -566,7 +581,9 @@ class PersistentQueueSpec extends Specification with TestHelper {
   "PersistentQueue with no journal" should {
     "create no journal" in {
       withTempFolder {
-        val q = makeQueue("mem", "journal" -> "false")
+        val q = new QueueConfig("mem") {
+          keepJournal = false
+        }.apply()("mem", folderName)
         q.setup
 
         q.add("coffee".getBytes)
@@ -577,12 +594,16 @@ class PersistentQueueSpec extends Specification with TestHelper {
 
     "lose all data after being destroyed" in {
       withTempFolder {
-        val q = makeQueue("mem", "journal" -> "false")
+        val q = new QueueConfig("mem") {
+          keepJournal = false
+        }.apply()("mem", folderName)
         q.setup
         q.add("coffee".getBytes)
         q.close
 
-        val q2 = makeQueue("mem", "journal" -> "false")
+        val q2 = new QueueConfig("mem") {
+          keepJournal = false
+        }.apply()("mem", folderName)
         q2.setup
         q2.remove mustEqual None
       }
@@ -593,7 +614,9 @@ class PersistentQueueSpec extends Specification with TestHelper {
   "PersistentQueue with item/size limit" should {
     "honor max_items" in {
       withTempFolder {
-        val q = makeQueue("weather_updates", "max_items" -> "1")
+        val q = new QueueConfig("weather_updates") {
+          maxItems = 1
+        }.apply()("weather_updates", folderName)
         q.setup
         q.add("sunny".getBytes) mustEqual true
         q.add("rainy".getBytes) mustEqual false
@@ -604,7 +627,9 @@ class PersistentQueueSpec extends Specification with TestHelper {
 
     "honor max_size" in {
       withTempFolder {
-        val q = makeQueue("weather_updates", "max_size" -> "510")
+        val q = new QueueConfig("weather_updates") {
+          maxSize = 510
+        }.apply()("weather_updates", folderName)
         q.setup
         q.add(("a" * 256).getBytes) mustEqual true
         q.add(("b" * 256).getBytes) mustEqual true
@@ -617,7 +642,10 @@ class PersistentQueueSpec extends Specification with TestHelper {
 
     "drop older items when discard_old_when_full is set" in {
       withTempFolder {
-        val q = makeQueue("weather_updates", "max_items" -> "3", "discard_old_when_full" -> "true")
+        val q = new QueueConfig("weather_updates") {
+          maxItems = 3
+          discardOldWhenFull = true
+        }.apply()("weather_updates", folderName)
         q.setup
         q.add("sunny".getBytes) mustEqual true
         q.add("rainy".getBytes) mustEqual true

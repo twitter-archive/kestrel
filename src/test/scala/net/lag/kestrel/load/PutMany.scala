@@ -21,8 +21,7 @@ import java.net._
 import java.nio._
 import java.nio.channels._
 import scala.collection.mutable
-import net.lag.extensions._
-
+import com.twitter.conversions.string._
 
 /**
  * Spam a kestrel server with 1M copies of a pop song lyric, to see how

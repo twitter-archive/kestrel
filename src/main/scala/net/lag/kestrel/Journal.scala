@@ -21,10 +21,8 @@ import java.io._
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.channels.FileChannel
 import com.twitter.actors.Actor._
-import com.twitter.xrayspecs.Time
-import net.lag.configgy.{Config, ConfigMap}
-import net.lag.logging.Logger
-
+import com.twitter.logging.Logger
+import com.twitter.Time
 
 // returned from journal replay
 abstract class JournalItem()
@@ -37,7 +35,6 @@ object JournalItem {
   case class ConfirmRemove(xid: Int) extends JournalItem
   case object EndOfFile extends JournalItem
 }
-
 
 /**
  * Codes for working with the journal file for a PersistentQueue.
