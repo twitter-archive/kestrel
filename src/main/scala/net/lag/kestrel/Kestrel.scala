@@ -165,6 +165,9 @@ object Kestrel {
   private val startTime = Time.now
 
   def main(args: Array[String]): Unit = {
+    // voodoo?
+    Scheduler.restart()
+
     runtime = RuntimeEnvironment(this, args)
     Logger.configure(runtime.loggingConfigFile)
     kestrel = Eval[KestrelConfig](runtime.configFile)()
