@@ -28,7 +28,7 @@ import config._
 class InaccessibleQueuePath extends Exception("Inaccessible queue path: Must be a directory and writable")
 
 class QueueCollection(queueFolder: String, private var defaultQueueConfig: QueueConfig,
-                      private var queueConfigs: List[QueueConfig]) {
+                      @volatile var queueBuilders: List[QueueBuilder]) {
   private val log = Logger.get(getClass.getName)
 
   private val path = new File(queueFolder)
@@ -44,12 +44,12 @@ class QueueCollection(queueFolder: String, private var defaultQueueConfig: Queue
   private val fanout_queues = new mutable.HashMap[String, mutable.HashSet[String]]
   private var shuttingDown = false
 
-  private val queueConfigMap = Map(queueConfigs.map { config => (config.name, config) }: _*)
+  private val queueConfigMap = Map(queueBuilders.map { builder => (builder.name, builder()) }: _*)
 
   private def buildQueue(name: String, realName: String, path: String) = {
     val config = queueConfigMap.getOrElse(name, defaultQueueConfig)
     log.info("Setting up queue %s: %s", realName, config)
-    config()(realName, path)
+    new PersistentQueue(realName, path, config, Some(this.apply))
   }
 
   // total items added since the server started up.

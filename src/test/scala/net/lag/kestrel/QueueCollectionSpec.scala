@@ -28,7 +28,7 @@ import config._
 class QueueCollectionSpec extends Specification with TestHelper {
   private var qc: QueueCollection = null
 
-  val config = new QueueConfig(null)
+  val config = new QueueBuilder().apply()
 
   "QueueCollection" should {
     doAfter {
@@ -234,11 +234,11 @@ class QueueCollectionSpec extends Specification with TestHelper {
         Time.withCurrentTimeFrozen { time =>
           new File(folderName + "/jobs").createNewFile()
           new File(folderName + "/expired").createNewFile()
-          val expireConfig = new QueueConfig("jobs") {
+          val expireConfig = new QueueBuilder() {
+            name = "jobs"
             expireToQueue = "expired"
           }
           qc = new QueueCollection(folderName, config, List(expireConfig))
-          Kestrel.kestrel.queueCollection = qc
           qc.loadQueues()
           qc.add("jobs", "hello".getBytes, 1)
           qc.queue("jobs").get.length mustEqual 1

@@ -27,7 +27,11 @@ import com.twitter.{Duration, Time}
 import com.twitter.logging.Logger
 import config._
 
-class PersistentQueue(persistencePath: String, val name: String, @volatile var config: QueueConfig) {
+class PersistentQueue(val name: String, persistencePath: String, @volatile var config: QueueConfig,
+                      queueLookup: Option[(String => Option[PersistentQueue])]) {
+  def this(name: String, persistencePath: String, config: QueueConfig) =
+    this(name, persistencePath, config, None)
+
   private case class Waiter(actor: Actor)
   private case object ItemArrived
 
@@ -87,7 +91,7 @@ class PersistentQueue(persistencePath: String, val name: String, @volatile var c
 
   if (!config.keepJournal) journal.erase()
 
-  val expireQueue = config.expireToQueue.flatMap { Kestrel.kestrel.queueCollection(_) }
+  val expireQueue = config.expireToQueue.flatMap { name => queueLookup.flatMap(_(name)) }
 
   // FIXME
   def dumpConfig(): Array[String] = synchronized {

@@ -32,7 +32,7 @@ class FakeKestrelHandler(queues: QueueCollection, maxOpenTransactions: Int)
 }
 
 class KestrelHandlerSpec extends Specification with TestHelper {
-  val config = new QueueConfig(null)
+  val config = new QueueBuilder().apply()
 
   case class beString(expected: String) extends Matcher[Option[QItem]]() {
     def apply(v: => Option[QItem]) = {
@@ -95,7 +95,7 @@ class KestrelHandlerSpec extends Specification with TestHelper {
       "on several queues" in {
         withTempFolder {
           queues = new QueueCollection(folderName, config, Nil)
-          val handler = new FakeKestrelHandler(queues, 1)
+          val handler = new FakeKestrelHandler(queues, 10)
           handler.setItem("red", 0, 0, "red1".getBytes)
           handler.setItem("red", 0, 0, "red2".getBytes)
           handler.setItem("green", 0, 0, "green1".getBytes)

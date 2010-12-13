@@ -46,7 +46,7 @@ object KestrelStats {
   val sessionID = new Counter
 }
 
-class Kestrel(defaultQueueConfig: QueueConfig, queues: List[QueueConfig], maxThreads: Int,
+class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], maxThreads: Int,
               listenAddress: String, listenPort: Int, queuePath: String, protocol: config.Protocol,
               expirationTimerFrequency: Duration, clientTimeout: Duration, maxOpenTransactions: Int)
       extends Service {
@@ -69,7 +69,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, queues: List[QueueConfig], maxThr
 
     System.setProperty("actors.maxPoolSize", maxThreads.toString)
 
-    queueCollection = new QueueCollection(queuePath, defaultQueueConfig, queues)
+    queueCollection = new QueueCollection(queuePath, defaultQueueConfig, builders)
     queueCollection.loadQueues()
     // FIXME: reload?
 
@@ -137,7 +137,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, queues: List[QueueConfig], maxThr
 
     acceptor.foreach { _.close().awaitUninterruptibly() }
     queueCollection.shutdown()
-    Scheduler.shutdown
+    //Scheduler.shutdown
     channelGroup.close().awaitUninterruptibly()
     channelFactory.releaseExternalResources()
 

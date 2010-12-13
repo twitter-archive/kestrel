@@ -23,7 +23,24 @@ import com.twitter.config.Config
 import com.twitter.conversions.si._
 import com.twitter.conversions.time._
 
-class QueueConfig(val name: String) extends Config[(String, String) => PersistentQueue] {
+case class QueueConfig(
+  maxItems: Int,
+  maxSize: Long,
+  maxItemSize: Long,
+  maxAge: Option[Duration],
+  maxJournalSize: Long,
+  maxMemorySize: Long,
+  maxJournalOverflow: Int,
+  discardOldWhenFull: Boolean,
+  keepJournal: Boolean,
+  syncJournal: Boolean,
+  multifileJournal: Boolean,
+  expireToQueue: Option[String],
+  maxExpireSweep: Int
+)
+
+class QueueBuilder extends Config[QueueConfig] {
+  var name: String = null
   var maxItems: Int = Int.MaxValue
   var maxSize: Long = Long.MaxValue
   var maxItemSize: Long = Long.MaxValue
@@ -38,17 +55,10 @@ class QueueConfig(val name: String) extends Config[(String, String) => Persisten
   var expireToQueue: Option[String] = None
   var maxExpireSweep: Int = Int.MaxValue
 
-  override def toString() = {
-    "QueueConfig(name=%s, maxItems=%d, maxSize=%d, maxItemSize=%d, maxAge=%s, maxJournalSize=%d, " +
-      "maxMemorySize=%d, maxJournalOverflow=%d, discardOldWhenFull=%s, keepJournal=%s, " +
-      "syncJournal=%s, multifileJournal=%s, expireToQueue=%s, maxExpireSweep=%s)".format(
-      name, maxItems, maxSize, maxItemSize, maxAge, maxJournalSize, maxMemorySize,
-      maxJournalOverflow, discardOldWhenFull, keepJournal, syncJournal, multifileJournal,
-      expireToQueue, maxExpireSweep)
-  }
-
-  def apply() = { (realName: String, path: String) =>
-    new PersistentQueue(path, realName, this)
+  def apply() = {
+    QueueConfig(maxItems, maxSize, maxItemSize, maxAge, maxJournalSize, maxMemorySize,
+                maxJournalOverflow, discardOldWhenFull, keepJournal, syncJournal, multifileJournal,
+                expireToQueue, maxExpireSweep)
   }
 }
 
@@ -62,12 +72,12 @@ trait KestrelConfig extends Config[Kestrel] {
   /**
    * Settings for a queue that isn't explicitly listed in `queues`.
    */
-  val default: QueueConfig = new QueueConfig(null)
+  val default: QueueBuilder = new QueueBuilder
 
   /**
    * Specific per-queue config.
    */
-  var queues: List[QueueConfig] = Nil
+  var queues: List[QueueBuilder] = Nil
 
   /**
    * Maximum threads to allocate to the actor pool.
@@ -94,7 +104,7 @@ trait KestrelConfig extends Config[Kestrel] {
   var maxOpenTransactions: Int = 1
 
   def apply(): Kestrel = {
-    new Kestrel(default, queues, maxThreads, listenAddress, listenPort, queuePath,
+    new Kestrel(default(), queues, maxThreads, listenAddress, listenPort, queuePath,
                 protocol, expirationTimerFrequency, clientTimeout, maxOpenTransactions)
   }
 }

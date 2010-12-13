@@ -25,41 +25,48 @@ import com.twitter.Time
 import com.twitter.conversions.si._
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
+import com.twitter.ostrich.RuntimeEnvironment
 import net.lag.TestHelper
 import org.specs.Specification
 import config._
 
 class ServerSpec extends Specification with TestHelper {
   val PORT = 22199
+  var kestrel: Kestrel = null
+
+  val runtime = RuntimeEnvironment(this, Array())
+  Kestrel.runtime = runtime
 
   def makeServer = {
-    val defaultConfig = new QueueConfig("") {
+    val defaultConfig = new QueueBuilder() {
       maxJournalSize = 16.kilo
-    }
+    }.apply()
     // make a queue specify max_items and max_age
-    val weatherUpdatesConfig = new QueueConfig("weather_updates") {
+    val weatherUpdatesConfig = new QueueBuilder() {
+      name = "weather_updates"
       maxItems = 1500000
       maxAge = 1800.seconds
     }
-    val kestrel = new Kestrel(new QueueConfig(null), List(weatherUpdatesConfig), 4, "localhost",
-                              PORT, canonicalFolderName, Protocol.Ascii, Time.never, Time.never, 1)
-    kestrel.start(null)
+    kestrel = new Kestrel(defaultConfig, List(weatherUpdatesConfig), 4, "localhost",
+                          PORT, canonicalFolderName, Protocol.Ascii, Time.never, Time.never, 1)
+    kestrel.start(runtime)
   }
 
 
   "Server" should {
     doAfter {
-      Kestrel.kestrel.shutdown()
+      kestrel.shutdown()
+      kestrel = null
     }
 
     "configure per-queue" in {
       withTempFolder {
         makeServer
-        val starship = Kestrel.kestrel.queueCollection("starship").get
-        val weatherUpdates = Kestrel.kestrel.queueCollection("weather_updates").get
-        starship.config.maxItems mustEqual Some(Int.MaxValue)
-        starship.config.maxAge mustEqual Some(0)
-        weatherUpdates.config.maxItems mustEqual Some(1500000)
+        val starship = kestrel.queueCollection("starship").get
+        val weatherUpdates = kestrel.queueCollection("weather_updates").get
+        starship.config.maxItems mustEqual Int.MaxValue
+        starship.config.maxAge mustEqual None
+        weatherUpdates.config.maxItems mustEqual 1500000
         weatherUpdates.config.maxAge mustEqual Some(1800.seconds)
       }
     }
