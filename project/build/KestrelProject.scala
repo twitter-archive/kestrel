@@ -8,6 +8,10 @@ class KestrelProject(info: ProjectInfo) extends StandardProject(info) with Subve
 
   val specs = "org.scala-tools.testing" %% "specs" % "1.6.5" % "test"
 
+  // workaround bug in sbt that hides scala-compiler.
+  override def filterScalaJars = false
+  val what = "org.scala-lang" % "scala-compiler" % "2.8.1"
+
   override def mainClass = Some("net.lag.kestrel.Kestrel")
 
   override def pomExtra =
