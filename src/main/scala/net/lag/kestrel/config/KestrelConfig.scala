@@ -94,6 +94,12 @@ trait KestrelConfig extends Config[Kestrel] {
    */
   var protocol: Protocol = Protocol.Ascii
 
+  /**
+   * If you would like a timer to periodically sweep through queues and clean
+   * up expired items (when they are at the head of a queue), set the timer's
+   * frequency here. 0 (the default) turns it off. This is only useful for queues
+   * that are rarely (or never) polled, but may contain short-lived items.
+   */
   var expirationTimerFrequency: Duration = 0.seconds
 
   var clientTimeout: Duration = 60.seconds
