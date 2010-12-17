@@ -1,4 +1,4 @@
-import com.twitter.conversions.si._
+import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
 import net.lag.kestrel.config._
 
@@ -15,8 +15,8 @@ new KestrelConfig {
   maxOpenTransactions = 100
 
   // default queue settings:
-  default.maxJournalSize = 16.mega
-  default.maxMemorySize = 128.mega
+  default.maxJournalSize = 16.megabytes
+  default.maxMemorySize = 128.megabytes
   default.maxJournalOverflow = 10
 
   queues = new QueueBuilder {
