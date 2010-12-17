@@ -20,9 +20,9 @@ package net.lag.kestrel
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import scala.collection.mutable
-import com.twitter.Time
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
+import com.twitter.util.Time
 import config._
 
 class InaccessibleQueuePath extends Exception("Inaccessible queue path: Must be a directory and writable")

@@ -18,8 +18,8 @@
 package net.lag.kestrel
 
 import scala.collection.mutable
-import com.twitter.Time
 import com.twitter.logging.Logger
+import com.twitter.util.Time
 
 class TooManyOpenTransactionsException extends Exception("Too many open transactions.")
 object TooManyOpenTransactionsException extends TooManyOpenTransactionsException

@@ -19,9 +19,8 @@ package net.lag.kestrel
 
 import java.io.{File, FileInputStream}
 import scala.util.Sorting
-import com.twitter.Time
 import com.twitter.conversions.time._
-import net.lag.TestHelper
+import com.twitter.util.{TempFolder, Time}
 import org.specs.Specification
 import org.specs.matcher.Matcher
 import config._
@@ -31,7 +30,7 @@ class FakeKestrelHandler(queues: QueueCollection, maxOpenTransactions: Int)
   protected def clientDescription: String = "none"
 }
 
-class KestrelHandlerSpec extends Specification with TestHelper {
+class KestrelHandlerSpec extends Specification with TempFolder with TestLogging {
   val config = new QueueBuilder().apply()
 
   case class beString(expected: String) extends Matcher[Option[QItem]]() {

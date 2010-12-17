@@ -18,18 +18,18 @@
 package net.lag.kestrel
 package config
 
-import com.twitter.Duration
 import com.twitter.config.Config
-import com.twitter.conversions.si._
+import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
+import com.twitter.util.{Duration, StorageUnit}
 
 case class QueueConfig(
   maxItems: Int,
-  maxSize: Long,
-  maxItemSize: Long,
+  maxSize: StorageUnit,
+  maxItemSize: StorageUnit,
   maxAge: Option[Duration],
-  maxJournalSize: Long,
-  maxMemorySize: Long,
+  maxJournalSize: StorageUnit,
+  maxMemorySize: StorageUnit,
   maxJournalOverflow: Int,
   discardOldWhenFull: Boolean,
   keepJournal: Boolean,
@@ -42,11 +42,11 @@ case class QueueConfig(
 class QueueBuilder extends Config[QueueConfig] {
   var name: String = null
   var maxItems: Int = Int.MaxValue
-  var maxSize: Long = Long.MaxValue
-  var maxItemSize: Long = Long.MaxValue
+  var maxSize: StorageUnit = Long.MaxValue.bytes
+  var maxItemSize: StorageUnit = Long.MaxValue.bytes
   var maxAge: Option[Duration] = None
-  var maxJournalSize: Long = 16.mega
-  var maxMemorySize: Long = 128.mega
+  var maxJournalSize: StorageUnit = 16.megabytes
+  var maxMemorySize: StorageUnit = 128.megabytes
   var maxJournalOverflow: Int = 10
   var discardOldWhenFull: Boolean = false
   var keepJournal: Boolean = true

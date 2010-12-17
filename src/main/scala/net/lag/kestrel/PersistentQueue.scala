@@ -23,8 +23,9 @@ import java.nio.channels.FileChannel
 import java.util.concurrent.CountDownLatch
 import com.twitter.actors.{Actor, TIMEOUT}
 import scala.collection.mutable
-import com.twitter.{Duration, Time}
+import com.twitter.conversions.storage._
 import com.twitter.logging.Logger
+import com.twitter.util.{Duration, Time}
 import config._
 
 class PersistentQueue(val name: String, persistencePath: String, @volatile var config: QueueConfig,
@@ -99,8 +100,8 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       "max_items=" + config.maxItems,
       "max_size=" + config.maxSize,
       "max_age=" + config.maxAge,
-      "max_journal_size=" + config.maxJournalSize,
-      "max_memory_size=" + config.maxMemorySize,
+      "max_journal_size=" + config.maxJournalSize.inBytes,
+      "max_memory_size=" + config.maxMemorySize.inBytes,
       "max_journal_overflow=" + config.maxJournalOverflow,
       "discard_old_when_full=" + config.discardOldWhenFull,
       "journal=" + config.keepJournal,
@@ -142,7 +143,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   }
 
   final def checkRotateJournal() {
-    if (config.keepJournal && config.multifileJournal && journal.size > config.maxJournalSize) {
+    if (config.keepJournal && config.multifileJournal && journal.size > config.maxJournalSize.inBytes) {
       synchronized {
         log.info("Rotating journal file for '%s'", name)
         journal.rotate()
@@ -154,8 +155,8 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
    * Add a value to the end of the queue, transactionally.
    */
   def add(value: Array[Byte], expiry: Long): Boolean = synchronized {
-    if (closed || value.size > config.maxItemSize) return false
-    while (queueLength >= config.maxItems || queueSize >= config.maxSize) {
+    if (closed || value.size > config.maxItemSize.inBytes) return false
+    while (queueLength >= config.maxItems || queueSize >= config.maxSize.inBytes) {
       if (!config.discardOldWhenFull) return false
       _remove(false)
       _totalDiscarded += 1
@@ -165,11 +166,12 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     val now = Time.now.inMilliseconds
     val item = QItem(now, adjustExpiry(now, expiry), value, 0)
     if (config.keepJournal && !journal.inReadBehind) {
-      if (journal.size > config.maxJournalSize * config.maxJournalOverflow && queueSize < config.maxJournalSize) {
+      if (journal.size > config.maxJournalSize.inBytes * config.maxJournalOverflow &&
+          queueSize < config.maxJournalSize.inBytes) {
         // force re-creation of the journal.
         rollJournal()
       }
-      if (queueSize >= config.maxMemorySize) {
+      if (queueSize >= config.maxMemorySize.inBytes) {
         log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
         journal.startReadBehind
       }
@@ -214,7 +216,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
         if (config.keepJournal) {
           if (transaction) journal.removeTentative() else journal.remove()
 
-          if ((queueLength == 0) && (journal.size >= config.maxJournalSize)) {
+          if ((queueLength == 0) && (journal.size >= config.maxJournalSize.inBytes)) {
             rollJournal()
           }
           checkRotateJournal()
@@ -378,7 +380,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   private final def fillReadBehind(): Unit = {
     // if we're in read-behind mode, scan forward in the journal to keep memory as full as
     // possible. this amortizes the disk overhead across all reads.
-    while (config.keepJournal && journal.inReadBehind && _memoryBytes < config.maxMemorySize) {
+    while (config.keepJournal && journal.inReadBehind && _memoryBytes < config.maxMemorySize.inBytes) {
       journal.fillReadBehind { item =>
         queue += item
         _memoryBytes += item.data.length
@@ -399,7 +401,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       case JournalItem.Add(item) =>
         _add(item)
         // when processing the journal, this has to happen after:
-        if (!journal.inReadBehind && queueSize >= config.maxMemorySize) {
+        if (!journal.inReadBehind && queueSize >= config.maxMemorySize.inBytes) {
           log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
           journal.startReadBehind
         }

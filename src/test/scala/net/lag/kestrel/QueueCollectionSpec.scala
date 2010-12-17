@@ -19,13 +19,12 @@ package net.lag.kestrel
 
 import java.io.{File, FileInputStream}
 import scala.util.Sorting
-import com.twitter.Time
+import com.twitter.util.{TempFolder, Time}
 import com.twitter.conversions.time._
-import net.lag.TestHelper
 import org.specs.Specification
 import config._
 
-class QueueCollectionSpec extends Specification with TestHelper {
+class QueueCollectionSpec extends Specification with TempFolder with TestLogging {
   private var qc: QueueCollection = null
 
   val config = new QueueBuilder().apply()

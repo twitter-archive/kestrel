@@ -22,7 +22,7 @@ import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.channels.FileChannel
 import com.twitter.actors.Actor._
 import com.twitter.logging.Logger
-import com.twitter.Time
+import com.twitter.util.Time
 
 // returned from journal replay
 abstract class JournalItem()

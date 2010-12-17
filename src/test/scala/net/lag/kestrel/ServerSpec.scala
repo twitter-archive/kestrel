@@ -21,17 +21,16 @@ import java.io._
 import java.net.Socket
 import scala.collection.Map
 import scala.util.Random
-import com.twitter.Time
 import com.twitter.actors.Scheduler
-import com.twitter.conversions.si._
+import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.ostrich.RuntimeEnvironment
-import net.lag.TestHelper
+import com.twitter.util.{TempFolder, Time}
 import org.specs.Specification
 import config._
 
-class ServerSpec extends Specification with TestHelper {
+class ServerSpec extends Specification with TempFolder with TestLogging {
   val PORT = 22199
   var kestrel: Kestrel = null
 
@@ -42,7 +41,7 @@ class ServerSpec extends Specification with TestHelper {
 
   def makeServer = {
     val defaultConfig = new QueueBuilder() {
-      maxJournalSize = 16.kilo
+      maxJournalSize = 16.kilobytes
     }.apply()
     // make a queue specify max_items and max_age
     val weatherUpdatesConfig = new QueueBuilder() {
@@ -204,7 +203,7 @@ class ServerSpec extends Specification with TestHelper {
 
         // oops, client2 dies before committing!
         client2.disconnect
-        waitUntil { client3.stats("queue_auto-rollback_bytes") == v.toString.length.toString } mustBe true
+        client3.stats("queue_auto-rollback_bytes") must eventually(be_==(v.toString.length.toString))
         stats = client3.stats
         stats("queue_auto-rollback_items") mustEqual "1"
         stats("queue_auto-rollback_open_transactions") mustEqual "0"
@@ -236,7 +235,7 @@ class ServerSpec extends Specification with TestHelper {
         client2.disconnect
 
         val client3 = new TestClient("localhost", PORT)
-        waitUntil { client3.stats("queue_auto-commit_bytes") == v.toString.length.toString } mustBe true
+        client3.stats("queue_auto-commit_bytes") must eventually(be_==(v.toString.length.toString))
         client3.get("auto-commit") mustEqual (v + 2).toString
 
         var stats = client3.stats

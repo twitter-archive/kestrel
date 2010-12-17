@@ -18,10 +18,10 @@
 package net.lag.kestrel
 
 import java.io._
-import net.lag.TestHelper
+import com.twitter.util.TempFolder
 import org.specs.Specification
 
-class JournalSpec extends Specification with TestHelper {
+class JournalSpec extends Specification with TempFolder with TestLogging {
   "Journal" should {
     "walk" in {
       withTempFolder {

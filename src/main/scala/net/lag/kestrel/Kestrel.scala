@@ -20,14 +20,13 @@ package net.lag.kestrel
 import java.net.InetSocketAddress
 import java.util.concurrent.{CountDownLatch, Executors, ExecutorService, TimeUnit}
 import scala.collection.{immutable, mutable}
-import com.twitter.{Duration, Time}
 import com.twitter.actors.{Actor, Scheduler}
 import com.twitter.actors.Actor._
-import com.twitter.eval.Eval
 import com.twitter.logging.Logger
 import com.twitter.naggati.{ActorHandler, NettyMessage}
 import com.twitter.naggati.codec.MemcacheRequest
 import com.twitter.ostrich.{RuntimeEnvironment, Service, ServiceTracker}
+import com.twitter.util.{Duration, Eval, Time}
 import org.jboss.netty.bootstrap.ServerBootstrap
 import org.jboss.netty.channel.{Channel, ChannelFactory, ChannelPipelineFactory, Channels}
 import org.jboss.netty.channel.group.DefaultChannelGroup

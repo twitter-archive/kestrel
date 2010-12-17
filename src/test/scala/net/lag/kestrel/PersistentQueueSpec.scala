@@ -20,16 +20,15 @@ package net.lag.kestrel
 import java.io.{File, FileInputStream}
 import java.util.concurrent.CountDownLatch
 import scala.collection.mutable
-import com.twitter.Time
 import com.twitter.actors.Actor.actor
-import com.twitter.conversions.si._
+import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
-import net.lag.TestHelper
+import com.twitter.util.{TempFolder, Time}
 import org.specs._
 import org.specs.matcher.Matcher
 import config._
 
-class PersistentQueueSpec extends Specification with TestHelper {
+class PersistentQueueSpec extends Specification with TempFolder with TestLogging {
   def dumpJournal(qname: String): String = {
     var rv = new mutable.ListBuffer[JournalItem]
     new Journal(new File(folderName, qname).getCanonicalPath, false).replay(qname) { item => rv += item }
@@ -102,7 +101,7 @@ class PersistentQueueSpec extends Specification with TestHelper {
     "resist adding an item that's too large" in {
       withTempFolder {
         val config = new QueueBuilder {
-          maxItemSize = 128
+          maxItemSize = 128.bytes
         }.apply()
         val q = new PersistentQueue("work", folderName, config)
         q.setup
@@ -142,7 +141,7 @@ class PersistentQueueSpec extends Specification with TestHelper {
     "rotate journals" in {
       withTempFolder {
         val config = new QueueBuilder {
-          maxJournalSize = 64
+          maxJournalSize = 64.bytes
         }.apply()
         val q = new PersistentQueue("rolling", folderName, config)
         q.setup
@@ -172,7 +171,7 @@ class PersistentQueueSpec extends Specification with TestHelper {
     "rotate journals with an open transaction" in {
       withTempFolder {
         val config = new QueueBuilder {
-          maxJournalSize = 64
+          maxJournalSize = 64.bytes
         }.apply()
         val q = new PersistentQueue("rolling", folderName, config)
         q.setup
@@ -254,16 +253,16 @@ class PersistentQueueSpec extends Specification with TestHelper {
     "allow max_journal_size and max_memory_size to be overridden per queue" in {
       withTempFolder {
         val config1 = new QueueBuilder {
-          maxMemorySize = 123
+          maxMemorySize = 123.bytes
         }.apply()
         val q1 = new PersistentQueue("test1", folderName, config1)
         q1.config.maxJournalSize mustEqual new QueueBuilder().maxJournalSize
-        q1.config.maxMemorySize mustEqual 123
+        q1.config.maxMemorySize mustEqual 123.bytes
         val config2 = new QueueBuilder {
-          maxJournalSize = 123
+          maxJournalSize = 123.bytes
         }.apply()
         val q2 = new PersistentQueue("test1", folderName, config2)
-        q2.config.maxJournalSize mustEqual 123
+        q2.config.maxJournalSize mustEqual 123.bytes
         q2.config.maxMemorySize mustEqual new QueueBuilder().maxMemorySize
       }
     }
@@ -272,7 +271,7 @@ class PersistentQueueSpec extends Specification with TestHelper {
       "on insert" in {
         withTempFolder {
           val config1 = new QueueBuilder {
-            maxMemorySize = 1.kilo
+            maxMemorySize = 1.kilobyte
           }.apply()
           val q = new PersistentQueue("things", folderName, config1)
 
@@ -337,7 +336,7 @@ class PersistentQueueSpec extends Specification with TestHelper {
       "on startup" in {
         withTempFolder {
           val config = new QueueBuilder {
-            maxMemorySize = 1.kilo
+            maxMemorySize = 1.kilobyte
           }.apply()
           val q = new PersistentQueue("things", folderName, config)
 
@@ -377,7 +376,7 @@ class PersistentQueueSpec extends Specification with TestHelper {
       "during journal processing, then return to ordinary times" in {
         withTempFolder {
           val config = new QueueBuilder {
-            maxMemorySize = 1.kilo
+            maxMemorySize = 1.kilobyte
           }.apply()
           val q = new PersistentQueue("things", folderName, config)
 
@@ -417,7 +416,7 @@ class PersistentQueueSpec extends Specification with TestHelper {
     "handle timeout reads" in {
       withTempFolder {
         val config1 = new QueueBuilder {
-          maxMemorySize = 1.kilo
+          maxMemorySize = 1.kilobyte
         }.apply()
         val q = new PersistentQueue("things", folderName, config1)
         q.setup
@@ -443,7 +442,7 @@ class PersistentQueueSpec extends Specification with TestHelper {
     "correctly interleave transactions in the journal" in {
       withTempFolder {
         val config = new QueueBuilder {
-          maxMemorySize = 1.kilo
+          maxMemorySize = 1.kilobyte
         }.apply()
         val q = new PersistentQueue("things", folderName, config)
 
@@ -524,7 +523,7 @@ class PersistentQueueSpec extends Specification with TestHelper {
     "recreate the journal file when it gets too big" in {
       withTempFolder {
         val config = new QueueBuilder {
-          maxJournalSize = 1.kilo
+          maxJournalSize = 1.kilobyte
           maxJournalOverflow = 3
         }.apply()
         val q = new PersistentQueue("things", folderName, config)
@@ -555,7 +554,7 @@ class PersistentQueueSpec extends Specification with TestHelper {
     "don't recreate the journal file if the queue itself is still huge" in {
       withTempFolder {
         val config = new QueueBuilder {
-          maxJournalSize = 1.kilo
+          maxJournalSize = 1.kilobyte
           maxJournalOverflow = 3
         }.apply()
         val q = new PersistentQueue("things", folderName, config)
@@ -635,7 +634,7 @@ class PersistentQueueSpec extends Specification with TestHelper {
     "honor max_size" in {
       withTempFolder {
         val config = new QueueBuilder {
-          maxSize = 510
+          maxSize = 510.bytes
         }.apply()
         val q = new PersistentQueue("weather_updates", folderName, config)
         q.setup
