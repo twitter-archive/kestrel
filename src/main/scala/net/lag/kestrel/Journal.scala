@@ -24,6 +24,8 @@ import com.twitter.actors.Actor._
 import com.twitter.logging.Logger
 import com.twitter.util.Time
 
+case class BrokenItemException(lastValidPosition: Long, cause: Throwable) extends IOException(cause)
+
 // returned from journal replay
 abstract class JournalItem()
 object JournalItem {
