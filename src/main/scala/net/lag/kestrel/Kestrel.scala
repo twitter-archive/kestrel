@@ -24,7 +24,7 @@ import com.twitter.actors.{Actor, Scheduler}
 import com.twitter.actors.Actor._
 import com.twitter.logging.Logger
 import com.twitter.naggati.{ActorHandler, NettyMessage}
-import com.twitter.naggati.codec.MemcacheRequest
+import com.twitter.naggati.codec.MemcacheCodec
 import com.twitter.ostrich.{RuntimeEnvironment, Service, ServiceTracker}
 import com.twitter.util.{Duration, Eval, Time}
 import org.jboss.netty.bootstrap.ServerBootstrap
@@ -91,7 +91,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], max
     bootstrap.setPipelineFactory(new ChannelPipelineFactory() {
       def getPipeline() = {
         val protocolCodec = protocol match {
-          case Protocol.Ascii => MemcacheRequest.asciiDecoder
+          case Protocol.Ascii => MemcacheCodec.asciiCodec
           case Protocol.Binary => throw new Exception("Binary protocol not supported yet.")
         }
         val actorHandler = new ActorHandler(filter, { channel =>
