@@ -33,7 +33,6 @@ object TextCodec {
   val read = readLine(true, "ISO-8859-1") { line =>
     if (line.endsWith(":")) {
       val segments = line.substring(0, line.length - 1).split(" ")
-      println("ok: " + segments.toList)
       if (segments.size < 2) throw new ProtocolError("Missing queue name!")
       readData(segments, new mutable.ListBuffer[Array[Byte]])
     } else {

@@ -18,7 +18,9 @@
 package net.lag.kestrel
 
 import scala.collection.mutable
+import com.twitter.conversions.thread._
 import com.twitter.logging.Logger
+import com.twitter.ostrich.BackgroundProcess
 import com.twitter.util.Time
 
 class TooManyOpenTransactionsException extends Exception("Too many open transactions.")
@@ -208,6 +210,9 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
   }
 
   protected def shutdown() = {
-    Kestrel.kestrel.shutdown()
+    BackgroundProcess {
+      Thread.sleep(100)
+      Kestrel.kestrel.shutdown()
+    }
   }
 }

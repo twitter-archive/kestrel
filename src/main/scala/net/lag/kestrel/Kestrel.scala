@@ -46,7 +46,7 @@ object KestrelStats {
   val sessionID = new Counter
 }
 
-class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], maxThreads: Int,
+class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
               listenAddress: String, listenPort: Int, queuePath: String, protocol: config.Protocol,
               expirationTimerFrequency: Duration, clientTimeout: Duration, maxOpenTransactions: Int)
       extends Service {
@@ -63,12 +63,10 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], max
   private val deathSwitch = new CountDownLatch(1)
 
   def start(runtime: RuntimeEnvironment) {
-    log.info("Kestrel config: maxThreads=%d listenAddress=%s port=%d queuePath=%s protocol=%s " +
+    log.info("Kestrel config: listenAddress=%s port=%d queuePath=%s protocol=%s " +
              "expirationTimerFrequency=%s clientTimeout=%s maxOpenTransactions=%d",
-             maxThreads, listenAddress, listenPort, queuePath, protocol, expirationTimerFrequency,
+             listenAddress, listenPort, queuePath, protocol, expirationTimerFrequency,
              clientTimeout, maxOpenTransactions)
-
-    System.setProperty("actors.maxPoolSize", maxThreads.toString)
 
     queueCollection = new QueueCollection(queuePath, defaultQueueConfig, builders)
     queueCollection.loadQueues()
@@ -140,7 +138,6 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], max
     memcacheAcceptor.foreach { _.close().awaitUninterruptibly() }
     textAcceptor.foreach { _.close().awaitUninterruptibly() }
     queueCollection.shutdown()
-    //Scheduler.shutdown
     channelGroup.close().awaitUninterruptibly()
     channelFactory.releaseExternalResources()
 
@@ -148,6 +145,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], max
     executor.awaitTermination(5, TimeUnit.SECONDS)
     timer.stop()
     timer = null
+    Scheduler.shutdown
     log.info("Goodbye.")
   }
 

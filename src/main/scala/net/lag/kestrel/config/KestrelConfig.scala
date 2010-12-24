@@ -87,12 +87,6 @@ trait KestrelConfig extends Config[Kestrel] {
    */
   var queues: List[QueueBuilder] = Nil
 
-  /**
-   * Maximum threads to allocate to the actor pool.
-   * The JVM won't allow anything less than 4.
-   */
-  var maxThreads: Int = (Runtime.getRuntime().availableProcessors * 2) max 4
-
   var listenAddress: String = "0.0.0.0"
   var memcacheListenPort: Int = 22133
   var queuePath: String = "/tmp"
@@ -118,7 +112,7 @@ trait KestrelConfig extends Config[Kestrel] {
   var maxOpenTransactions: Int = 1
 
   def apply(): Kestrel = {
-    new Kestrel(default(), queues, maxThreads, listenAddress, memcacheListenPort, queuePath,
+    new Kestrel(default(), queues, listenAddress, memcacheListenPort, queuePath,
                 protocol, expirationTimerFrequency, clientTimeout, maxOpenTransactions)
   }
 }
