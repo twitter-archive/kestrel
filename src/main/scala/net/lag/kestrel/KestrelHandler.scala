@@ -70,6 +70,14 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
         transactions.clear()
       }
     }
+
+    def popAll(name: String): Seq[Int] = {
+      synchronized {
+        val xids = transactions(name).toArray
+        transactions(name).clear()
+        xids
+      }
+    }
   }
 
   KestrelStats.sessions.incr()
@@ -124,6 +132,12 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
     }
   }
 
+  def closeAllTransactions(key: String): Int = {
+    val xids = pendingTransactions.popAll(key)
+    xids.foreach { xid => queues.confirmRemove(key, xid) }
+    xids.size
+  }
+
   // will do a continuous transactional fetch on a queue until time runs out or transactions are
   // full.
   final def monitorUntil(key: String, timeLimit: Time)(f: Option[QItem] => Unit) {
@@ -167,8 +181,8 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
     pendingTransactions.cancelAll()
   }
 
-  def setItem(key: String, flags: Int, expiry: Int, data: Array[Byte]) = {
-    log.debug("set -> q=%s flags=%d expiry=%d size=%d", key, flags, expiry, data.length)
+  def setItem(key: String, flags: Int, expiry: Option[Time], data: Array[Byte]) = {
+    log.debug("set -> q=%s flags=%d expiry=%s size=%d", key, flags, expiry, data.length)
     KestrelStats.setRequests.incr()
     queues.add(key, data, expiry)
   }

@@ -24,6 +24,7 @@ import java.util.concurrent.CountDownLatch
 import com.twitter.actors.{Actor, TIMEOUT}
 import scala.collection.mutable
 import com.twitter.conversions.storage._
+import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.util.{Duration, Time}
 import config._
@@ -47,8 +48,8 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   // # of items that were expired by the time they were read:
   private var _totalExpired: Long = 0
 
-  // age (in milliseconds) of the last item read from the queue:
-  private var _currentAge: Long = 0
+  // age of the last item read from the queue:
+  private var _currentAge: Duration = 0.milliseconds
 
   // # of items thot were discarded because the queue was full:
   private var _totalDiscarded: Long = 0
@@ -80,7 +81,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   def bytes: Long = synchronized { queueSize }
   def journalSize: Long = synchronized { journal.size }
   def totalExpired: Long = synchronized { _totalExpired }
-  def currentAge: Long = synchronized { if (queueSize == 0) 0 else _currentAge }
+  def currentAge: Duration = synchronized { if (queueSize == 0) 0.milliseconds else _currentAge }
   def waiterCount: Long = synchronized { waiters.size }
   def totalDiscarded: Long = synchronized { _totalDiscarded }
   def isClosed: Boolean = synchronized { closed || paused }
@@ -119,18 +120,20 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       ("expired_items", totalExpired.toString),
       ("mem_items", memoryLength.toString),
       ("mem_bytes", memoryBytes.toString),
-      ("age", currentAge.toString),
+      ("age", currentAge.inMilliseconds.toString),
       ("discarded", totalDiscarded.toString),
       ("waiters", waiterCount.toString),
       ("open_transactions", openTransactionCount.toString)
     )
   }
 
-  private final def adjustExpiry(startingTime: Long, expiry: Long): Long = {
-    config.maxAge.map { m =>
-      val maxExpiry = startingTime + m.inMilliseconds
-      if (expiry > 0) (expiry min maxExpiry) else maxExpiry
-    }.getOrElse(expiry)
+  private final def adjustExpiry(startingTime: Time, expiry: Option[Time]): Option[Time] = {
+    if (config.maxAge.isDefined) {
+      val maxExpiry = startingTime + config.maxAge.get
+      if (expiry.isDefined) Some(expiry.get min maxExpiry) else Some(maxExpiry)
+    } else {
+      expiry
+    }
   }
 
   final def rollJournal() {
@@ -154,7 +157,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   /**
    * Add a value to the end of the queue, transactionally.
    */
-  def add(value: Array[Byte], expiry: Long): Boolean = synchronized {
+  def add(value: Array[Byte], expiry: Option[Time]): Boolean = synchronized {
     if (closed || value.size > config.maxItemSize.inBytes) return false
     while (queueLength >= config.maxItems || queueSize >= config.maxSize.inBytes) {
       if (!config.discardOldWhenFull) return false
@@ -163,7 +166,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       if (config.keepJournal) journal.remove()
     }
 
-    val now = Time.now.inMilliseconds
+    val now = Time.now
     val item = QItem(now, adjustExpiry(now, expiry), value, 0)
     if (config.keepJournal && !journal.inReadBehind) {
       if (journal.size > config.maxJournalSize.inBytes * config.maxJournalOverflow &&
@@ -185,7 +188,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     true
   }
 
-  def add(value: Array[Byte]): Boolean = add(value, 0)
+  def add(value: Array[Byte]): Boolean = add(value, None)
 
   /**
    * Peek at the head item in the queue, if there is one.
@@ -447,7 +450,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     discardExpired(config.maxExpireSweep)
     if (queue.isEmpty) return None
 
-    val now = Time.now.inMilliseconds
+    val now = Time.now
     val item = queue.dequeue
     val len = item.data.length
     queueSize -= len
@@ -469,7 +472,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       0
     } else {
       val realExpiry = adjustExpiry(queue.front.addTime, queue.front.expiry)
-      if ((realExpiry != 0) && (realExpiry <= Time.now.inMilliseconds)) {
+      if (realExpiry.isDefined && (realExpiry.get <= Time.now)) {
         _totalExpired += 1
         val item = queue.dequeue
         val len = item.data.length
@@ -478,7 +481,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
         queueLength -= 1
         fillReadBehind
         if (config.keepJournal) journal.remove()
-        expireQueue.foreach { _.add(item.data, 0) }
+        expireQueue.foreach { _.add(item.data, None) }
         1 + discardExpired(max - 1)
       } else {
         0

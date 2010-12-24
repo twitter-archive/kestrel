@@ -211,17 +211,10 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
           qc = new QueueCollection(folderName, config, Nil)
           qc.loadQueues()
 
-          qc.add("expired", "hello".getBytes, 5)
+          qc.add("expired", "hello".getBytes, Some(5.seconds.fromNow))
           time.advance(4.seconds)
           new String(qc.receive("expired").get) mustEqual "hello"
-          qc.add("expired", "hello".getBytes, 5)
-          time.advance(6.seconds)
-          qc.receive("expired") mustEqual None
-
-          qc.add("expired", "hello".getBytes, 5.seconds.fromNow.inSeconds)
-          time.advance(4.seconds)
-          new String(qc.receive("expired").get) mustEqual "hello"
-          qc.add("expired", "hello".getBytes, 5.seconds.fromNow.inSeconds)
+          qc.add("expired", "hello".getBytes, Some(5.seconds.fromNow))
           time.advance(6.seconds)
           qc.receive("expired") mustEqual None
         }
@@ -239,7 +232,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
           }
           qc = new QueueCollection(folderName, config, List(expireConfig))
           qc.loadQueues()
-          qc.add("jobs", "hello".getBytes, 1)
+          qc.add("jobs", "hello".getBytes, Some(1.second.fromNow))
           qc.queue("jobs").get.length mustEqual 1
           qc.queue("expired").get.length mustEqual 0
 

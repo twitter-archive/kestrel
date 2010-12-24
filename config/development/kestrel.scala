@@ -4,7 +4,7 @@ import net.lag.kestrel.config._
 
 new KestrelConfig {
   listenAddress = "0.0.0.0"
-  listenPort = 22133
+  memcacheListenPort = 22133
 
   queuePath = "/var/spool/kestrel"
 

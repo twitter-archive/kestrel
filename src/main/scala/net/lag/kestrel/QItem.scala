@@ -20,13 +20,17 @@ package net.lag.kestrel
 import java.nio.{ByteBuffer, ByteOrder}
 import com.twitter.util.Time
 
-case class QItem(addTime: Long, expiry: Long, data: Array[Byte], var xid: Int) {
+case class QItem(addTime: Time, expiry: Option[Time], data: Array[Byte], var xid: Int) {
   def pack(): Array[Byte] = {
     val bytes = new Array[Byte](data.length + 16)
     val buffer = ByteBuffer.wrap(bytes)
     buffer.order(ByteOrder.LITTLE_ENDIAN)
-    buffer.putLong(addTime)
-    buffer.putLong(expiry)
+    buffer.putLong(addTime.inMilliseconds)
+    if (expiry.isDefined) {
+      buffer.putLong(expiry.get.inMilliseconds)
+    } else {
+      buffer.putLong(0)
+    }
     buffer.put(data)
     bytes
   }
@@ -37,10 +41,10 @@ object QItem {
     val buffer = ByteBuffer.wrap(data)
     val bytes = new Array[Byte](data.length - 16)
     buffer.order(ByteOrder.LITTLE_ENDIAN)
-    val addTime = buffer.getLong
+    val addTime = Time(buffer.getLong)
     val expiry = buffer.getLong
     buffer.get(bytes)
-    QItem(addTime, expiry, bytes, 0)
+    QItem(addTime, if (expiry == 0) None else Some(Time(expiry)), bytes, 0)
   }
 
   def unpackOldAdd(data: Array[Byte]): QItem = {
@@ -49,6 +53,6 @@ object QItem {
     buffer.order(ByteOrder.LITTLE_ENDIAN)
     val expiry = buffer.getInt
     buffer.get(bytes)
-    QItem(Time.now.inMilliseconds, if (expiry == 0) 0 else expiry * 1000, bytes, 0)
+    QItem(Time.now, if (expiry == 0) None else Some(Time(expiry * 1000)), bytes, 0)
   }
 }

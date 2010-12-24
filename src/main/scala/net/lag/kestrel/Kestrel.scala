@@ -22,6 +22,7 @@ import java.util.concurrent.{CountDownLatch, Executors, ExecutorService, TimeUni
 import scala.collection.{immutable, mutable}
 import com.twitter.actors.{Actor, Scheduler}
 import com.twitter.actors.Actor._
+import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.naggati.{ActorHandler, NettyMessage}
 import com.twitter.naggati.codec.MemcacheCodec
@@ -55,7 +56,8 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], max
   var timer: Timer = null
   var executor: ExecutorService = null
   var channelFactory: ChannelFactory = null
-  var acceptor: Option[Channel] = None
+  var memcacheAcceptor: Option[Channel] = None
+  var textAcceptor: Option[Channel] = None
   val channelGroup = new DefaultChannelGroup("channels")
 
   private val deathSwitch = new CountDownLatch(1)
@@ -76,19 +78,13 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], max
     timer = new HashedWheelTimer()
     executor = Executors.newCachedThreadPool()
     channelFactory = new NioServerSocketChannelFactory(executor, executor)
-    val bootstrap = new ServerBootstrap(channelFactory)
-    val pipeline = bootstrap.getPipeline()
     val filter: NettyMessage.Filter = immutable.Set(
       classOf[NettyMessage.MessageReceived],
       classOf[NettyMessage.ExceptionCaught],
       classOf[NettyMessage.ChannelIdle],
       classOf[NettyMessage.ChannelDisconnected])
 
-    /* while the MemcacheRequest decoder and ActorHandler are both sharable pipelines, the
-     * "FrameDecoder" that MemcacheRequest is based on is NOT. so we need to build a new pipeline
-     * for each connection until this is fixed.
-     */
-    bootstrap.setPipelineFactory(new ChannelPipelineFactory() {
+    val memcachePipelineFactory = new ChannelPipelineFactory() {
       def getPipeline() = {
         val protocolCodec = protocol match {
           case Protocol.Ascii => MemcacheCodec.asciiCodec
@@ -99,17 +95,24 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], max
         })
         Channels.pipeline(protocolCodec, actorHandler)
       }
-    })
+    }
+    memcacheAcceptor = Some(makeAcceptor(channelFactory, memcachePipelineFactory,
+                                         new InetSocketAddress(listenAddress, listenPort)))
 
-    bootstrap.setOption("backlog", 1000)
-    bootstrap.setOption("reuseAddress", true)
-    bootstrap.setOption("child.keepAlive", true)
-    bootstrap.setOption("child.tcpNoDelay", true)
-    bootstrap.setOption("child.receiveBufferSize", 2048)
-    acceptor = Some(bootstrap.bind(new InetSocketAddress(listenAddress, listenPort)))
+    val textPipelineFactory = new ChannelPipelineFactory() {
+      def getPipeline() = {
+        val protocolCodec = TextCodec.decoder
+        val actorHandler = new ActorHandler(filter, { channel =>
+          new TextHandler(channel, channelGroup, queueCollection, maxOpenTransactions, clientTimeout)
+        })
+        Channels.pipeline(protocolCodec, actorHandler)
+      }
+    }
+    textAcceptor = Some(makeAcceptor(channelFactory, textPipelineFactory,
+                                     new InetSocketAddress(listenAddress, 2222)))
 
     // optionally, start a periodic timer to clean out expired items.
-    if (expirationTimerFrequency > Time.never) {
+    if (expirationTimerFrequency > 0.milliseconds) {
       log.info("Starting up background expiration task.")
       val expirationTask = new TimerTask {
         def run(timeout: Timeout) {
@@ -134,7 +137,8 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], max
     log.info("Shutting down!")
     deathSwitch.countDown()
 
-    acceptor.foreach { _.close().awaitUninterruptibly() }
+    memcacheAcceptor.foreach { _.close().awaitUninterruptibly() }
+    textAcceptor.foreach { _.close().awaitUninterruptibly() }
     queueCollection.shutdown()
     //Scheduler.shutdown
     channelGroup.close().awaitUninterruptibly()
@@ -153,6 +157,18 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], max
 
   override def reload() {
     // FIXME
+  }
+
+  private def makeAcceptor(channelFactory: ChannelFactory, pipelineFactory: ChannelPipelineFactory,
+                           address: InetSocketAddress): Channel = {
+    val bootstrap = new ServerBootstrap(channelFactory)
+    bootstrap.setPipelineFactory(pipelineFactory)
+    bootstrap.setOption("backlog", 1000)
+    bootstrap.setOption("reuseAddress", true)
+    bootstrap.setOption("child.keepAlive", true)
+    bootstrap.setOption("child.tcpNoDelay", true)
+    bootstrap.setOption("child.receiveBufferSize", 2048)
+    bootstrap.bind(address)
   }
 }
 

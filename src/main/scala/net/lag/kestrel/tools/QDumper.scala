@@ -20,6 +20,7 @@ package tools
 
 import java.io.{FileNotFoundException, IOException}
 import scala.collection.mutable
+import com.twitter.conversions.time._
 import com.twitter.util.Time
 
 class QueueDumper(filename: String) {
@@ -64,7 +65,7 @@ class QueueDumper(filename: String) {
   }
 
   def dumpItem(item: JournalItem) {
-    val now = Time.now.inMilliseconds
+    val now = Time.now
     if (!QDumper.quiet) print("%08x  ".format(offset & 0xffffffffL))
     item match {
       case JournalItem.Add(qitem) =>
@@ -73,11 +74,11 @@ class QueueDumper(filename: String) {
           if (qitem.xid > 0) {
             print(" xid=%d".format(qitem.xid))
           }
-          if (qitem.expiry > 0) {
-            if (qitem.expiry - now < 0) {
+          if (qitem.expiry.isDefined) {
+            if (qitem.expiry.get - now < 0.milliseconds) {
               print(" expired")
             } else {
-              print(" exp=%d".format(qitem.expiry - now))
+              print(" exp=%s".format(qitem.expiry.get - now))
             }
           }
           println()

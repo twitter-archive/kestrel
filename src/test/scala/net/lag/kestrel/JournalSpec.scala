@@ -18,7 +18,7 @@
 package net.lag.kestrel
 
 import java.io._
-import com.twitter.util.TempFolder
+import com.twitter.util.{TempFolder, Time}
 import org.specs.Specification
 
 class JournalSpec extends Specification with TempFolder with TestLogging {
@@ -27,9 +27,9 @@ class JournalSpec extends Specification with TempFolder with TestLogging {
       withTempFolder {
         val journal = new Journal(folderName + "/a1", false)
         journal.open()
-        journal.add(QItem(0, 0, new Array[Byte](32), 0))
-        journal.add(QItem(0, 0, new Array[Byte](64), 0))
-        journal.add(QItem(0, 0, new Array[Byte](10), 0))
+        journal.add(QItem(Time.now, None, new Array[Byte](32), 0))
+        journal.add(QItem(Time.now, None, new Array[Byte](64), 0))
+        journal.add(QItem(Time.now, None, new Array[Byte](10), 0))
         journal.close()
 
         val journal2 = new Journal(folderName + "/a1", false)
@@ -46,7 +46,7 @@ class JournalSpec extends Specification with TempFolder with TestLogging {
       withTempFolder {
         val journal = new Journal(folderName + "/a1", false)
         journal.open()
-        journal.add(QItem(0, 0, new Array[Byte](32), 0))
+        journal.add(QItem(Time.now, None, new Array[Byte](32), 0))
         journal.close()
 
         val f = new FileOutputStream(folderName + "/a1", true)

@@ -49,8 +49,17 @@ extends NettyHandler[MemcacheRequest](channel, channelGroup, queueCollection, ma
           channel.write(new MemcacheResponse("ERROR"))
         }
       case "set" =>
+        val now = Time.now
+        val expiry = request.line(3).toInt
+        val normalizedExpiry: Option[Time] = if (expiry == 0) {
+          None
+        } else if (expiry < 1000000) {
+          Some(now + expiry.seconds)
+        } else {
+          Some(Time.epoch + expiry.seconds)
+        }
         try {
-          if (setItem(request.line(1), request.line(2).toInt, request.line(3).toInt, request.data.get)) {
+          if (setItem(request.line(1), request.line(2).toInt, normalizedExpiry, request.data.get)) {
             channel.write(new MemcacheResponse("STORED"))
           } else {
             channel.write(new MemcacheResponse("NOT_STORED"))

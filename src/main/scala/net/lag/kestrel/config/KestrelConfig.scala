@@ -37,7 +37,15 @@ case class QueueConfig(
   multifileJournal: Boolean,
   expireToQueue: Option[String],
   maxExpireSweep: Int
-)
+) {
+  override def toString() = {
+    ("maxItems=%d maxSize=%s maxItemSize=%s maxAge=%s maxJournalSize=%s maxMemorySize=%s " +
+     "maxJournalOverflow=%d discardOldWhenFull=%s keepJournal=%s syncJournal=%s " +
+     "mutlifileJournal=%s expireToQueue=%s maxExpireSweep=%d").format(maxItems, maxSize,
+     maxItemSize, maxAge, maxJournalSize, maxMemorySize, maxJournalOverflow, discardOldWhenFull,
+     keepJournal, syncJournal, multifileJournal, expireToQueue, maxExpireSweep)
+  }
+}
 
 class QueueBuilder extends Config[QueueConfig] {
   var name: String = null
@@ -86,7 +94,7 @@ trait KestrelConfig extends Config[Kestrel] {
   var maxThreads: Int = (Runtime.getRuntime().availableProcessors * 2) max 4
 
   var listenAddress: String = "0.0.0.0"
-  var listenPort: Int = 22133
+  var memcacheListenPort: Int = 22133
   var queuePath: String = "/tmp"
 
   /**
@@ -110,7 +118,7 @@ trait KestrelConfig extends Config[Kestrel] {
   var maxOpenTransactions: Int = 1
 
   def apply(): Kestrel = {
-    new Kestrel(default(), queues, maxThreads, listenAddress, listenPort, queuePath,
+    new Kestrel(default(), queues, maxThreads, listenAddress, memcacheListenPort, queuePath,
                 protocol, expirationTimerFrequency, clientTimeout, maxOpenTransactions)
   }
 }

@@ -51,8 +51,8 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
       withTempFolder {
         queues = new QueueCollection(folderName, config, Nil)
         val handler = new FakeKestrelHandler(queues, 10)
-        handler.setItem("test", 0, 0, "one".getBytes)
-        handler.setItem("test", 0, 0, "two".getBytes)
+        handler.setItem("test", 0, None, "one".getBytes)
+        handler.setItem("test", 0, None, "two".getBytes)
         handler.getItem("test", 0, false, false) { _ must beString("one") }
         handler.getItem("test", 0, false, false) { _ must beString("two") }
       }
@@ -62,7 +62,7 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
       withTempFolder {
         queues = new QueueCollection(folderName, config, Nil)
         val handler = new FakeKestrelHandler(queues, 10)
-        handler.setItem("test", 0, 0, "one".getBytes)
+        handler.setItem("test", 0, None, "one".getBytes)
         handler.getItem("test", 0, true, false) { _ must beString("one") }
         handler.getItem("test", 0, true, false) { _ mustEqual None }
         handler.abortTransaction("test") mustEqual true
@@ -77,9 +77,9 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
         withTempFolder {
           queues = new QueueCollection(folderName, config, Nil)
           val handler = new FakeKestrelHandler(queues, 10)
-          handler.setItem("test", 0, 0, "one".getBytes)
-          handler.setItem("test", 0, 0, "two".getBytes)
-          handler.setItem("test", 0, 0, "three".getBytes)
+          handler.setItem("test", 0, None, "one".getBytes)
+          handler.setItem("test", 0, None, "two".getBytes)
+          handler.setItem("test", 0, None, "three".getBytes)
           handler.getItem("test", 0, true, false) { _ must beString("one") }
           handler.getItem("test", 0, true, false) { _ must beString("two") }
           handler.abortTransaction("test") mustEqual true
@@ -95,12 +95,12 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
         withTempFolder {
           queues = new QueueCollection(folderName, config, Nil)
           val handler = new FakeKestrelHandler(queues, 10)
-          handler.setItem("red", 0, 0, "red1".getBytes)
-          handler.setItem("red", 0, 0, "red2".getBytes)
-          handler.setItem("green", 0, 0, "green1".getBytes)
-          handler.setItem("green", 0, 0, "green2".getBytes)
-          handler.setItem("blue", 0, 0, "blue1".getBytes)
-          handler.setItem("blue", 0, 0, "blue2".getBytes)
+          handler.setItem("red", 0, None, "red1".getBytes)
+          handler.setItem("red", 0, None, "red2".getBytes)
+          handler.setItem("green", 0, None, "green1".getBytes)
+          handler.setItem("green", 0, None, "green2".getBytes)
+          handler.setItem("blue", 0, None, "blue1".getBytes)
+          handler.setItem("blue", 0, None, "blue2".getBytes)
 
           handler.getItem("red", 0, true, false) { _ must beString("red1") }
           handler.getItem("green", 0, true, false) { _ must beString("green1") }
@@ -124,10 +124,24 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
         withTempFolder {
           queues = new QueueCollection(folderName, config, Nil)
           val handler = new FakeKestrelHandler(queues, 1)
-          handler.setItem("red", 0, 0, "red1".getBytes)
-          handler.setItem("red", 0, 0, "red2".getBytes)
+          handler.setItem("red", 0, None, "red1".getBytes)
+          handler.setItem("red", 0, None, "red2".getBytes)
           handler.getItem("red", 0, true, false) { _ must beString("red1") }
           handler.getItem("red", 0, true, false) { x => x } must throwA[TooManyOpenTransactionsException]
+        }
+      }
+
+      "close all transactions" in {
+        withTempFolder {
+          queues = new QueueCollection(folderName, config, Nil)
+          val handler = new FakeKestrelHandler(queues, 2)
+          handler.setItem("red", 0, None, "red1".getBytes)
+          handler.setItem("red", 0, None, "red2".getBytes)
+          handler.getItem("red", 0, true, false) { _ must beString("red1") }
+          handler.getItem("red", 0, true, false) { _ must beString("red2") }
+          handler.closeAllTransactions("red") mustEqual 2
+          handler.abortTransaction("red") mustEqual false
+          handler.pendingTransactions.size("red") mustEqual 0
         }
       }
     }

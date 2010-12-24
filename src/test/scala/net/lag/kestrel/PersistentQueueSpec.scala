@@ -577,7 +577,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
         Thread.sleep(10)
         q.remove() must beSomeQItem(128)
         q.length mustEqual 0
-        q.currentAge mustEqual 0
+        q.currentAge mustEqual 0.milliseconds
       }
     }
   }
