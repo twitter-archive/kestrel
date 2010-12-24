@@ -49,17 +49,22 @@ closes the previous transaction and opens a new one.
 
     get <queue> [timeout]
 
-    get-many <queue> [timeout]
+    monitor <queue> [timeout]
 
 You can explicitly confirm previous fetches if you like.
 
     confirm <queue> <count>
 
+## Maintenance
+
+Various maintenance tasks work:
+
+    shutdown
+
 
 flush
 delete
 flush_all
-shutdown
 flush_expired
 flush_all_expired
 roll
