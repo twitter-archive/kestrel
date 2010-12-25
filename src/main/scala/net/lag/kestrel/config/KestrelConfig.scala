@@ -115,4 +115,9 @@ trait KestrelConfig extends Config[Kestrel] {
     new Kestrel(default(), queues, listenAddress, memcacheListenPort, queuePath,
                 protocol, expirationTimerFrequency, clientTimeout, maxOpenTransactions)
   }
+
+  def reload(kestrel: Kestrel) {
+    // only the queue configs can be changed.
+    kestrel.reload(default(), queues)
+  }
 }

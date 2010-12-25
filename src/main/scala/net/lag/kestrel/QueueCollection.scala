@@ -27,7 +27,7 @@ import config._
 
 class InaccessibleQueuePath extends Exception("Inaccessible queue path: Must be a directory and writable")
 
-class QueueCollection(queueFolder: String, private var defaultQueueConfig: QueueConfig,
+class QueueCollection(queueFolder: String, @volatile private var defaultQueueConfig: QueueConfig,
                       @volatile var queueBuilders: List[QueueBuilder]) {
   private val log = Logger.get(getClass.getName)
 
@@ -44,7 +44,7 @@ class QueueCollection(queueFolder: String, private var defaultQueueConfig: Queue
   private val fanout_queues = new mutable.HashMap[String, mutable.HashSet[String]]
   private var shuttingDown = false
 
-  private val queueConfigMap = Map(queueBuilders.map { builder => (builder.name, builder()) }: _*)
+  @volatile private var queueConfigMap = Map(queueBuilders.map { builder => (builder.name, builder()) }: _*)
 
   private def buildQueue(name: String, realName: String, path: String) = {
     val config = queueConfigMap.getOrElse(name, defaultQueueConfig)
@@ -70,6 +70,16 @@ class QueueCollection(queueFolder: String, private var defaultQueueConfig: Queue
 
   def currentItems = queues.values.foldLeft(0L) { _ + _.length }
   def currentBytes = queues.values.foldLeft(0L) { _ + _.bytes }
+
+  def reload(newDefaultQueueConfig: QueueConfig, newQueueBuilders: List[QueueBuilder]) {
+    defaultQueueConfig = newDefaultQueueConfig
+    queueBuilders = newQueueBuilders
+    queueConfigMap = Map(queueBuilders.map { builder => (builder.name, builder()) }: _*)
+    queues.foreach { case (name, queue) =>
+      val configName = if (name contains '+') name.split('+')(0) else name
+      queue.config = queueConfigMap.get(configName).getOrElse(defaultQueueConfig)
+    }
+  }
 
   /**
    * Get a named queue, creating it if necessary.

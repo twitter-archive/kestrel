@@ -154,7 +154,18 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
   }
 
   override def reload() {
-    // FIXME
+    try {
+      Logger.configure(Kestrel.runtime.loggingConfigFile)
+      Eval[KestrelConfig](Kestrel.runtime.configFile).reload(this)
+    } catch {
+      case e: Eval.CompilerException =>
+        log.error(e, "Error in config: %s", e)
+        log.error(e.messages.flatten.mkString("\n"))
+    }
+  }
+
+  def reload(newDefaultQueueConfig: QueueConfig, newQueueBuilders: List[QueueBuilder]) {
+    queueCollection.reload(newDefaultQueueConfig, newQueueBuilders)
   }
 
   private def makeAcceptor(channelFactory: ChannelFactory, pipelineFactory: ChannelPipelineFactory,

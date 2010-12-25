@@ -73,6 +73,25 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
       }
     }
 
+    "reload" in {
+      withTempFolder {
+        makeServer
+        val starship = kestrel.queueCollection("starship").get
+        val weatherUpdates = kestrel.queueCollection("weather_updates").get
+        starship.config.maxItems mustEqual Int.MaxValue
+        weatherUpdates.config.maxItems mustEqual 1500000
+        new KestrelConfig {
+          default.maxItems = 9999
+          queues = new QueueBuilder {
+            name = "starship"
+            maxItems = 50
+          }
+        }.reload(kestrel)
+        starship.config.maxItems mustEqual 50
+        weatherUpdates.config.maxItems mustEqual 9999
+      }
+    }
+
     "set and get one entry" in {
       withTempFolder {
         makeServer
