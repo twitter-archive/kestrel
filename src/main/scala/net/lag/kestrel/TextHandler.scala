@@ -148,9 +148,11 @@ extends NettyHandler[TextRequest](channel, channelGroup, queueCollection, maxOpe
         monitorUntil(queueName, timeout) { item =>
           channel.write(ItemResponse(item.map { _.data }))
         }
+      case "quit" =>
+        channel.close()
       case "shutdown" =>
         shutdown()
-        channel.write(CountResponse(1))
+        channel.write(CountResponse(0))
       case x =>
         channel.write(ErrorResponse("Unknown command: " + x))
 // peek <queue> [timeout]

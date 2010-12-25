@@ -61,6 +61,9 @@ Various maintenance tasks work:
 
     shutdown
 
+And you can close your connection explicitly:
+
+    quit
 
 flush
 delete
@@ -69,5 +72,4 @@ flush_expired
 flush_all_expired
 roll
 version
-quit
 reload
