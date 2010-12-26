@@ -234,13 +234,14 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
    */
   def remove(): Option[QItem] = remove(false)
 
-  def operateReact(op: => Option[QItem], timeoutAbsolute: Long)(f: Option[QItem] => Unit): Unit = {
-    operateOrWait(op, timeoutAbsolute) match {
+  def operateReact(op: => Option[QItem], timeout: Option[Time])(f: Option[QItem] => Unit): Unit = {
+    operateOrWait(op, timeout) match {
       case (item, None) =>
         f(item)
       case (None, Some(w)) =>
-        Actor.self.reactWithin((timeoutAbsolute - Time.now.inMilliseconds) max 0) {
-          case ItemArrived => operateReact(op, timeoutAbsolute)(f)
+        val actorTimeout = if (timeout.isDefined) (timeout.get - Time.now).inMilliseconds else 0
+        Actor.self.reactWithin(actorTimeout max 0) {
+          case ItemArrived => operateReact(op, timeout)(f)
           case TIMEOUT => synchronized {
             waiters -= w
             // race: someone could have done an add() between the timeout and grabbing the lock.
@@ -254,17 +255,18 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     }
   }
 
-  def operateReceive(op: => Option[QItem], timeoutAbsolute: Long): Option[QItem] = {
-    operateOrWait(op, timeoutAbsolute) match {
+  def operateReceive(op: => Option[QItem], timeout: Option[Time]): Option[QItem] = {
+    operateOrWait(op, timeout) match {
       case (item, None) =>
         item
       case (None, Some(w)) =>
-        val gotSomething = Actor.self.receiveWithin((timeoutAbsolute - Time.now.inMilliseconds) max 0) {
+        val actorTimeout = if (timeout.isDefined) (timeout.get - Time.now).inMilliseconds else 0
+        val gotSomething = Actor.self.receiveWithin(actorTimeout max 0) {
           case ItemArrived => true
           case TIMEOUT => false
         }
         if (gotSomething) {
-          operateReceive(op, timeoutAbsolute)
+          operateReceive(op, timeout)
         } else {
           synchronized { waiters -= w }
           // race: someone could have done an add() between the timeout and grabbing the lock.
@@ -278,20 +280,20 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     }
   }
 
-  def removeReact(timeoutAbsolute: Long, transaction: Boolean)(f: Option[QItem] => Unit): Unit = {
-    operateReact(remove(transaction), timeoutAbsolute)(f)
+  def removeReact(timeout: Option[Time], transaction: Boolean)(f: Option[QItem] => Unit): Unit = {
+    operateReact(remove(transaction), timeout)(f)
   }
 
-  def removeReceive(timeoutAbsolute: Long, transaction: Boolean): Option[QItem] = {
-    operateReceive(remove(transaction), timeoutAbsolute)
+  def removeReceive(timeout: Option[Time], transaction: Boolean): Option[QItem] = {
+    operateReceive(remove(transaction), timeout)
   }
 
-  def peekReact(timeoutAbsolute: Long)(f: Option[QItem] => Unit): Unit = {
-    operateReact(peek, timeoutAbsolute)(f)
+  def peekReact(timeout: Option[Time])(f: Option[QItem] => Unit): Unit = {
+    operateReact(peek, timeout)(f)
   }
 
-  def peekReceive(timeoutAbsolute: Long): Option[QItem] = {
-    operateReceive(peek, timeoutAbsolute)
+  def peekReceive(timeout: Option[Time]): Option[QItem] = {
+    operateReceive(peek, timeout)
   }
 
   /**
@@ -300,9 +302,9 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
    * current actor is added to the wait-list, and will receive `ItemArrived` when an item is
    * available (or the queue is closed).
    */
-  private def operateOrWait(op: => Option[QItem], timeoutAbsolute: Long): (Option[QItem], Option[Waiter]) = synchronized {
+  private def operateOrWait(op: => Option[QItem], timeout: Option[Time]): (Option[QItem], Option[Waiter]) = synchronized {
     val item = op
-    if (!item.isDefined && !closed && !paused && timeoutAbsolute > 0) {
+    if (!item.isDefined && !closed && !paused && timeout.isDefined) {
       val w = Waiter(Actor.self)
       waiters += w
       (None, Some(w))

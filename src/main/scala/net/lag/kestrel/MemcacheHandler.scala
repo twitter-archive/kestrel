@@ -115,7 +115,7 @@ extends NettyHandler[MemcacheRequest](channel, channelGroup, queueCollection, ma
 
   private def get(name: String): Unit = {
     var key = name
-    var timeout = 0
+    var timeout: Option[Time] = None
     var closing = false
     var opening = false
     var aborting = false
@@ -127,7 +127,7 @@ extends NettyHandler[MemcacheRequest](channel, channelGroup, queueCollection, ma
       for (i <- 1 until options.length) {
         val opt = options(i)
         if (opt startsWith "t=") {
-          timeout = opt.substring(2).toInt
+          timeout = Some(opt.substring(2).toInt.seconds.fromNow)
         }
         if (opt == "close") closing = true
         if (opt == "open") opening = true

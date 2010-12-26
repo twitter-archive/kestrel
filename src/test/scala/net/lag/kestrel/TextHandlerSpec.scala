@@ -100,7 +100,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
       "closes transactions" in {
         expect {
           one(queueCollection).confirmRemove("test", 100)
-          one(queueCollection).remove(equal("test"), equal(0), equal(true), equal(false))(function.capture)
+          one(queueCollection).remove(equal("test"), equal(None), equal(true), equal(false))(function.capture)
         }
 
         textHandler.pendingTransactions.add("test", 100)
@@ -115,7 +115,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
 
       "empty queue" in {
         expect {
-          one(queueCollection).remove(equal("test"), equal(0), equal(true), equal(false))(function.capture)
+          one(queueCollection).remove(equal("test"), equal(None), equal(true), equal(false))(function.capture)
           one(channel).write(ItemResponse(None))
         }
 
@@ -127,7 +127,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
         val response = capturingParam[ItemResponse]
 
         expect {
-          one(queueCollection).remove(equal("test"), equal(0), equal(true), equal(false))(function.capture)
+          one(queueCollection).remove(equal("test"), equal(None), equal(true), equal(false))(function.capture)
           one(channel).write(response.capture)
         }
         textHandler.handle(TextRequest("get", List("test"), Nil))

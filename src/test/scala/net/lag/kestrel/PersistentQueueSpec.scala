@@ -429,7 +429,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
         var rv: String = null
         val latch = new CountDownLatch(1)
         actor {
-          q.removeReact(Time.now.inMilliseconds + 250, false) { item =>
+          q.removeReact(Some(250.milliseconds.fromNow), false) { item =>
             rv = new String(item.get.data)
             latch.countDown
           }

@@ -18,10 +18,10 @@
 package net.lag.kestrel
 
 import scala.collection.mutable
-import com.twitter.conversions.thread._
+import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.ostrich.BackgroundProcess
-import com.twitter.util.Time
+import com.twitter.util.{Duration, Time}
 
 class TooManyOpenTransactionsException extends Exception("Too many open transactions.")
 object TooManyOpenTransactionsException extends TooManyOpenTransactionsException
@@ -143,11 +143,10 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
   // will do a continuous transactional fetch on a queue until time runs out or transactions are
   // full.
   final def monitorUntil(key: String, timeLimit: Time)(f: Option[QItem] => Unit) {
-    val remaining = (timeLimit - Time.now).inMillis.toInt
-    if (remaining <= 0 || pendingTransactions.size(key) >= maxOpenTransactions) {
+    if (timeLimit <= Time.now || pendingTransactions.size(key) >= maxOpenTransactions) {
       f(None)
     } else {
-      queues.remove(key, remaining, true, false) {
+      queues.remove(key, Some(timeLimit), true, false) {
         case None =>
           f(None)
         case x @ Some(item) =>
@@ -158,14 +157,14 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
     }
   }
 
-  def getItem(key: String, timeout: Int, opening: Boolean, peeking: Boolean)(f: Option[QItem] => Unit) {
+  def getItem(key: String, timeout: Option[Time], opening: Boolean, peeking: Boolean)(f: Option[QItem] => Unit) {
     if (opening && pendingTransactions.size(key) >= maxOpenTransactions) {
       log.warning("Attempt to open too many transactions on '%s' (sid %d, %s)", key, sessionID,
                   clientDescription)
       throw TooManyOpenTransactionsException
     }
 
-    log.debug("get -> q=%s t=%d open=%s peek=%s", key, timeout, opening, peeking)
+    log.debug("get -> q=%s t=%s open=%s peek=%s", key, timeout, opening, peeking)
     if (peeking) {
       KestrelStats.peekRequests.incr
     } else {

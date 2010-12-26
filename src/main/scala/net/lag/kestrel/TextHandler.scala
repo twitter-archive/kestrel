@@ -127,7 +127,7 @@ extends NettyHandler[TextRequest](channel, channelGroup, queueCollection, maxOpe
         }
         val queueName = request.args(0)
         try {
-          val timeout = request.args.drop(1).headOption.map { _.toInt }.getOrElse(0)
+          val timeout = request.args.drop(1).headOption.map { _.toInt.milliseconds.fromNow }
           closeAllTransactions(queueName)
           getItem(queueName, timeout, true, false) { item =>
             channel.write(ItemResponse(item.map { _.data }))

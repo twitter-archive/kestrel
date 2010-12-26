@@ -22,7 +22,7 @@ import java.util.concurrent.CountDownLatch
 import scala.collection.mutable
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
-import com.twitter.util.Time
+import com.twitter.util.{Duration, Time}
 import config._
 
 class InaccessibleQueuePath extends Exception("Inaccessible queue path: Must be a directory and writable")
@@ -133,7 +133,7 @@ class QueueCollection(queueFolder: String, @volatile private var defaultQueueCon
    * Retrieve an item from a queue and pass it to a continuation. If no item is available within
    * the requested time, or the server is shutting down, None is passed.
    */
-  def remove(key: String, timeout: Int, transaction: Boolean, peek: Boolean)(f: Option[QItem] => Unit): Unit = {
+  def remove(key: String, timeout: Option[Time], transaction: Boolean, peek: Boolean)(f: Option[QItem] => Unit): Unit = {
     queue(key) match {
       case None =>
         queueMisses.incr
@@ -142,7 +142,7 @@ class QueueCollection(queueFolder: String, @volatile private var defaultQueueCon
         if (peek) {
           f(q.peek())
         } else {
-          q.removeReact(if (timeout == 0) timeout else Time.now.inMilliseconds + timeout, transaction) {
+          q.removeReact(timeout, transaction) {
             case None =>
               queueMisses.incr
               f(None)
@@ -158,7 +158,7 @@ class QueueCollection(queueFolder: String, @volatile private var defaultQueueCon
   def receive(key: String): Option[Array[Byte]] = {
     var rv: Option[Array[Byte]] = None
     val latch = new CountDownLatch(1)
-    remove(key, 0, false, false) {
+    remove(key, None, false, false) {
       case None =>
         rv = None
         latch.countDown
