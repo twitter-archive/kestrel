@@ -16,11 +16,17 @@
 
 package net.lag.kestrel
 
+import java.net.InetSocketAddress
+import com.twitter.conversions.time._
 import com.twitter.naggati.test.TestCodec
+import com.twitter.util.Time
 import org.jboss.netty.buffer.ChannelBuffers
+import org.jboss.netty.channel.Channel
+import org.jboss.netty.channel.group.ChannelGroup
 import org.specs.Specification
+import org.specs.mock.{JMocker, ClassMocker}
 
-class TextHandlerSpec extends Specification {
+class TextHandlerSpec extends Specification with JMocker with ClassMocker {
   def wrap(s: String) = ChannelBuffers.wrappedBuffer(s.getBytes)
 
   "TextCodec" should {
@@ -71,6 +77,67 @@ class TextHandlerSpec extends Specification {
     "item response" in {
       val codec = new TestCodec(TextCodec.read, TextCodec.write)
       codec.send(ItemResponse(Some("hello".getBytes))) mustEqual List(":hello\n")
+    }
+  }
+
+  "TextHandler" should {
+    val channel = mock[Channel]
+    val channelGroup = mock[ChannelGroup]
+    val queueCollection = mock[QueueCollection]
+
+    def equal[A](a: A) = will(beEqual(a))
+
+    "get request" in {
+      val function = capturingParam[Function[Option[QItem], Unit]]
+
+      expect {
+        one(channel).getRemoteAddress() willReturn new InetSocketAddress(0)
+        one(channelGroup).add(channel)
+      }
+
+      val textHandler = new TextHandler(channel, channelGroup, queueCollection, 10, 0.milliseconds)
+
+      "closes transactions" in {
+        expect {
+          one(queueCollection).confirmRemove("test", 100)
+          one(queueCollection).remove(equal("test"), equal(0), equal(true), equal(false))(function.capture)
+        }
+
+        textHandler.pendingTransactions.add("test", 100)
+        textHandler.pendingTransactions.size("test") mustEqual 1
+        textHandler.handle(TextRequest("get", List("test"), Nil))
+        textHandler.pendingTransactions.size("test") mustEqual 0
+      }
+
+      "with timeout" in {
+        // ...
+      }
+
+      "empty queue" in {
+        expect {
+          one(queueCollection).remove(equal("test"), equal(0), equal(true), equal(false))(function.capture)
+          one(channel).write(ItemResponse(None))
+        }
+
+        textHandler.handle(TextRequest("get", List("test"), Nil))
+        function.captured(None)
+      }
+
+      "item ready" in {
+        val response = capturingParam[ItemResponse]
+
+        expect {
+          one(queueCollection).remove(equal("test"), equal(0), equal(true), equal(false))(function.capture)
+          one(channel).write(response.capture)
+        }
+        textHandler.handle(TextRequest("get", List("test"), Nil))
+        function.captured(Some(QItem(Time(0), None, "hello".getBytes, 0)))
+        new String(response.captured.data.get) mustEqual "hello"
+      }
+    }
+
+    "put request" in {
+      // ...
     }
   }
 }

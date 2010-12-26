@@ -7,6 +7,11 @@ class KestrelProject(info: ProjectInfo) extends StandardProject(info) with Subve
   val naggati = "com.twitter" % "naggati" % "2.0.0-SNAPSHOT"
 
   val specs = "org.scala-tools.testing" %% "specs" % "1.6.5" % "test"
+  val jmock = "org.jmock" % "jmock" % "2.4.0" % "test"
+  val cglib = "cglib" % "cglib" % "2.1_3" % "test"
+  val asm = "asm" % "asm" % "1.5.3" % "test"
+  val objenesis = "org.objenesis" % "objenesis" % "1.1" % "test"
+  val hamcrest = "org.hamcrest" % "hamcrest-all" % "1.1" % "test"
 
   // workaround bug in sbt that hides scala-compiler.
   override def filterScalaJars = false
