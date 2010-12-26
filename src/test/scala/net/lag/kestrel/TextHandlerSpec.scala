@@ -110,7 +110,13 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
       }
 
       "with timeout" in {
-        // ...
+        Time.withCurrentTimeFrozen { time =>
+          expect {
+            one(queueCollection).remove(equal("test"), equal(Some(500.milliseconds.fromNow)), equal(true), equal(false))(function.capture)
+          }
+
+          textHandler.handle(TextRequest("get", List("test", "500"), Nil))
+        }
       }
 
       "empty queue" in {
@@ -137,7 +143,18 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
     }
 
     "put request" in {
-      // ...
+      val bytes = capturingParam[Array[Byte]]
+
+      expect {
+        one(channel).getRemoteAddress() willReturn new InetSocketAddress(0)
+        one(channelGroup).add(channel)
+        one(queueCollection).add(equal("test"), bytes.capture, equal(None)) willReturn true
+        one(channel).write(CountResponse(1))
+      }
+
+      val textHandler = new TextHandler(channel, channelGroup, queueCollection, 10, 0.milliseconds)
+      textHandler.handle(TextRequest("put", List("test"), List("hello".getBytes)))
+      new String(bytes.captured) mustEqual "hello"
     }
   }
 }
