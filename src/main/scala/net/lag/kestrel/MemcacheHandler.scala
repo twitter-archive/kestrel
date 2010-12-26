@@ -167,7 +167,6 @@ extends NettyHandler[MemcacheRequest](channel, channelGroup, queueCollection, ma
           }
         } catch {
           case e: TooManyOpenTransactionsException =>
-            log.warning("Attempt to open too many transactions on '%s' (sid %d, %s)", key, sessionID, clientDescription)
             channel.write(new MemcacheResponse("ERROR"))
             channel.close()
             return

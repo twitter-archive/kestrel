@@ -99,7 +99,7 @@ class TextHandler(
   maxOpenTransactions: Int,
   clientTimeout: Duration)
 extends NettyHandler[TextRequest](channel, channelGroup, queueCollection, maxOpenTransactions, clientTimeout) {
-  protected final def handle(request: TextRequest) = {
+  final def handle(request: TextRequest) = {
     request.command match {
       case "put" =>
         // put <queue> [expiry]:
@@ -135,6 +135,8 @@ extends NettyHandler[TextRequest](channel, channelGroup, queueCollection, maxOpe
         } catch {
           case e: NumberFormatException =>
             channel.write(ErrorResponse("Error parsing timeout."))
+          case e: TooManyOpenTransactionsException =>
+            channel.write(ErrorResponse("Too many open transactions; limit=" + maxOpenTransactions))
         }
       case "monitor" =>
         // monitor <queue> <timeout>

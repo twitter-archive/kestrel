@@ -160,6 +160,8 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
 
   def getItem(key: String, timeout: Int, opening: Boolean, peeking: Boolean)(f: Option[QItem] => Unit) {
     if (opening && pendingTransactions.size(key) >= maxOpenTransactions) {
+      log.warning("Attempt to open too many transactions on '%s' (sid %d, %s)", key, sessionID,
+                  clientDescription)
       throw TooManyOpenTransactionsException
     }
 
