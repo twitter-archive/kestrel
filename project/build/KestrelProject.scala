@@ -1,7 +1,7 @@
 import sbt._
 import com.twitter.sbt._
 
-class KestrelProject(info: ProjectInfo) extends StandardProject(info) with SubversionPublisher {
+class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) with SubversionPublisher {
   val configgy = "com.twitter" % "configgy" % "3.0.0-SNAPSHOT"
   val ostrich = "com.twitter" % "ostrich" % "3.0.0-SNAPSHOT"
   val naggati = "com.twitter" % "naggati" % "2.0.0-SNAPSHOT"
