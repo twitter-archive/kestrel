@@ -21,6 +21,7 @@ import scala.collection.mutable
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.ostrich.BackgroundProcess
+import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{Duration, Time}
 
 class TooManyOpenTransactionsException extends Exception("Too many open transactions.")
@@ -32,7 +33,7 @@ object TooManyOpenTransactionsException extends TooManyOpenTransactionsException
 abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactions: Int) {
   private val log = Logger.get(getClass.getName)
 
-  val sessionID = KestrelStats.sessionID.incr
+  val sessionId = Kestrel.sessionId.incrementAndGet()
 
   object pendingTransactions {
     private val transactions = new mutable.HashMap[String, mutable.ListBuffer[Int]] {
@@ -82,16 +83,16 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
     }
   }
 
-  KestrelStats.sessions.incr()
-  KestrelStats.totalConnections.incr()
+  Kestrel.sessions.incrementAndGet()
+  Stats.incr("total_connections")
 
   protected def clientDescription: String
 
-  // usually called when mina sends a disconnect signal.
+  // usually called when netty sends a disconnect signal.
   protected def finish() {
-    log.debug("End of session %d", sessionID)
+    log.debug("End of session %d", sessionId)
     abortAnyTransaction()
-    KestrelStats.sessions.decr()
+    Kestrel.sessions.decrementAndGet()
   }
 
   protected def flushAllQueues() {
@@ -103,7 +104,7 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
     pendingTransactions.pop(key) match {
       case None =>
         log.warning("Attempt to abort a non-existent transaction on '%s' (sid %d, %s)",
-                    key, sessionID, clientDescription)
+                    key, sessionId, clientDescription)
         false
       case Some(xid) =>
         log.debug("abort -> q=%s", key)
@@ -159,16 +160,16 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
 
   def getItem(key: String, timeout: Option[Time], opening: Boolean, peeking: Boolean)(f: Option[QItem] => Unit) {
     if (opening && pendingTransactions.size(key) >= maxOpenTransactions) {
-      log.warning("Attempt to open too many transactions on '%s' (sid %d, %s)", key, sessionID,
+      log.warning("Attempt to open too many transactions on '%s' (sid %d, %s)", key, sessionId,
                   clientDescription)
       throw TooManyOpenTransactionsException
     }
 
     log.debug("get -> q=%s t=%s open=%s peek=%s", key, timeout, opening, peeking)
     if (peeking) {
-      KestrelStats.peekRequests.incr
+      Stats.incr("cmd_peek")
     } else {
-      KestrelStats.getRequests.incr
+      Stats.incr("cmd_get")
     }
     queues.remove(key, timeout, opening, peeking) {
       case None =>
@@ -186,7 +187,7 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
 
   def setItem(key: String, flags: Int, expiry: Option[Time], data: Array[Byte]) = {
     log.debug("set -> q=%s flags=%d expiry=%s size=%d", key, flags, expiry, data.length)
-    KestrelStats.setRequests.incr()
+    Stats.incr("cmd_set")
     queues.add(key, data, expiry)
   }
 

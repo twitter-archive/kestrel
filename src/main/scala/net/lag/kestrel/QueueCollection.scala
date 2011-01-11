@@ -22,6 +22,7 @@ import java.util.concurrent.CountDownLatch
 import scala.collection.mutable
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
+import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{Duration, Time}
 import config._
 
@@ -51,13 +52,6 @@ class QueueCollection(queueFolder: String, @volatile private var defaultQueueCon
     log.info("Setting up queue %s: %s", realName, config)
     new PersistentQueue(realName, path, config, Some(this.apply))
   }
-
-  // total items added since the server started up.
-  val totalAdded = new Counter()
-
-  // hits/misses on removing items from the queue
-  val queueHits = new Counter()
-  val queueMisses = new Counter()
 
   // preload any queues
   def loadQueues() {
@@ -122,7 +116,7 @@ class QueueCollection(queueFolder: String, @volatile private var defaultQueueCon
       case None => false
       case Some(q) =>
         val result = q.add(item, expiry)
-        if (result) totalAdded.incr()
+        if (result) Stats.incr("total_items")
         result
     }
   }
@@ -136,7 +130,7 @@ class QueueCollection(queueFolder: String, @volatile private var defaultQueueCon
   def remove(key: String, timeout: Option[Time], transaction: Boolean, peek: Boolean)(f: Option[QItem] => Unit): Unit = {
     queue(key) match {
       case None =>
-        queueMisses.incr
+        Stats.incr("get_misses")
         f(None)
       case Some(q) =>
         if (peek) {
@@ -144,10 +138,10 @@ class QueueCollection(queueFolder: String, @volatile private var defaultQueueCon
         } else {
           q.removeReact(timeout, transaction) {
             case None =>
-              queueMisses.incr
+              Stats.incr("get_misses")
               f(None)
             case Some(item) =>
-              queueHits.incr
+              Stats.incr("get_hits")
               f(Some(item))
           }
         }

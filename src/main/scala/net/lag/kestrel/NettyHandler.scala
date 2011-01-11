@@ -50,7 +50,7 @@ extends KestrelHandler(queueCollection, maxOpenTransactions) with Actor {
   }
 
   channelGroup.add(channel)
-  log.debug("New session %d from %s:%d", sessionID, remoteAddress.getHostName, remoteAddress.getPort)
+  log.debug("New session %d from %s:%d", sessionId, remoteAddress.getHostName, remoteAddress.getPort)
   start()
 
   protected def clientDescription: String = {
@@ -68,9 +68,9 @@ extends KestrelHandler(queueCollection, maxOpenTransactions) with Actor {
             case _: ProtocolError =>
               handleProtocolError()
             case _: IOException =>
-              log.debug("I/O Exception on session %d: %s", sessionID, cause.toString)
+              log.debug("I/O Exception on session %d: %s", sessionId, cause.toString)
             case e =>
-              log.error(cause, "Exception caught on session %d: %s", sessionID, cause.toString)
+              log.error(cause, "Exception caught on session %d: %s", sessionId, cause.toString)
               handleException(e)
           }
           channel.close()

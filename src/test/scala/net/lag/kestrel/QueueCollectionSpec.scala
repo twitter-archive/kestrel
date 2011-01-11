@@ -21,6 +21,7 @@ import java.io.{File, FileInputStream}
 import scala.util.Sorting
 import com.twitter.util.{TempFolder, Time}
 import com.twitter.conversions.time._
+import com.twitter.ostrich.stats.Stats
 import org.specs.Specification
 import config._
 
@@ -38,6 +39,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
 
     "create a queue" in {
       withTempFolder {
+        Stats.clearAll()
         qc = new QueueCollection(folderName, config, Nil)
         qc.queueNames mustEqual Nil
 
@@ -47,7 +49,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
         qc.queueNames.sorted mustEqual List("work1", "work2")
         qc.currentBytes mustEqual 16
         qc.currentItems mustEqual 2
-        qc.totalAdded() mustEqual 2
+        Stats.getCounter("total_items")() mustEqual 2
 
         new String(qc.receive("work1").get) mustEqual "stuff"
         qc.receive("work1") mustEqual None
@@ -56,7 +58,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
 
         qc.currentBytes mustEqual 0
         qc.currentItems mustEqual 0
-        qc.totalAdded() mustEqual 2
+        Stats.getCounter("total_items")() mustEqual 2
       }
     }
 
@@ -94,28 +96,29 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
 
     "queue hit/miss tracking" in {
       withTempFolder {
+        Stats.clearAll()
         qc = new QueueCollection(folderName, config, Nil)
         qc.add("ducklings", "ugly1".getBytes)
         qc.add("ducklings", "ugly2".getBytes)
-        qc.queueHits() mustEqual 0
-        qc.queueMisses() mustEqual 0
+        Stats.getCounter("get_hits")() mustEqual 0
+        Stats.getCounter("get_misses")() mustEqual 0
 
         new String(qc.receive("ducklings").get) mustEqual "ugly1"
-        qc.queueHits() mustEqual 1
-        qc.queueMisses() mustEqual 0
+        Stats.getCounter("get_hits")() mustEqual 1
+        Stats.getCounter("get_misses")() mustEqual 0
         qc.receive("zombie") mustEqual None
-        qc.queueHits() mustEqual 1
-        qc.queueMisses() mustEqual 1
+        Stats.getCounter("get_hits")() mustEqual 1
+        Stats.getCounter("get_misses")() mustEqual 1
 
         new String(qc.receive("ducklings").get) mustEqual "ugly2"
-        qc.queueHits() mustEqual 2
-        qc.queueMisses() mustEqual 1
+        Stats.getCounter("get_hits")() mustEqual 2
+        Stats.getCounter("get_misses")() mustEqual 1
         qc.receive("ducklings") mustEqual None
-        qc.queueHits() mustEqual 2
-        qc.queueMisses() mustEqual 2
+        Stats.getCounter("get_hits")() mustEqual 2
+        Stats.getCounter("get_misses")() mustEqual 2
         qc.receive("ducklings") mustEqual None
-        qc.queueHits() mustEqual 2
-        qc.queueMisses() mustEqual 3
+        Stats.getCounter("get_hits")() mustEqual 2
+        Stats.getCounter("get_misses")() mustEqual 3
       }
     }
 

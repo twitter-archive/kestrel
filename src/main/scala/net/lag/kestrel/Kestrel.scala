@@ -19,6 +19,7 @@ package net.lag.kestrel
 
 import java.net.InetSocketAddress
 import java.util.concurrent.{CountDownLatch, Executors, ExecutorService, TimeUnit}
+import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.{immutable, mutable}
 import com.twitter.actors.{Actor, Scheduler}
 import com.twitter.actors.Actor._
@@ -27,6 +28,7 @@ import com.twitter.logging.Logger
 import com.twitter.naggati.{ActorHandler, NettyMessage}
 import com.twitter.naggati.codec.MemcacheCodec
 import com.twitter.ostrich.{RuntimeEnvironment, Service, ServiceTracker}
+import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{Duration, Eval, Time}
 import org.jboss.netty.bootstrap.ServerBootstrap
 import org.jboss.netty.channel.{Channel, ChannelFactory, ChannelPipelineFactory, Channels}
@@ -34,17 +36,6 @@ import org.jboss.netty.channel.group.DefaultChannelGroup
 import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory
 import org.jboss.netty.util.{HashedWheelTimer, Timeout, Timer, TimerTask}
 import config._
-
-object KestrelStats {
-  val bytesRead = new Counter
-  val bytesWritten = new Counter
-  val sessions = new Counter
-  val totalConnections = new Counter
-  val getRequests = new Counter
-  val setRequests = new Counter
-  val peekRequests = new Counter
-  val sessionID = new Counter
-}
 
 class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
               listenAddress: String, listenPort: Int, queuePath: String, protocol: config.Protocol,
@@ -191,6 +182,10 @@ object Kestrel {
   // voodoo?
   @volatile var scheduler = Scheduler.impl
 
+  // track concurrent sessions
+  val sessions = new AtomicInteger()
+  val sessionId = new AtomicInteger()
+
   def main(args: Array[String]): Unit = {
     runtime = RuntimeEnvironment(this, args)
     try {
@@ -203,6 +198,9 @@ object Kestrel {
         System.exit(1)
     }
     ServiceTracker.register(kestrel)
+
+    Stats.addGauge("connections") { sessions.get().toDouble }
+
     kestrel.start(runtime)
 
     // AdminServiceConfig.apply().apply(runtime) => blah.

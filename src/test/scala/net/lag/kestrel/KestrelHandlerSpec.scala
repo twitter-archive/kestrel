@@ -20,6 +20,7 @@ package net.lag.kestrel
 import java.io.{File, FileInputStream}
 import scala.util.Sorting
 import com.twitter.conversions.time._
+import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{TempFolder, Time}
 import org.specs.Specification
 import org.specs.matcher.Matcher
@@ -55,6 +56,35 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
         handler.setItem("test", 0, None, "two".getBytes)
         handler.getItem("test", None, false, false) { _ must beString("one") }
         handler.getItem("test", None, false, false) { _ must beString("two") }
+      }
+    }
+
+    "track stats" in {
+      withTempFolder {
+        Stats.clearAll()
+        queues = new QueueCollection(folderName, config, Nil)
+        val handler = new FakeKestrelHandler(queues, 10)
+
+        Stats.getCounter("cmd_get")() mustEqual 0
+        Stats.getCounter("cmd_set")() mustEqual 0
+        Stats.getCounter("get_hits")() mustEqual 0
+        Stats.getCounter("get_misses")() mustEqual 0
+
+        handler.setItem("test", 0, None, "one".getBytes)
+        Stats.getCounter("cmd_set")() mustEqual 1
+        Stats.getCounter("cmd_get")() mustEqual 0
+
+        handler.getItem("test", None, false, false) { _ must beString("one") }
+        Stats.getCounter("cmd_set")() mustEqual 1
+        Stats.getCounter("cmd_get")() mustEqual 1
+        Stats.getCounter("get_hits")() mustEqual 1
+        Stats.getCounter("get_misses")() mustEqual 0
+
+        handler.getItem("test2", None, false, false) { _ mustEqual None }
+        Stats.getCounter("cmd_set")() mustEqual 1
+        Stats.getCounter("cmd_get")() mustEqual 2
+        Stats.getCounter("get_hits")() mustEqual 1
+        Stats.getCounter("get_misses")() mustEqual 1
       }
     }
 
