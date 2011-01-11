@@ -41,10 +41,10 @@ object QItem {
     val buffer = ByteBuffer.wrap(data)
     val bytes = new Array[Byte](data.length - 16)
     buffer.order(ByteOrder.LITTLE_ENDIAN)
-    val addTime = Time(buffer.getLong)
+    val addTime = Time.fromMilliseconds(buffer.getLong)
     val expiry = buffer.getLong
     buffer.get(bytes)
-    QItem(addTime, if (expiry == 0) None else Some(Time(expiry)), bytes, 0)
+    QItem(addTime, if (expiry == 0) None else Some(Time.fromMilliseconds(expiry)), bytes, 0)
   }
 
   def unpackOldAdd(data: Array[Byte]): QItem = {
@@ -53,6 +53,6 @@ object QItem {
     buffer.order(ByteOrder.LITTLE_ENDIAN)
     val expiry = buffer.getInt
     buffer.get(bytes)
-    QItem(Time.now, if (expiry == 0) None else Some(Time(expiry * 1000)), bytes, 0)
+    QItem(Time.now, if (expiry == 0) None else Some(Time.fromSeconds(expiry)), bytes, 0)
   }
 }

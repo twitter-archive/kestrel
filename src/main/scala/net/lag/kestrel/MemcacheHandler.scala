@@ -22,6 +22,7 @@ import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.naggati.ProtocolError
 import com.twitter.naggati.codec.{MemcacheRequest, MemcacheResponse}
+import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{Duration, Time}
 import org.jboss.netty.channel.Channel
 import org.jboss.netty.channel.group.ChannelGroup
@@ -34,7 +35,7 @@ class MemcacheHandler(
   channelGroup: ChannelGroup,
   queueCollection: QueueCollection,
   maxOpenTransactions: Int,
-  clientTimeout: Duration)
+  clientTimeout: Option[Duration])
 extends NettyHandler[MemcacheRequest](channel, channelGroup, queueCollection, maxOpenTransactions, clientTimeout) {
   protected final def handle(request: MemcacheRequest) = {
     request.line(0) match {
@@ -153,7 +154,7 @@ extends NettyHandler[MemcacheRequest](channel, channelGroup, queueCollection, ma
       if (opening || !closing) {
         if (pendingTransactions.size(key) > 0 && !peeking && !opening) {
           log.warning("Attempt to perform a non-transactional fetch with an open transaction on " +
-                      " '%s' (sid %d, %s)", key, sessionID, clientDescription)
+                      " '%s' (sid %d, %s)", key, sessionId, clientDescription)
           channel.write(new MemcacheResponse("ERROR"))
           channel.close()
           return
@@ -186,21 +187,21 @@ extends NettyHandler[MemcacheRequest](channel, channelGroup, queueCollection, ma
 
   private def stats() = {
     var report = new mutable.ArrayBuffer[(String, String)]
-    report += (("uptime", Kestrel.uptime.toString))
+    report += (("uptime", Kestrel.uptime.inSeconds.toString))
     report += (("time", (Time.now.inMilliseconds / 1000).toString))
     report += (("version", Kestrel.runtime.jarVersion))
     report += (("curr_items", queues.currentItems.toString))
-    report += (("total_items", queues.totalAdded.toString))
+    report += (("total_items", Stats.getCounter("total_items")().toString))
     report += (("bytes", queues.currentBytes.toString))
-    report += (("curr_connections", KestrelStats.sessions.toString))
-    report += (("total_connections", KestrelStats.totalConnections.toString))
-    report += (("cmd_get", KestrelStats.getRequests.toString))
-    report += (("cmd_set", KestrelStats.setRequests.toString))
-    report += (("cmd_peek", KestrelStats.peekRequests.toString))
-    report += (("get_hits", queues.queueHits.toString))
-    report += (("get_misses", queues.queueMisses.toString))
-    report += (("bytes_read", KestrelStats.bytesRead.toString))
-    report += (("bytes_written", KestrelStats.bytesWritten.toString))
+    report += (("curr_connections", Kestrel.sessions.get().toString))
+    report += (("total_connections", Stats.getCounter("total_connections")().toString))
+    report += (("cmd_get", Stats.getCounter("cmd_get")().toString))
+    report += (("cmd_set", Stats.getCounter("cmd_set")().toString))
+    report += (("cmd_peek", Stats.getCounter("cmd_peek")().toString))
+    report += (("get_hits", Stats.getCounter("get_hits")().toString))
+    report += (("get_misses", Stats.getCounter("get_misses")().toString))
+    report += (("bytes_read", Stats.getCounter("bytes_read")().toString))
+    report += (("bytes_written", Stats.getCounter("bytes_written")().toString))
 
     for (qName <- queues.queueNames) {
       report ++= queues.stats(qName).map { case (k, v) => ("queue_" + qName + "_" + k, v) }

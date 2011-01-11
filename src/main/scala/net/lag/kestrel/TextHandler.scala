@@ -97,7 +97,7 @@ class TextHandler(
   channelGroup: ChannelGroup,
   queueCollection: QueueCollection,
   maxOpenTransactions: Int,
-  clientTimeout: Duration)
+  clientTimeout: Option[Duration])
 extends NettyHandler[TextRequest](channel, channelGroup, queueCollection, maxOpenTransactions, clientTimeout) {
   final def handle(request: TextRequest) = {
     request.command match {

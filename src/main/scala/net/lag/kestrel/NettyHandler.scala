@@ -39,14 +39,14 @@ abstract class NettyHandler[M](
   val channelGroup: ChannelGroup,
   queueCollection: QueueCollection,
   maxOpenTransactions: Int,
-  clientTimeout: Duration)
+  clientTimeout: Option[Duration])
 extends KestrelHandler(queueCollection, maxOpenTransactions) with Actor {
   val log = Logger.get(getClass.getName)
 
   private val remoteAddress = channel.getRemoteAddress.asInstanceOf[InetSocketAddress]
 
-  if (clientTimeout > 0.milliseconds) {
-    channel.getPipeline.addFirst("idle", new IdleStateHandler(Kestrel.kestrel.timer, 0, 0, clientTimeout.inSeconds.toInt))
+  if (clientTimeout.isDefined) {
+    channel.getPipeline.addFirst("idle", new IdleStateHandler(Kestrel.kestrel.timer, 0, 0, clientTimeout.get.inSeconds.toInt))
   }
 
   channelGroup.add(channel)

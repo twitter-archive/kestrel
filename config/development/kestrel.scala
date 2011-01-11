@@ -5,6 +5,7 @@ import net.lag.kestrel.config._
 new KestrelConfig {
   listenAddress = "0.0.0.0"
   memcacheListenPort = 22133
+  textListenPort = 2222
 
   queuePath = "/var/spool/kestrel"
 
@@ -18,6 +19,11 @@ new KestrelConfig {
   default.maxJournalSize = 16.megabytes
   default.maxMemorySize = 128.megabytes
   default.maxJournalOverflow = 10
+
+  admin.httpPort = 2223
+
+  admin.jsonStatsLogger = "stats"
+  admin.jsonStatsServiceName = "kestrel"
 
   queues = new QueueBuilder {
     // keep items for no longer than a half hour, and don't accept any more if

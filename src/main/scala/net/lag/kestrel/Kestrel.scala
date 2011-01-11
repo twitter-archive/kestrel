@@ -38,8 +38,10 @@ import org.jboss.netty.util.{HashedWheelTimer, Timeout, Timer, TimerTask}
 import config._
 
 class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
-              listenAddress: String, listenPort: Int, queuePath: String, protocol: config.Protocol,
-              expirationTimerFrequency: Duration, clientTimeout: Duration, maxOpenTransactions: Int)
+              listenAddress: String, memcacheListenPort: Option[Int], textListenPort: Option[Int],
+              queuePath: String, protocol: config.Protocol,
+              expirationTimerFrequency: Option[Duration], clientTimeout: Option[Duration],
+              maxOpenTransactions: Int)
       extends Service {
   private val log = Logger.get(getClass.getName)
 
@@ -54,10 +56,10 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
   private val deathSwitch = new CountDownLatch(1)
 
   def start(runtime: RuntimeEnvironment) {
-    log.info("Kestrel config: listenAddress=%s port=%d queuePath=%s protocol=%s " +
-             "expirationTimerFrequency=%s clientTimeout=%s maxOpenTransactions=%d",
-             listenAddress, listenPort, queuePath, protocol, expirationTimerFrequency,
-             clientTimeout, maxOpenTransactions)
+    log.info("Kestrel config: listenAddress=%s memcachePort=%s textPort=%s queuePath=%s " +
+             "protocol=%s expirationTimerFrequency=%s clientTimeout=%s maxOpenTransactions=%d",
+             listenAddress, memcacheListenPort, textListenPort, queuePath, protocol,
+             expirationTimerFrequency, clientTimeout, maxOpenTransactions)
 
     queueCollection = new QueueCollection(queuePath, defaultQueueConfig, builders)
     queueCollection.loadQueues()
@@ -85,8 +87,10 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
         Channels.pipeline(protocolCodec, actorHandler)
       }
     }
-    memcacheAcceptor = Some(makeAcceptor(channelFactory, memcachePipelineFactory,
-                                         new InetSocketAddress(listenAddress, listenPort)))
+    memcacheAcceptor = memcacheListenPort.map { port =>
+      val address = new InetSocketAddress(listenAddress, port)
+      makeAcceptor(channelFactory, memcachePipelineFactory, address)
+    }
 
     val textPipelineFactory = new ChannelPipelineFactory() {
       def getPipeline() = {
@@ -97,11 +101,13 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
         Channels.pipeline(protocolCodec, actorHandler)
       }
     }
-    textAcceptor = Some(makeAcceptor(channelFactory, textPipelineFactory,
-                                     new InetSocketAddress(listenAddress, 2222)))
+    textAcceptor = textListenPort.map { port =>
+      val address = new InetSocketAddress(listenAddress, port)
+      makeAcceptor(channelFactory, textPipelineFactory, address)
+    }
 
     // optionally, start a periodic timer to clean out expired items.
-    if (expirationTimerFrequency > 0.milliseconds) {
+    if (expirationTimerFrequency.isDefined) {
       log.info("Starting up background expiration task.")
       val expirationTask = new TimerTask {
         def run(timeout: Timeout) {
@@ -109,7 +115,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
           if (expired > 0) {
             log.info("Expired %d item(s) from queues automatically.", expired)
           }
-          timer.newTimeout(this, expirationTimerFrequency.inMilliseconds, TimeUnit.MILLISECONDS)
+          timer.newTimeout(this, expirationTimerFrequency.get.inMilliseconds, TimeUnit.MILLISECONDS)
         }
       }
       expirationTask.run(null)
@@ -202,8 +208,6 @@ object Kestrel {
     Stats.addGauge("connections") { sessions.get().toDouble }
 
     kestrel.start(runtime)
-
-    // AdminServiceConfig.apply().apply(runtime) => blah.
   }
 
   def uptime() = Time.now - startTime

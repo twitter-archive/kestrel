@@ -21,6 +21,7 @@ package config
 import com.twitter.config.Config
 import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
+import com.twitter.ostrich.config.AdminServiceConfig
 import com.twitter.util.{Duration, StorageUnit}
 
 case class QueueConfig(
@@ -88,7 +89,20 @@ trait KestrelConfig extends Config[Kestrel] {
   var queues: List[QueueBuilder] = Nil
 
   var listenAddress: String = "0.0.0.0"
-  var memcacheListenPort: Int = 22133
+
+  /**
+   * Port for accepting memcache protocol connections.
+   */
+  var memcacheListenPort: Option[Int] = Some(22133)
+
+  /**
+   * Port for accepting text protocol connections.
+   */
+  var textListenPort: Option[Int] = Some(2222)
+
+  /**
+   * Where queue journals should be stored.
+   */
   var queuePath: String = "/tmp"
 
   /**
@@ -97,22 +111,31 @@ trait KestrelConfig extends Config[Kestrel] {
   var protocol: Protocol = Protocol.Ascii
 
   /**
-   * If you would like a timer to periodically sweep through queues and clean
-   * up expired items (when they are at the head of a queue), set the timer's
-   * frequency here. 0 (the default) turns it off. This is only useful for queues
-   * that are rarely (or never) polled, but may contain short-lived items.
+   * If you would like a timer to periodically sweep through queues and clean up expired items
+   * (when they are at the head of a queue), set the timer's frequency here. This is only useful
+   * for queues that are rarely (or never) polled, but may contain short-lived items.
    */
-  var expirationTimerFrequency: Duration = 0.seconds
+  var expirationTimerFrequency: Option[Duration] = None
 
-  var clientTimeout: Duration = 60.seconds
+  /**
+   * An optional timeout for idle client connections. A client that hasn't sent a request in this
+   * period of time will be disconnected.
+   */
+  var clientTimeout: Option[Duration] = None
 
   /**
    * Maximum # of transactions (incomplete GETs) each client can have open at one time.
    */
   var maxOpenTransactions: Int = 1
 
+  /**
+   * Admin service configuration (optional).
+   */
+  val admin = new AdminServiceConfig()
+
   def apply(): Kestrel = {
-    new Kestrel(default(), queues, listenAddress, memcacheListenPort, queuePath,
+    admin()(Kestrel.runtime)
+    new Kestrel(default(), queues, listenAddress, memcacheListenPort, textListenPort, queuePath,
                 protocol, expirationTimerFrequency, clientTimeout, maxOpenTransactions)
   }
 

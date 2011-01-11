@@ -95,7 +95,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
         one(channelGroup).add(channel)
       }
 
-      val textHandler = new TextHandler(channel, channelGroup, queueCollection, 10, 0.milliseconds)
+      val textHandler = new TextHandler(channel, channelGroup, queueCollection, 10, None)
 
       "closes transactions" in {
         expect {
@@ -152,7 +152,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
         one(channel).write(CountResponse(1))
       }
 
-      val textHandler = new TextHandler(channel, channelGroup, queueCollection, 10, 0.milliseconds)
+      val textHandler = new TextHandler(channel, channelGroup, queueCollection, 10, None)
       textHandler.handle(TextRequest("put", List("test"), List("hello".getBytes)))
       new String(bytes.captured) mustEqual "hello"
     }
