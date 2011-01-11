@@ -519,26 +519,36 @@ class PersistentQueue(persistencePath: String, val name: String,
     Some(item)
   }
 
-  final def discardExpired(max: Int): Int = synchronized {
-    if (queue.isEmpty || journal.isReplaying || max <= 0) {
-      0
-    } else {
-      val realExpiry = adjustExpiry(queue.front.addTime, queue.front.expiry)
-      if ((realExpiry != 0) && (realExpiry < Time.now.inMilliseconds)) {
-        _totalExpired += 1
-        val item = queue.dequeue
-        val len = item.data.length
-        queueSize -= len
-        _memoryBytes -= len
-        queueLength -= 1
-        fillReadBehind
-        if (keepJournal()) journal.remove()
-        expiredQueue().map { _.add(item.data, 0) }
-        1 + discardExpired(max - 1)
-      } else {
-        0
+  final def discardExpired(max: Int): Int = {
+    val itemsToRemove = synchronized {
+      var continue = true
+      val toRemove = new mutable.ListBuffer[QItem]
+      while(continue) {
+        if (synchronized { queue.isEmpty || journal.isReplaying }) {
+          continue = false
+        } else {
+          val realExpiry = adjustExpiry(queue.front.addTime, queue.front.expiry)
+          if ((realExpiry != 0) && (realExpiry < Time.now.inMilliseconds)) {
+            _totalExpired += 1
+            val item = queue.dequeue
+            val len = item.data.length
+            queueSize -= len
+            _memoryBytes -= len
+            queueLength -= 1
+            fillReadBehind
+            toRemove += item
+          } else {
+            continue = false
+          }
+        }
       }
+      toRemove
     }
+
+    itemsToRemove.foreach { item =>
+      expiredQueue().map { _.add(item.data, 0) }
+    }
+    itemsToRemove.size
   }
 
   private def _unremove(xid: Int) = {

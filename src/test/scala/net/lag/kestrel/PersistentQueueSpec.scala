@@ -627,4 +627,48 @@ class PersistentQueueSpec extends Specification with TestHelper {
       }
     }
   }
+
+  "PersistentQueue with item expiry" should {
+    doBefore {
+      Time.freeze
+    }
+
+    "expire items into the ether" in {
+      withTempFolder {
+        val q = makeQueue("wu_tang", "journal" -> "false")
+        val expiry = Time.now + 1.second
+        q.add("rza".getBytes, expiry.inMillis) mustEqual true
+        q.add("gza".getBytes, expiry.inMillis) mustEqual true
+        q.add("ol dirty bastard".getBytes, expiry.inMillis) mustEqual true
+        q.add("raekwon".getBytes) mustEqual true
+        Time.advance(2.seconds)
+        q.discardExpired(q.length.toInt) mustEqual 3
+        q.length mustEqual 1
+        q.remove must beSomeQItem("raekwon")
+      }
+    }
+
+    "expire items into a queue" in {
+      withTempFolder {
+        val r = makeQueue("rappers", "journal" -> "false")
+        val q = makeQueue("wu_tang", "journal" -> "false")
+        q.expiredQueue.set(Some(Some(r))) // :(
+        val expiry = Time.now + 1.second
+
+        q.add("method man".getBytes, expiry.inMillis) mustEqual true
+        q.add("ghostface killah".getBytes, expiry.inMillis) mustEqual true
+        q.add("u-god".getBytes, expiry.inMillis) mustEqual true
+        q.add("masta killa".getBytes) mustEqual true
+        Time.advance(2.seconds)
+        q.discardExpired(q.length.toInt) mustEqual 3
+        q.length mustEqual 1
+        q.remove must beSomeQItem("masta killa")
+
+        r.length mustEqual 3
+        r.remove must beSomeQItem("method man")
+        r.remove must beSomeQItem("ghostface killah")
+        r.remove must beSomeQItem("u-god")
+      }
+    }
+  }
 }
