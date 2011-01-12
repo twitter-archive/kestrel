@@ -73,8 +73,8 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   // track tentative removals
   private var xidCounter: Int = 0
   private val openTransactions = new mutable.HashMap[Int, QItem]
-  def openTransactionCount = openTransactions.size
-  def openTransactionIds = openTransactions.keys.toSeq.sorted.reverse
+  private def openTransactionIds = openTransactions.keys.toSeq.sorted.reverse
+  def openTransactionCount = synchronized { openTransactions.size }
 
   def length: Long = synchronized { queueLength }
   def totalItems: Long = synchronized { _totalItems }
