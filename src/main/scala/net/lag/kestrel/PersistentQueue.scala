@@ -545,8 +545,10 @@ class PersistentQueue(persistencePath: String, val name: String,
       toRemove
     }
 
-    itemsToRemove.foreach { item =>
-      expiredQueue().map { _.add(item.data, 0) }
+    expiredQueue().map { expiredQueue =>
+      itemsToRemove.foreach { item =>
+        expiredQueue.add(item.data, 0)
+      }
     }
     itemsToRemove.size
   }
