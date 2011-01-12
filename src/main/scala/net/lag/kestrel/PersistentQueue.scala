@@ -523,8 +523,8 @@ class PersistentQueue(persistencePath: String, val name: String,
     val itemsToRemove = synchronized {
       var continue = true
       val toRemove = new mutable.ListBuffer[QItem]
-      while(continue) {
-        if (synchronized { queue.isEmpty || journal.isReplaying }) {
+      while (continue) {
+        if (queue.isEmpty || journal.isReplaying) {
           continue = false
         } else {
           val realExpiry = adjustExpiry(queue.front.addTime, queue.front.expiry)
@@ -536,6 +536,7 @@ class PersistentQueue(persistencePath: String, val name: String,
             _memoryBytes -= len
             queueLength -= 1
             fillReadBehind
+            if (keepJournal()) journal.remove()
             toRemove += item
           } else {
             continue = false
@@ -545,10 +546,8 @@ class PersistentQueue(persistencePath: String, val name: String,
       toRemove
     }
 
-    expiredQueue().map { expiredQueue =>
-      itemsToRemove.foreach { item =>
-        expiredQueue.add(item.data, 0)
-      }
+    expiredQueue().foreach { q =>
+      itemsToRemove.foreach { item => q.add(item.data, 0) }
     }
     itemsToRemove.size
   }
