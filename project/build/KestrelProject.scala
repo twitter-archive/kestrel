@@ -1,12 +1,11 @@
 import sbt._
 import com.twitter.sbt._
 
-class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) with SubversionPublisher {
-  val configgy = "com.twitter" % "configgy" % "3.0.0-SNAPSHOT"
-  val ostrich = "com.twitter" % "ostrich" % "3.0.0-SNAPSHOT"
+class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) with SubversionPublisher with DefaultRepos {
+  val ostrich = "com.twitter" % "ostrich" % "3.0.0.foo-SNAPSHOT"
   val naggati = "com.twitter" % "naggati" % "2.0.0-SNAPSHOT"
 
-  val specs = "org.scala-tools.testing" %% "specs" % "1.6.5" % "test"
+  val specs = "org.scala-tools.testing" % "specs_2.8.0" % "1.6.5" % "test"
   val jmock = "org.jmock" % "jmock" % "2.4.0" % "test"
   val cglib = "cglib" % "cglib" % "2.1_3" % "test"
   val asm = "asm" % "asm" % "1.5.3" % "test"
