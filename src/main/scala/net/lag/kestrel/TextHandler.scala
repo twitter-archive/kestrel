@@ -105,50 +105,50 @@ extends NettyHandler[TextRequest](channel, channelGroup, queueCollection, maxOpe
         // put <queue> [expiry]:
         if (request.args.size < 1) {
           channel.write(ErrorResponse("Queue name required."))
-          throw new ProtocolError("Queue name required.")
-        }
-        val queueName = request.args(0)
-        try {
-          val expiry = request.args.drop(1).headOption.map { Time.now + _.toInt.milliseconds }
-          var count = 0
-          request.items.foreach { item =>
-            if (setItem(queueName, 0, expiry, item)) count += 1
+        } else {
+          val queueName = request.args(0)
+          try {
+            val expiry = request.args.drop(1).headOption.map { Time.now + _.toInt.milliseconds }
+            var count = 0
+            request.items.foreach { item =>
+              if (setItem(queueName, 0, expiry, item)) count += 1
+            }
+            channel.write(CountResponse(count))
+          } catch {
+            case e: NumberFormatException =>
+              channel.write(ErrorResponse("Error parsing expiration time."))
           }
-          channel.write(CountResponse(count))
-        } catch {
-          case e: NumberFormatException =>
-            channel.write(ErrorResponse("Error parsing expiration time."))
         }
       case "get" =>
         // get <queue> [timeout]
         if (request.args.size < 1) {
           channel.write(ErrorResponse("Queue name required."))
-          throw new ProtocolError("Queue name required.")
-        }
-        val queueName = request.args(0)
-        try {
-          val timeout = request.args.drop(1).headOption.map { _.toInt.milliseconds.fromNow }
-          closeAllTransactions(queueName)
-          getItem(queueName, timeout, true, false) { item =>
-            channel.write(ItemResponse(item.map { _.data }))
+        } else {
+          val queueName = request.args(0)
+          try {
+            val timeout = request.args.drop(1).headOption.map { _.toInt.milliseconds.fromNow }
+            closeAllTransactions(queueName)
+            getItem(queueName, timeout, true, false) { item =>
+              channel.write(ItemResponse(item.map { _.data }))
+            }
+          } catch {
+            case e: NumberFormatException =>
+              channel.write(ErrorResponse("Error parsing timeout."))
+            case e: TooManyOpenTransactionsException =>
+              channel.write(ErrorResponse("Too many open transactions; limit=" + maxOpenTransactions))
           }
-        } catch {
-          case e: NumberFormatException =>
-            channel.write(ErrorResponse("Error parsing timeout."))
-          case e: TooManyOpenTransactionsException =>
-            channel.write(ErrorResponse("Too many open transactions; limit=" + maxOpenTransactions))
         }
       case "monitor" =>
         // monitor <queue> <timeout>
         if (request.args.size < 2) {
           channel.write(ErrorResponse("Queue name & timeout required."))
-          throw new ProtocolError("Queue name & timeout required.")
-        }
-        val queueName = request.args(0)
-        val timeout = request.args(1).toInt.milliseconds.fromNow
-        closeAllTransactions(queueName)
-        monitorUntil(queueName, timeout) { item =>
-          channel.write(ItemResponse(item.map { _.data }))
+        } else {
+          val queueName = request.args(0)
+          val timeout = request.args(1).toInt.milliseconds.fromNow
+          closeAllTransactions(queueName)
+          monitorUntil(queueName, timeout) { item =>
+            channel.write(ItemResponse(item.map { _.data }))
+          }
         }
       case "quit" =>
         channel.close()
