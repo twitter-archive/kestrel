@@ -52,10 +52,11 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
   var memcacheAcceptor: Option[Channel] = None
   var textAcceptor: Option[Channel] = None
   val channelGroup = new DefaultChannelGroup("channels")
+  var runtime: RuntimeEnvironment = null
 
   private val deathSwitch = new CountDownLatch(1)
 
-  def start(runtime: RuntimeEnvironment) {
+  def start() {
     log.info("Kestrel config: listenAddress=%s memcachePort=%s textPort=%s queuePath=%s " +
              "protocol=%s expirationTimerFrequency=%s clientTimeout=%s maxOpenTransactions=%d",
              listenAddress, memcacheListenPort, textListenPort, queuePath, protocol,
@@ -124,8 +125,6 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
     actor {
       deathSwitch.await()
     }
-
-    log.info("Kestrel %s started.", runtime.jarVersion)
   }
 
   def shutdown() {
@@ -179,6 +178,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
 }
 
 object Kestrel {
+  val log = Logger.get(getClass.getName)
   var kestrel: Kestrel = null
   var runtime: RuntimeEnvironment = null
 
@@ -207,7 +207,10 @@ object Kestrel {
 
     Stats.addGauge("connections") { sessions.get().toDouble }
 
-    kestrel.start(runtime)
+    kestrel.runtime = runtime
+    kestrel.start()
+
+    log.info("Kestrel %s started.", runtime.jarVersion)
   }
 
   def uptime() = Time.now - startTime

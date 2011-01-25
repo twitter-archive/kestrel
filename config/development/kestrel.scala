@@ -1,3 +1,4 @@
+import com.twitter.admin.config._
 import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
 import net.lag.kestrel.config._
@@ -22,8 +23,12 @@ new KestrelConfig {
 
   admin.httpPort = 2223
 
-  admin.jsonStatsLogger = "stats"
-  admin.jsonStatsServiceName = "kestrel"
+  admin.statsNodes = new StatsConfig {
+    reporters = new JsonStatsLoggerConfig {
+      loggerName = "stats"
+      serviceName = "kestrel"
+    } :: new TimeSeriesCollectorConfig
+  }
 
   queues = new QueueBuilder {
     // keep items for no longer than a half hour, and don't accept any more if
