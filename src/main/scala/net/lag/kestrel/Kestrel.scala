@@ -23,12 +23,12 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.{immutable, mutable}
 import com.twitter.actors.{Actor, Scheduler}
 import com.twitter.actors.Actor._
+import com.twitter.admin.{RuntimeEnvironment, Service, ServiceTracker}
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.naggati.{ActorHandler, NettyMessage}
 import com.twitter.naggati.codec.MemcacheCodec
-import com.twitter.ostrich.{RuntimeEnvironment, Service, ServiceTracker}
-import com.twitter.ostrich.stats.Stats
+import com.twitter.stats.Stats
 import com.twitter.util.{Duration, Eval, Time}
 import org.jboss.netty.bootstrap.ServerBootstrap
 import org.jboss.netty.channel.{Channel, ChannelFactory, ChannelPipelineFactory, Channels}

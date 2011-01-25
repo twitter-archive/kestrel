@@ -22,10 +22,10 @@ import java.net.Socket
 import scala.collection.Map
 import scala.util.Random
 import com.twitter.actors.Scheduler
+import com.twitter.admin.RuntimeEnvironment
 import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
-import com.twitter.ostrich.RuntimeEnvironment
 import com.twitter.util.{TempFolder, Time}
 import org.specs.Specification
 import config._

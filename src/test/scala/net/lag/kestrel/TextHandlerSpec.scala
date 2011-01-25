@@ -137,7 +137,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
           one(channel).write(response.capture)
         }
         textHandler.handle(TextRequest("get", List("test"), Nil))
-        function.captured(Some(QItem(Time(0), None, "hello".getBytes, 0)))
+        function.captured(Some(QItem(Time.epoch, None, "hello".getBytes, 0)))
         new String(response.captured.data.get) mustEqual "hello"
       }
     }

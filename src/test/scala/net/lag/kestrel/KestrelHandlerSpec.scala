@@ -20,7 +20,7 @@ package net.lag.kestrel
 import java.io.{File, FileInputStream}
 import scala.util.Sorting
 import com.twitter.conversions.time._
-import com.twitter.ostrich.stats.Stats
+import com.twitter.stats.Stats
 import com.twitter.util.{TempFolder, Time}
 import org.specs.Specification
 import org.specs.matcher.Matcher

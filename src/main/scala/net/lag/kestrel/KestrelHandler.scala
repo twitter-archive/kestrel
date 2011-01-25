@@ -18,10 +18,10 @@
 package net.lag.kestrel
 
 import scala.collection.mutable
+import com.twitter.admin.BackgroundProcess
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
-import com.twitter.ostrich.BackgroundProcess
-import com.twitter.ostrich.stats.Stats
+import com.twitter.stats.Stats
 import com.twitter.util.{Duration, Time}
 
 class TooManyOpenTransactionsException extends Exception("Too many open transactions.")

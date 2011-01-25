@@ -21,7 +21,7 @@ package config
 import com.twitter.config.Config
 import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
-import com.twitter.ostrich.config.AdminServiceConfig
+import com.twitter.admin.config.AdminServiceConfig
 import com.twitter.util.{Duration, StorageUnit}
 
 case class QueueConfig(

@@ -21,11 +21,12 @@ import java.io._
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.channels.FileChannel
 import java.util.concurrent.CountDownLatch
-import com.twitter.actors.{Actor, TIMEOUT}
 import scala.collection.mutable
+import com.twitter.actors.{Actor, TIMEOUT}
 import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
+import com.twitter.stats.Stats
 import com.twitter.util.{Duration, Time}
 import config._
 
