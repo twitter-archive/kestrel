@@ -52,7 +52,6 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
   var memcacheAcceptor: Option[Channel] = None
   var textAcceptor: Option[Channel] = None
   val channelGroup = new DefaultChannelGroup("channels")
-  var runtime: RuntimeEnvironment = null
 
   private val deathSwitch = new CountDownLatch(1)
 
@@ -207,9 +206,7 @@ object Kestrel {
 
     Stats.addGauge("connections") { sessions.get().toDouble }
 
-    kestrel.runtime = runtime
     kestrel.start()
-
     log.info("Kestrel %s started.", runtime.jarVersion)
   }
 
