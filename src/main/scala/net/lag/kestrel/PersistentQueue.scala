@@ -128,6 +128,20 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     )
   }
 
+  def gauge(gaugeName: String, value: => Double) = Stats.addGauge("q/" + name + "/" + gaugeName)(value)
+
+  gauge("items", length)
+  gauge("bytes", bytes)
+  gauge("total_items", totalItems)
+  gauge("logsize", journalSize)
+//  gauge("expired_items", totalExpired)
+  gauge("mem_items", memoryLength)
+  gauge("mem_bytes", memoryBytes)
+  gauge("age_msec", currentAge.inMilliseconds)
+//  gauge("discarded")
+  gauge("waiters", waiterCount)
+  gauge("open_transactions", openTransactionCount)
+
   private final def adjustExpiry(startingTime: Time, expiry: Option[Time]): Option[Time] = {
     if (config.maxAge.isDefined) {
       val maxExpiry = startingTime + config.maxAge.get
