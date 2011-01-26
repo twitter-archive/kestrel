@@ -44,16 +44,16 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   private var queueSize: Long = 0
 
   // # of items EVER added to the queue:
-  private var _totalItems: Long = 0
-
-  // # of items that were expired by the time they were read:
-  private var _totalExpired: Long = 0
+  val totalItems = Stats.getCounter("q/" + name + "/total_items")
 
   // age of the last item read from the queue:
   private var _currentAge: Duration = 0.milliseconds
 
+  // # of items that were expired by the time they were read:
+  val totalExpired = Stats.getCounter("q/" + name + "/expired_items")
+
   // # of items thot were discarded because the queue was full:
-  private var _totalDiscarded: Long = 0
+  val totalDiscarded = Stats.getCounter("q/" + name + "/discarded")
 
   // # of items in the queue (including those not in memory)
   private var queueLength: Long = 0
@@ -78,13 +78,10 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   def openTransactionCount = synchronized { openTransactions.size }
 
   def length: Long = synchronized { queueLength }
-  def totalItems: Long = synchronized { _totalItems }
   def bytes: Long = synchronized { queueSize }
   def journalSize: Long = synchronized { journal.size }
-  def totalExpired: Long = synchronized { _totalExpired }
   def currentAge: Duration = synchronized { if (queueSize == 0) 0.milliseconds else _currentAge }
   def waiterCount: Long = synchronized { waiters.size }
-  def totalDiscarded: Long = synchronized { _totalDiscarded }
   def isClosed: Boolean = synchronized { closed || paused }
 
   // mostly for unit tests.
@@ -116,13 +113,13 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     Array(
       ("items", length.toString),
       ("bytes", bytes.toString),
-      ("total_items", totalItems.toString),
+      ("total_items", totalItems().toString),
       ("logsize", journalSize.toString),
-      ("expired_items", totalExpired.toString),
+      ("expired_items", totalExpired().toString),
       ("mem_items", memoryLength.toString),
       ("mem_bytes", memoryBytes.toString),
       ("age", currentAge.inMilliseconds.toString),
-      ("discarded", totalDiscarded.toString),
+      ("discarded", totalDiscarded().toString),
       ("waiters", waiterCount.toString),
       ("open_transactions", openTransactionCount.toString)
     )
@@ -132,13 +129,10 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
 
   gauge("items", length)
   gauge("bytes", bytes)
-  gauge("total_items", totalItems)
   gauge("logsize", journalSize)
-//  gauge("expired_items", totalExpired)
   gauge("mem_items", memoryLength)
   gauge("mem_bytes", memoryBytes)
   gauge("age_msec", currentAge.inMilliseconds)
-//  gauge("discarded")
   gauge("waiters", waiterCount)
   gauge("open_transactions", openTransactionCount)
 
@@ -177,7 +171,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     while (queueLength >= config.maxItems || queueSize >= config.maxSize.inBytes) {
       if (!config.discardOldWhenFull) return false
       _remove(false)
-      _totalDiscarded += 1
+      totalDiscarded.incr()
       if (config.keepJournal) journal.remove()
     }
 
@@ -453,7 +447,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       queue += item
       _memoryBytes += item.data.length
     }
-    _totalItems += 1
+    totalItems.incr()
     queueSize += item.data.length
     queueLength += 1
   }
@@ -490,7 +484,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     } else {
       val realExpiry = adjustExpiry(queue.front.addTime, queue.front.expiry)
       if (realExpiry.isDefined && (realExpiry.get <= Time.now)) {
-        _totalExpired += 1
+        totalExpired.incr()
         val item = queue.dequeue
         val len = item.data.length
         queueSize -= len
