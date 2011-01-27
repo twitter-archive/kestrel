@@ -150,6 +150,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
 
   override def reload() {
     try {
+      log.info("Reloading %s ...", Kestrel.runtime.configFile)
       Logger.configure(Kestrel.runtime.loggingConfigFile)
       Eval[KestrelConfig](Kestrel.runtime.configFile).reload(this)
     } catch {

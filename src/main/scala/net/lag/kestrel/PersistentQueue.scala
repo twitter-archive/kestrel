@@ -43,17 +43,20 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   // current size of all data in the queue:
   private var queueSize: Long = 0
 
-  // # of items EVER added to the queue:
-  val totalItems = Stats.getCounter("q/" + name + "/total_items")
-
   // age of the last item read from the queue:
   private var _currentAge: Duration = 0.milliseconds
 
+  // # of items EVER added to the queue:
+  val totalItems = Stats.getCounter("q/" + name + "/total_items")
+  totalItems.reset()
+
   // # of items that were expired by the time they were read:
   val totalExpired = Stats.getCounter("q/" + name + "/expired_items")
+  totalExpired.reset()
 
   // # of items thot were discarded because the queue was full:
   val totalDiscarded = Stats.getCounter("q/" + name + "/discarded")
+  totalDiscarded.reset()
 
   // # of items in the queue (including those not in memory)
   private var queueLength: Long = 0

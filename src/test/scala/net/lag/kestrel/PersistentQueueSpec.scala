@@ -74,14 +74,14 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
         q.setup
 
         q.length mustEqual 0
-        q.totalItems mustEqual 0
+        q.totalItems() mustEqual 0
         q.bytes mustEqual 0
         q.journalSize mustEqual 0
 
         q.add("hello kitty".getBytes)
 
         q.length mustEqual 1
-        q.totalItems mustEqual 1
+        q.totalItems() mustEqual 1
         q.bytes mustEqual 11
         q.journalSize mustEqual 32
         new File(folderName, "work").length mustEqual 32
@@ -89,7 +89,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
         new String(q.remove.get.data) mustEqual "hello kitty"
 
         q.length mustEqual 0
-        q.totalItems mustEqual 1
+        q.totalItems() mustEqual 1
         q.bytes mustEqual 0
         q.journalSize mustEqual 33
 
@@ -104,7 +104,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
           maxItemSize = 128.bytes
         }.apply()
         val q = new PersistentQueue("work", folderName, config)
-        q.setup
+        q.setup()
         q.length mustEqual 0
         q.add(new Array[Byte](127)) mustEqual true
         q.add(new Array[Byte](128)) mustEqual true
@@ -116,10 +116,10 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
     "flush all items" in {
       withTempFolder {
         val q = new PersistentQueue("work", folderName, new QueueBuilder().apply())
-        q.setup
+        q.setup()
 
         q.length mustEqual 0
-        q.totalItems mustEqual 0
+        q.totalItems() mustEqual 0
         q.bytes mustEqual 0
         q.journalSize mustEqual 0
 
@@ -128,7 +128,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
         q.add("gamma".getBytes)
         q.length mustEqual 3
 
-        q.flush
+        q.flush()
         q.length mustEqual 0
 
         // journal should contain exactly: one unfinished transaction, 2 items.
@@ -144,25 +144,25 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
           maxJournalSize = 64.bytes
         }.apply()
         val q = new PersistentQueue("rolling", folderName, config)
-        q.setup
+        q.setup()
 
         q.add(new Array[Byte](32))
         q.add(new Array[Byte](64))
         q.length mustEqual 2
-        q.totalItems mustEqual 2
+        q.totalItems() mustEqual 2
         q.bytes mustEqual 32 + 64
         (q.journalSize > 96) mustBe true
 
-        q.remove
+        q.remove()
         q.length mustEqual 1
-        q.totalItems mustEqual 2
+        q.totalItems() mustEqual 2
         q.bytes mustEqual 64
         (q.journalSize > 96) mustBe true
 
         // now it should rotate:
-        q.remove
+        q.remove()
         q.length mustEqual 0
-        q.totalItems mustEqual 2
+        q.totalItems() mustEqual 2
         q.bytes mustEqual 0
         (q.journalSize < 10) mustBe true
       }
@@ -174,18 +174,18 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
           maxJournalSize = 64.bytes
         }.apply()
         val q = new PersistentQueue("rolling", folderName, config)
-        q.setup
+        q.setup()
 
         q.add(new Array[Byte](32))
         q.add(new Array[Byte](64))
         q.length mustEqual 2
-        q.totalItems mustEqual 2
+        q.totalItems() mustEqual 2
         q.bytes mustEqual 32 + 64
         (q.journalSize > 96) mustBe true
 
-        q.remove
+        q.remove()
         q.length mustEqual 1
-        q.totalItems mustEqual 2
+        q.totalItems() mustEqual 2
         q.bytes mustEqual 64
         (q.journalSize > 96) mustBe true
 
@@ -193,7 +193,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
         q.remove(true)
         q.length mustEqual 0
         q.openTransactionCount mustEqual 1
-        q.totalItems mustEqual 2
+        q.totalItems() mustEqual 2
         q.bytes mustEqual 0
         (q.journalSize < 96) mustBe true
       }
