@@ -39,4 +39,8 @@ class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) wit
   lazy val flood = task { args =>
     runTask(Some("net.lag.kestrel.load.Flood"), testClasspath, args).dependsOn(testCompile)
   }
+
+  lazy val packing = task { args =>
+    runTask(Some("net.lag.kestrel.load.JournalPacking"), testClasspath, args).dependsOn(testCompile)
+  }
 }
