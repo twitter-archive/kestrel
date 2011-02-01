@@ -11,7 +11,7 @@ new KestrelConfig {
 
   queuePath = "/var/spool/kestrel"
 
-  clientTimeout = 30.seconds
+  clientTimeout = None
 
   expirationTimerFrequency = 1.second
 
@@ -42,31 +42,23 @@ new KestrelConfig {
     // remaining contents will be lost.
     name = "transient_events"
     keepJournal = false
-  } :: new QueueBuilder {
-    name = "jobs_pending"
-    expireToQueue = "jobs_ready"
-    maxAge = 30.seconds
-  } :: new QueueBuilder {
-    name = "jobs_ready"
-    syncJournal = true
-  } :: new QueueBuilder {
-    name = "spam"
-    multifileJournal = true
   }
 
   loggers = new LoggerConfig {
     level = Level.INFO
     handlers = new FileHandlerConfig {
       filename = "/var/log/kestrel/kestrel.log"
-      roll = Policy.Never
+      roll = Policy.SigHup
     }
   } :: new LoggerConfig {
     node = "stats"
     level = Level.INFO
     useParents = false
-    handlers = new FileHandlerConfig {
-      filename = "/var/log/kestrel/stats.log"
-      roll = Policy.Never
+    handlers = new ScribeHandlerConfig {
+      hostname = "localhost"
+      category = "cuckoo_json"
+      maxMessagesPerTransaction = 100
+      formatter = BareFormatterConfig
     }
   }
 }

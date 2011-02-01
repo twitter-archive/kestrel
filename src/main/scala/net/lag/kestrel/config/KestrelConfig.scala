@@ -23,6 +23,8 @@ import com.twitter.admin.config._
 import com.twitter.config.Config
 import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
+import com.twitter.logging.Logger
+import com.twitter.logging.config._
 import com.twitter.util.{Duration, StorageUnit}
 
 case class QueueConfig(
@@ -134,7 +136,13 @@ trait KestrelConfig extends Config[RuntimeEnvironment => Kestrel] {
    */
   val admin = new AdminServiceConfig()
 
+  /**
+   * Logging config (optional).
+   */
+  var loggers: List[LoggerConfig] = Nil
+
   def apply() = { (runtime: RuntimeEnvironment) =>
+    Logger.configure(loggers)
     admin()(runtime)
     val kestrel = new Kestrel(default(), queues, listenAddress, memcacheListenPort, textListenPort,
                               queuePath, protocol, expirationTimerFrequency, clientTimeout,

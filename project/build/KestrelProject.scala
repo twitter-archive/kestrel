@@ -35,6 +35,7 @@ class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) wit
   override def fork = forkRun
   lazy val putMany = runTask(Some("net.lag.kestrel.load.PutMany"), testClasspath, "100", "10000", "1024").dependsOn(testCompile) describedAs "Run a load test."
   lazy val manyClients = runTask(Some("net.lag.kestrel.load.ManyClients"), testClasspath).dependsOn(testCompile)
+
   lazy val flood = task { args =>
     runTask(Some("net.lag.kestrel.load.Flood"), testClasspath, args).dependsOn(testCompile)
   }
