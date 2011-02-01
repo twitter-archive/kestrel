@@ -149,10 +149,14 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   }
 
   final def rollJournal() {
-    if (config.keepJournal && !config.multifileJournal) {
+    if (config.keepJournal) {
+      log.info("Rolling journal file for '%s' (qsize=%d)", name, queueSize)
       synchronized {
-        log.info("Rolling journal file for '%s' (qsize=%d)", name, queueSize)
-        journal.roll(xidCounter, openTransactionIds map { openTransactions(_) }, queue)
+        if (config.multifileJournal) {
+          journal.rotate()
+        } else {
+          journal.roll(xidCounter, openTransactionIds map { openTransactions(_) }, queue)
+        }
       }
     }
   }
