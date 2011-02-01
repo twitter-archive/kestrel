@@ -144,10 +144,6 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
     log.info("Goodbye.")
   }
 
-  def quiesce() {
-    shutdown()
-  }
-
   override def reload() {
     try {
       log.info("Reloading %s ...", Kestrel.runtime.configFile)
@@ -182,7 +178,6 @@ object Kestrel {
   var kestrel: Kestrel = null
   var runtime: RuntimeEnvironment = null
 
-  private val _expiryStats = new mutable.HashMap[String, Int]
   private val startTime = Time.now
 
   // voodoo?
@@ -194,16 +189,7 @@ object Kestrel {
 
   def main(args: Array[String]): Unit = {
     runtime = RuntimeEnvironment(this, args)
-    try {
-      Logger.configure(runtime.loggingConfigFile)
-      kestrel = Eval[KestrelConfig](runtime.configFile)()
-    } catch {
-      case e: Eval.CompilerException =>
-        Logger.get("").fatal(e, "Error in config: %s", e)
-        Logger.get("").fatal(e.messages.flatten.mkString("\n"))
-        System.exit(1)
-    }
-    ServiceTracker.register(kestrel)
+    kestrel = runtime.loadRuntimeConfig[Kestrel]()
 
     Stats.addGauge("connections") { sessions.get().toDouble }
 

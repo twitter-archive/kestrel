@@ -18,10 +18,11 @@
 package net.lag.kestrel
 package config
 
+import com.twitter.admin.{RuntimeEnvironment, ServiceTracker}
+import com.twitter.admin.config._
 import com.twitter.config.Config
 import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
-import com.twitter.admin.config._
 import com.twitter.util.{Duration, StorageUnit}
 
 case class QueueConfig(
@@ -77,7 +78,7 @@ object Protocol {
   case object Binary extends Protocol
 }
 
-trait KestrelConfig extends Config[Kestrel] {
+trait KestrelConfig extends Config[RuntimeEnvironment => Kestrel] {
   /**
    * Settings for a queue that isn't explicitly listed in `queues`.
    */
@@ -133,10 +134,13 @@ trait KestrelConfig extends Config[Kestrel] {
    */
   val admin = new AdminServiceConfig()
 
-  def apply(): Kestrel = {
-    admin()(Kestrel.runtime)
-    new Kestrel(default(), queues, listenAddress, memcacheListenPort, textListenPort, queuePath,
-                protocol, expirationTimerFrequency, clientTimeout, maxOpenTransactions)
+  def apply() = { (runtime: RuntimeEnvironment) =>
+    admin()(runtime)
+    val kestrel = new Kestrel(default(), queues, listenAddress, memcacheListenPort, textListenPort,
+                              queuePath, protocol, expirationTimerFrequency, clientTimeout,
+                              maxOpenTransactions)
+    ServiceTracker.register(kestrel)
+    kestrel
   }
 
   def reload(kestrel: Kestrel) {
