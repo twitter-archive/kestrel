@@ -205,6 +205,21 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
           new String(qc.receive("jobs").get) mustEqual "job2"
         }
       }
+
+      "pass through fanout-only master" in {
+        withTempFolder {
+          new File(folderName + "/jobs+client1").createNewFile()
+          val jobConfig = new QueueBuilder() {
+            name = "jobs"
+            fanoutOnly = true
+          }
+          qc = new QueueCollection(folderName, config, List(jobConfig))
+          qc.loadQueues()
+          qc.add("jobs", "job1".getBytes)
+          qc.receive("jobs") mustEqual None
+          new String(qc.receive("jobs+client1").get) mustEqual "job1"
+        }
+      }
     }
 
     "expire items when (and only when) they are expired" in {

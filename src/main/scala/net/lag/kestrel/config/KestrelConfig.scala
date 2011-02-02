@@ -40,14 +40,15 @@ case class QueueConfig(
   syncJournal: Boolean,
   multifileJournal: Boolean,
   expireToQueue: Option[String],
-  maxExpireSweep: Int
+  maxExpireSweep: Int,
+  fanoutOnly: Boolean
 ) {
   override def toString() = {
     ("maxItems=%d maxSize=%s maxItemSize=%s maxAge=%s maxJournalSize=%s maxMemorySize=%s " +
      "maxJournalOverflow=%d discardOldWhenFull=%s keepJournal=%s syncJournal=%s " +
-     "mutlifileJournal=%s expireToQueue=%s maxExpireSweep=%d").format(maxItems, maxSize,
+     "mutlifileJournal=%s expireToQueue=%s maxExpireSweep=%d fanoutOnly=%s").format(maxItems, maxSize,
      maxItemSize, maxAge, maxJournalSize, maxMemorySize, maxJournalOverflow, discardOldWhenFull,
-     keepJournal, syncJournal, multifileJournal, expireToQueue, maxExpireSweep)
+     keepJournal, syncJournal, multifileJournal, expireToQueue, maxExpireSweep, fanoutOnly)
   }
 }
 
@@ -66,11 +67,12 @@ class QueueBuilder extends Config[QueueConfig] {
   var multifileJournal: Boolean = false
   var expireToQueue: Option[String] = None
   var maxExpireSweep: Int = Int.MaxValue
+  var fanoutOnly: Boolean = false
 
   def apply() = {
     QueueConfig(maxItems, maxSize, maxItemSize, maxAge, maxJournalSize, maxMemorySize,
                 maxJournalOverflow, discardOldWhenFull, keepJournal, syncJournal, multifileJournal,
-                expireToQueue, maxExpireSweep)
+                expireToQueue, maxExpireSweep, fanoutOnly)
   }
 }
 

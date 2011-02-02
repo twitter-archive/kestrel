@@ -40,6 +40,8 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
 
   private val log = Logger.get(getClass.getName)
 
+  private val isFanout = (name contains '+')
+
   // current size of all data in the queue:
   private var queueSize: Long = 0
 
@@ -132,7 +134,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
 
   gauge("items", length)
   gauge("bytes", bytes)
-  gauge("logsize", journalSize)
+  gauge("journal_size", journal.totalSize)
   gauge("mem_items", memoryLength)
   gauge("mem_bytes", memoryBytes)
   gauge("age_msec", currentAge.inMilliseconds)
@@ -175,6 +177,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
    */
   def add(value: Array[Byte], expiry: Option[Time]): Boolean = synchronized {
     if (closed || value.size > config.maxItemSize.inBytes) return false
+    if (config.fanoutOnly && !isFanout) return true
     while (queueLength >= config.maxItems || queueSize >= config.maxSize.inBytes) {
       if (!config.discardOldWhenFull) return false
       _remove(false)

@@ -79,6 +79,12 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
     open(queueFile)
   }
 
+  def totalSize: Long = {
+    (queueFile :: Journal.orderedFilesForQueue(new File(queuePath), queueName).map {
+      new File(queuePath, _)
+    }).foldLeft(0L) { (sum, f) => sum + f.length() }
+  }
+
   def roll(xid: Int, openItems: Seq[QItem], queue: Iterable[QItem]) {
     writer.close
     val tmpFile = new File(queuePath, queueName + "~~" + Time.now.inMilliseconds)
