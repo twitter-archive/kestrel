@@ -1,7 +1,8 @@
 import sbt._
 import com.twitter.sbt._
 
-class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) with SubversionPublisher with DefaultRepos {
+class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info)
+with SubversionPublisher with DefaultRepos with gh.Issues {
   val ostrich = "com.twitter" % "ostrich" % "3.0.3"
   val naggati = "com.twitter" % "naggati" % "2.0.0-SNAPSHOT"
 
@@ -30,6 +31,9 @@ class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) wit
   override def releaseBuild = true
 
   override def subversionRepository = Some("http://svn.local.twitter.com/maven-public")
+
+  def ghCredentials = gh.LocalGhCreds(log)
+  def ghRepository = ("robey", "kestrel")
 
   // 100 times: 10,000 items of 1024 bytes each.
   override def fork = forkRun
