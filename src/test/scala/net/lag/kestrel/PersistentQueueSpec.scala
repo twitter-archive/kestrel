@@ -234,7 +234,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
           q.setup()
           q.add("sunny".getBytes) mustEqual true
           q.length mustEqual 1
-          time.advance(3.seconds)
+          time.advance(4.seconds)
           q.remove mustEqual None
 
           q.config = new QueueBuilder {
@@ -666,45 +666,54 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
   }
 
   "PersistentQueue with item expiry" should {
-    doBefore {
-      Time.freeze
-    }
-
     "expire items into the ether" in {
       withTempFolder {
-        val q = makeQueue("wu_tang", "journal" -> "false")
-        val expiry = Time.now + 1.second
-        q.add("rza".getBytes, expiry.inMillis) mustEqual true
-        q.add("gza".getBytes, expiry.inMillis) mustEqual true
-        q.add("ol dirty bastard".getBytes, expiry.inMillis) mustEqual true
-        q.add("raekwon".getBytes) mustEqual true
-        Time.advance(2.seconds)
-        q.discardExpired(q.length.toInt) mustEqual 3
-        q.length mustEqual 1
-        q.remove must beSomeQItem("raekwon")
+        Time.withCurrentTimeFrozen { time =>
+          val config = new QueueBuilder {
+            keepJournal = false
+          }.apply()
+          val q = new PersistentQueue("wu_tang", folderName, config)
+          q.setup()
+          val expiry = Time.now + 1.second
+          q.add("rza".getBytes, Some(expiry)) mustEqual true
+          q.add("gza".getBytes, Some(expiry)) mustEqual true
+          q.add("ol dirty bastard".getBytes, Some(expiry)) mustEqual true
+          q.add("raekwon".getBytes) mustEqual true
+          time.advance(2.seconds)
+          q.discardExpired(q.length.toInt) mustEqual 3
+          q.length mustEqual 1
+          q.remove must beSomeQItem("raekwon")
+        }
       }
     }
 
     "expire items into a queue" in {
       withTempFolder {
-        val r = makeQueue("rappers", "journal" -> "false")
-        val q = makeQueue("wu_tang", "journal" -> "false")
-        q.expiredQueue.set(Some(Some(r))) // :(
-        val expiry = Time.now + 1.second
+        Time.withCurrentTimeFrozen { time =>
+          val config = new QueueBuilder {
+            keepJournal = false
+          }.apply()
+          val r = new PersistentQueue("rappers", folderName, config)
+          val q = new PersistentQueue("wu_tang", folderName, config)
+          r.setup()
+          q.setup()
+          q.expireQueue = Some(r)
+          val expiry = Time.now + 1.second
 
-        q.add("method man".getBytes, expiry.inMillis) mustEqual true
-        q.add("ghostface killah".getBytes, expiry.inMillis) mustEqual true
-        q.add("u-god".getBytes, expiry.inMillis) mustEqual true
-        q.add("masta killa".getBytes) mustEqual true
-        Time.advance(2.seconds)
-        q.discardExpired(q.length.toInt) mustEqual 3
-        q.length mustEqual 1
-        q.remove must beSomeQItem("masta killa")
+          q.add("method man".getBytes, Some(expiry)) mustEqual true
+          q.add("ghostface killah".getBytes, Some(expiry)) mustEqual true
+          q.add("u-god".getBytes, Some(expiry)) mustEqual true
+          q.add("masta killa".getBytes) mustEqual true
+          time.advance(2.seconds)
+          q.discardExpired(q.length.toInt) mustEqual 3
+          q.length mustEqual 1
+          q.remove must beSomeQItem("masta killa")
 
-        r.length mustEqual 3
-        r.remove must beSomeQItem("method man")
-        r.remove must beSomeQItem("ghostface killah")
-        r.remove must beSomeQItem("u-god")
+          r.length mustEqual 3
+          r.remove must beSomeQItem("method man")
+          r.remove must beSomeQItem("ghostface killah")
+          r.remove must beSomeQItem("u-god")
+        }
       }
     }
   }

@@ -20,7 +20,7 @@ package net.lag.kestrel
 import java.nio.{ByteBuffer, ByteOrder}
 import com.twitter.util.Time
 
-case class QItem(addTime: Long, expiry: Option[Time], data: Array[Byte], var xid: Int) {
+case class QItem(addTime: Time, expiry: Option[Time], data: Array[Byte], var xid: Int) {
   def pack(opcode: Byte, withXid: Boolean): ByteBuffer = {
     val headerSize = if (withXid) 9 else 5
     val buffer = ByteBuffer.allocate(data.length + 16 + headerSize)

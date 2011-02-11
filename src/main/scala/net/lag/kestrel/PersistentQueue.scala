@@ -96,7 +96,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
 
   if (!config.keepJournal) journal.erase()
 
-  val expireQueue = config.expireToQueue.flatMap { name => queueLookup.flatMap(_(name)) }
+  @volatile var expireQueue: Option[PersistentQueue] = config.expireToQueue.flatMap { name => queueLookup.flatMap(_(name)) }
 
   // FIXME
   def dumpConfig(): Array[String] = synchronized {
@@ -497,15 +497,15 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
           continue = false
         } else {
           val realExpiry = adjustExpiry(queue.front.addTime, queue.front.expiry)
-          if ((realExpiry != 0) && (realExpiry < Time.now.inMilliseconds)) {
-            _totalExpired += 1
+          if (realExpiry.isDefined && realExpiry.get < Time.now) {
+            totalExpired.incr()
             val item = queue.dequeue
             val len = item.data.length
             queueSize -= len
             _memoryBytes -= len
             queueLength -= 1
             fillReadBehind
-            if (keepJournal()) journal.remove()
+            if (config.keepJournal) journal.remove()
             toRemove += item
           } else {
             continue = false
@@ -515,8 +515,8 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       toRemove
     }
 
-    expiredQueue().foreach { q =>
-      itemsToRemove.foreach { item => q.add(item.data, 0) }
+    expireQueue.foreach { q =>
+      itemsToRemove.foreach { item => q.add(item.data, None) }
     }
     itemsToRemove.size
   }
