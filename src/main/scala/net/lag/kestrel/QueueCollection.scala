@@ -114,7 +114,7 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
         val normalizedExpiry: Long = if (expiry == 0) {
           0
         } else if (expiry < 1000000) {
-          now + expiry
+          now + (expiry * 1000)
         } else {
           expiry
         }
