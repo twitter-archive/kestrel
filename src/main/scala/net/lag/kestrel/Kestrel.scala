@@ -21,8 +21,6 @@ import java.net.InetSocketAddress
 import java.util.concurrent.{CountDownLatch, Executors, ExecutorService, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.{immutable, mutable}
-import com.twitter.actors.{Actor, Scheduler}
-import com.twitter.actors.Actor._
 import com.twitter.admin.{RuntimeEnvironment, Service, ServiceTracker}
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
@@ -81,10 +79,8 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
           case Protocol.Ascii => MemcacheCodec.asciiCodec
           case Protocol.Binary => throw new Exception("Binary protocol not supported yet.")
         }
-        val actorHandler = new ActorHandler(filter, { channel =>
-          new MemcacheHandler(channel, channelGroup, queueCollection, maxOpenTransactions, clientTimeout)
-        })
-        Channels.pipeline(protocolCodec, actorHandler)
+        val handler = new MemcacheHandler(channelGroup, queueCollection, maxOpenTransactions, clientTimeout)
+        Channels.pipeline(protocolCodec, handler)
       }
     }
     memcacheAcceptor = memcacheListenPort.map { port =>
@@ -95,10 +91,8 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
     val textPipelineFactory = new ChannelPipelineFactory() {
       def getPipeline() = {
         val protocolCodec = TextCodec.decoder
-        val actorHandler = new ActorHandler(filter, { channel =>
-          new TextHandler(channel, channelGroup, queueCollection, maxOpenTransactions, clientTimeout)
-        })
-        Channels.pipeline(protocolCodec, actorHandler)
+        val handler = new TextHandler(channelGroup, queueCollection, maxOpenTransactions, clientTimeout)
+        Channels.pipeline(protocolCodec, handler)
       }
     }
     textAcceptor = textListenPort.map { port =>
@@ -120,10 +114,6 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
       }
       expirationTask.run(null)
     }
-
-    actor {
-      deathSwitch.await()
-    }
   }
 
   def shutdown() {
@@ -140,7 +130,6 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
     executor.awaitTermination(5, TimeUnit.SECONDS)
     timer.stop()
     timer = null
-    Scheduler.shutdown
     log.info("Goodbye.")
   }
 
@@ -179,9 +168,6 @@ object Kestrel {
   var runtime: RuntimeEnvironment = null
 
   private val startTime = Time.now
-
-  // voodoo?
-  @volatile var scheduler = Scheduler.impl
 
   // track concurrent sessions
   val sessions = new AtomicInteger()

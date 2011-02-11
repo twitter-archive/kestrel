@@ -21,7 +21,7 @@ import com.twitter.conversions.time._
 import com.twitter.naggati.test.TestCodec
 import com.twitter.util.Time
 import org.jboss.netty.buffer.ChannelBuffers
-import org.jboss.netty.channel.Channel
+import org.jboss.netty.channel._
 import org.jboss.netty.channel.group.ChannelGroup
 import org.specs.Specification
 import org.specs.mock.{JMocker, ClassMocker}
@@ -95,7 +95,8 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
         one(channelGroup).add(channel)
       }
 
-      val textHandler = new TextHandler(channel, channelGroup, queueCollection, 10, None)
+      val textHandler = new TextHandler(channelGroup, queueCollection, 10, None)
+      textHandler.handleUpstream(null, new UpstreamChannelStateEvent(channel, ChannelState.OPEN, true))
 
       "closes transactions" in {
         expect {
@@ -152,7 +153,8 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
         one(channel).write(CountResponse(1))
       }
 
-      val textHandler = new TextHandler(channel, channelGroup, queueCollection, 10, None)
+      val textHandler = new TextHandler(channelGroup, queueCollection, 10, None)
+      textHandler.handleUpstream(null, new UpstreamChannelStateEvent(channel, ChannelState.OPEN, true))
       textHandler.handle(TextRequest("put", List("test"), List("hello".getBytes)))
       new String(bytes.captured) mustEqual "hello"
     }

@@ -93,12 +93,11 @@ case class CountResponse(count: Long) extends TextResponse {
  * Simple text-line protocol handler for a kestrel connection.
  */
 class TextHandler(
-  channel: Channel,
   channelGroup: ChannelGroup,
   queueCollection: QueueCollection,
   maxOpenTransactions: Int,
   clientTimeout: Option[Duration])
-extends NettyHandler[TextRequest](channel, channelGroup, queueCollection, maxOpenTransactions, clientTimeout) {
+extends NettyHandler[TextRequest](channelGroup, queueCollection, maxOpenTransactions, clientTimeout) {
   final def handle(request: TextRequest) = {
     request.command match {
       case "put" =>
