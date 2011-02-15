@@ -154,6 +154,7 @@ trait KestrelConfig extends Config[RuntimeEnvironment => Kestrel] {
   }
 
   def reload(kestrel: Kestrel) {
+    Logger.configure(loggers)
     // only the queue configs can be changed.
     kestrel.reload(default(), queues)
   }
