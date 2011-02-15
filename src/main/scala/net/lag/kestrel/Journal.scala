@@ -20,7 +20,9 @@ package net.lag.kestrel
 import java.io._
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.channels.FileChannel
+import java.util.concurrent.Semaphore
 import com.twitter.actors.Actor._
+import com.twitter.admin.BackgroundProcess
 import com.twitter.logging.Logger
 import com.twitter.util.Time
 
@@ -376,18 +378,16 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
     if (readerFilename == Some(queueName)) {
       readerFilename = Some(rotatedFile)
     }
-    packer ! "pack"
+    packerSemaphore.release()
   }
 
-  val packer = actor {
-    loop {
-      react {
-        case "pack" =>
-          pack()
-      }
+  val packerSemaphore = new Semaphore(0)
+  val packer = BackgroundProcess.spawnDaemon("pack:" + queueName) {
+    while (true) {
+      packerSemaphore.acquire()
+      pack()
     }
   }
-  packer.start()
 
   private def pack() {
     val filenames = Journal.journalsBefore(new File(queuePath), queueName, readerFilename.getOrElse(queueName))

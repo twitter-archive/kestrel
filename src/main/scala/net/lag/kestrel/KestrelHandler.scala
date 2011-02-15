@@ -18,7 +18,7 @@
 package net.lag.kestrel
 
 import scala.collection.mutable
-import com.twitter.admin.BackgroundProcess
+import com.twitter.admin.{BackgroundProcess, ServiceTracker}
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.stats.Stats
@@ -213,7 +213,7 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
   protected def shutdown() = {
     BackgroundProcess {
       Thread.sleep(100)
-      Kestrel.kestrel.shutdown()
+      ServiceTracker.shutdown()
     }
   }
 }
