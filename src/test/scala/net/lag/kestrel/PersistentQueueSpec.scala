@@ -38,16 +38,19 @@ class FakeTimer extends Timer {
 
   var deadline: Time = Time.epoch
   var repeat: Option[Duration] = None
+  var timeout: () => Unit = { () => }
 
   def schedule(when: Time)(f: => Unit): TimerTask = {
     deadline = when
     repeat = None
+    timeout = { () => f }
     timerTask
   }
 
   def schedule(when: Time, period: Duration)(f: => Unit): TimerTask = {
     deadline = when
     repeat = Some(period)
+    timeout = { () => f }
     timerTask
   }
 
@@ -442,24 +445,48 @@ class PersistentQueueSpec extends Specification with JMocker with ClassMocker wi
     }
 
     "handle timeout reads" in {
-      withTempFolder {
-        val config1 = new QueueBuilder {
-          maxMemorySize = 1.kilobyte
-        }.apply()
-        val q = new PersistentQueue("things", folderName, config1, timer)
-        q.setup
+      "success" in {
+        withTempFolder {
+          val config1 = new QueueBuilder {
+            maxMemorySize = 1.kilobyte
+          }.apply()
+          val q = new PersistentQueue("things", folderName, config1, timer)
+          q.setup
 
-        var rv: String = null
+          var rv: Option[String] = None
 
-        val deadline = 250.milliseconds.fromNow
-        q.waitRemove(Some(deadline), false) { item =>
-          rv = new String(item.get.data)
+          val deadline = 250.milliseconds.fromNow
+          q.waitRemove(Some(deadline), false) { item =>
+            rv = item.map { x => new String(x.data) }
+          }
+          timer.deadline mustEqual deadline
+
+          rv mustEqual None
+          q.add("hello".getBytes)
+          rv mustEqual Some("hello")
         }
-        timer.deadline mustEqual deadline
+      }
 
-        rv mustBe null
-        q.add("hello".getBytes)
-        rv mustEqual "hello"
+      "timeout" in {
+        withTempFolder {
+          val config1 = new QueueBuilder {
+            maxMemorySize = 1.kilobyte
+          }.apply()
+          val q = new PersistentQueue("things", folderName, config1, timer)
+          q.setup
+
+          var rv: Option[String] = Some("foo")
+
+          val deadline = 250.milliseconds.fromNow
+          q.waitRemove(Some(deadline), false) { item =>
+            rv = item.map { x => new String(x.data) }
+          }
+          timer.deadline mustEqual deadline
+
+          rv mustEqual Some("foo")
+          timer.timeout()
+          rv mustEqual None
+        }
       }
     }
 
