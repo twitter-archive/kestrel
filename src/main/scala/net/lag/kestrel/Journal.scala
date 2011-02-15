@@ -21,7 +21,6 @@ import java.io._
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.channels.FileChannel
 import java.util.concurrent.Semaphore
-import com.twitter.actors.Actor._
 import com.twitter.admin.BackgroundProcess
 import com.twitter.logging.Logger
 import com.twitter.util.Time
@@ -115,6 +114,7 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
     reader.foreach { _.close }
     reader = None
     readerFilename = None
+    // FIXME: could terminate packer thread too.
   }
 
   def erase(): Unit = {
@@ -200,7 +200,7 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
             readerFilename = Journal.journalAfter(new File(queuePath), queueName, readerFilename.get)
             reader = Some(new FileInputStream(new File(queuePath, readerFilename.get)).getChannel)
             fillReadBehind(f)
-            // FIXME: send actor signal to pack queue files!
+            packerSemaphore.release()
           case (_, _) =>
         }
       }
@@ -310,18 +310,18 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
     }
   }
 
-  def walk() = new tools.PythonIterator[(JournalItem, Int)] {
-// FIXME
+  def walk(): Iterator[(JournalItem, Int)] = {
     val in = new FileInputStream(new File(queuePath, queueName)).getChannel
-    def apply() = {
+    def next(): Stream[(JournalItem, Int)] = {
       readJournalEntry(in) match {
         case (JournalItem.EndOfFile, _) =>
           in.close()
-          None
+          Stream.Empty
         case x =>
-          Some(x)
+          new Stream.Cons(x, next())
       }
     }
+    next().iterator
   }
 
   private def readBlock(in: FileChannel): Array[Byte] = {
