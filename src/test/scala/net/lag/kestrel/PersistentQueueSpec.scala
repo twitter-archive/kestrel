@@ -20,7 +20,6 @@ package net.lag.kestrel
 import java.io.{File, FileInputStream}
 import java.util.concurrent.CountDownLatch
 import scala.collection.mutable
-import com.twitter.actors.Actor.actor
 import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
 import com.twitter.util.{Duration, TempFolder, Time, Timer, TimerTask}
