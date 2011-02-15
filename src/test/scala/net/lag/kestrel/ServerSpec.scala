@@ -21,7 +21,6 @@ import java.io._
 import java.net.Socket
 import scala.collection.Map
 import scala.util.Random
-import com.twitter.actors.Scheduler
 import com.twitter.admin.RuntimeEnvironment
 import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
@@ -36,8 +35,6 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
 
   val runtime = RuntimeEnvironment(this, Array())
   Kestrel.runtime = runtime
-  // voodoo? there seems to be an initialization race in actors.
-  @volatile var scheduler = Scheduler.impl
 
   def makeServer = {
     val defaultConfig = new QueueBuilder() {

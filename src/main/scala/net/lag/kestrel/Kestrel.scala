@@ -24,7 +24,6 @@ import scala.collection.{immutable, mutable}
 import com.twitter.admin.{RuntimeEnvironment, Service, ServiceTracker}
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
-import com.twitter.naggati.{ActorHandler, NettyMessage}
 import com.twitter.naggati.codec.MemcacheCodec
 import com.twitter.stats.Stats
 import com.twitter.util.{Duration, Eval, Time, Timer => TTimer, TimerTask => TTimerTask}
@@ -79,8 +78,6 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
   var textAcceptor: Option[Channel] = None
   val channelGroup = new DefaultChannelGroup("channels")
 
-  private val deathSwitch = new CountDownLatch(1)
-
   def start() {
     log.info("Kestrel config: listenAddress=%s memcachePort=%s textPort=%s queuePath=%s " +
              "protocol=%s expirationTimerFrequency=%s clientTimeout=%s maxOpenTransactions=%d",
@@ -94,11 +91,6 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
     // netty setup:
     executor = Executors.newCachedThreadPool()
     channelFactory = new NioServerSocketChannelFactory(executor, executor)
-    val filter: NettyMessage.Filter = immutable.Set(
-      classOf[NettyMessage.MessageReceived],
-      classOf[NettyMessage.ExceptionCaught],
-      classOf[NettyMessage.ChannelIdle],
-      classOf[NettyMessage.ChannelDisconnected])
 
     val memcachePipelineFactory = new ChannelPipelineFactory() {
       def getPipeline() = {
@@ -145,7 +137,6 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
 
   def shutdown() {
     log.info("Shutting down!")
-    deathSwitch.countDown()
 
     memcacheAcceptor.foreach { _.close().awaitUninterruptibly() }
     textAcceptor.foreach { _.close().awaitUninterruptibly() }

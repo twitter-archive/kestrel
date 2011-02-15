@@ -29,7 +29,7 @@ import org.jboss.netty.channel.group.ChannelGroup
 import org.jboss.netty.handler.timeout._
 
 /**
- * Kestrel handler that uses netty/actors. Wraps up common netty/actor code so you only receive a
+ * Kestrel handler that uses netty. Wraps up common netty code so you only receive a
  * message or an exception.
  */
 abstract class NettyHandler[M](

@@ -227,8 +227,7 @@ class QueueCollection(queueFolder: String, timer: Timer,
   }
 
   /**
-   * Shutdown this queue collection. All actors are asked to exit, and
-   * any future queue requests will fail.
+   * Shutdown this queue collection. Any future queue requests will fail.
    */
   def shutdown(): Unit = synchronized {
     if (shuttingDown) {
