@@ -141,8 +141,7 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
     xids.size
   }
 
-  // will do a continuous transactional fetch on a queue until time runs out or transactions are
-  // full.
+  // will do a continuous transactional fetch on a queue until time runs out or transactions are full.
   final def monitorUntil(key: String, timeLimit: Time)(f: Option[QItem] => Unit) {
     if (timeLimit <= Time.now || pendingTransactions.size(key) >= maxOpenTransactions) {
       f(None)

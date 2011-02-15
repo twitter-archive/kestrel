@@ -27,13 +27,41 @@ import com.twitter.logging.Logger
 import com.twitter.naggati.{ActorHandler, NettyMessage}
 import com.twitter.naggati.codec.MemcacheCodec
 import com.twitter.stats.Stats
-import com.twitter.util.{Duration, Eval, Time}
+import com.twitter.util.{Duration, Eval, Time, Timer => TTimer, TimerTask => TTimerTask}
 import org.jboss.netty.bootstrap.ServerBootstrap
 import org.jboss.netty.channel.{Channel, ChannelFactory, ChannelPipelineFactory, Channels}
 import org.jboss.netty.channel.group.DefaultChannelGroup
 import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory
 import org.jboss.netty.util.{HashedWheelTimer, Timeout, Timer, TimerTask}
 import config._
+
+
+// FIXME move me!
+class NettyTimer(underlying: Timer) extends TTimer {
+  def schedule(when: Time)(f: => Unit): TTimerTask = {
+    val timeout = underlying.newTimeout(new TimerTask {
+      def run(to: Timeout) {
+        if (!to.isCancelled) f
+      }
+    }, (when - Time.now).inMilliseconds max 0, TimeUnit.MILLISECONDS)
+    toTimerTask(timeout)
+  }
+
+  def schedule(when: Time, period: Duration)(f: => Unit): TTimerTask = {
+    val task = schedule(when) {
+      f
+      schedule(when + period, period)(f)
+    }
+    task
+  }
+
+  def stop() { underlying.stop() }
+
+  private[this] def toTimerTask(task: Timeout) = new TTimerTask {
+    def cancel() { task.cancel() }
+  }
+}
+
 
 class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
               listenAddress: String, memcacheListenPort: Option[Int], textListenPort: Option[Int],
@@ -59,12 +87,11 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
              listenAddress, memcacheListenPort, textListenPort, queuePath, protocol,
              expirationTimerFrequency, clientTimeout, maxOpenTransactions)
 
-    queueCollection = new QueueCollection(queuePath, defaultQueueConfig, builders)
+    timer = new HashedWheelTimer()
+    queueCollection = new QueueCollection(queuePath, new NettyTimer(timer), defaultQueueConfig, builders)
     queueCollection.loadQueues()
-    // FIXME: reload?
 
     // netty setup:
-    timer = new HashedWheelTimer()
     executor = Executors.newCachedThreadPool()
     channelFactory = new NioServerSocketChannelFactory(executor, executor)
     val filter: NettyMessage.Filter = immutable.Set(
