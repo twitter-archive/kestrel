@@ -84,7 +84,8 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
              listenAddress, memcacheListenPort, textListenPort, queuePath, protocol,
              expirationTimerFrequency, clientTimeout, maxOpenTransactions)
 
-    timer = new HashedWheelTimer()
+    // this means no timeout will be at better granularity than 10ms.
+    timer = new HashedWheelTimer(10, TimeUnit.MILLISECONDS)
     queueCollection = new QueueCollection(queuePath, new NettyTimer(timer), defaultQueueConfig, builders)
     queueCollection.loadQueues()
 
