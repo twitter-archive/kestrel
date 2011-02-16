@@ -27,7 +27,7 @@ import org.specs.Specification
 import org.specs.matcher.Matcher
 import config._
 
-class PersistentQueueSpec extends Specification with TempFolder with TestLogging {
+class PersistentQueueSpec extends Specification with TempFolder with TestLogging with QueueMatchers {
   def dumpJournal(qname: String): String = {
     var rv = new mutable.ListBuffer[JournalItem]
     new Journal(new File(folderName, qname).getCanonicalPath, false).replay(qname) { item => rv += item }
@@ -44,26 +44,6 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
       case JournalItem.Unremove(xid) => "unremove(%d)".format(xid)
       case JournalItem.ConfirmRemove(xid) => "confirm-remove(%d)".format(xid)
     } mkString ", "
-  }
-
-  def beSomeQItem(s: String) = new Matcher[Option[QItem]] {
-    def apply(qitemEval: => Option[QItem]) = {
-      val qitem = qitemEval
-      (qitem.isDefined && (new String(qitem.get.data) == s), "ok", "wrong or missing queue item")
-    }
-  }
-
-  def beSomeQItem(len: Int) = new Matcher[Option[QItem]] {
-    def apply(qitemEval: => Option[QItem]) = {
-      val qitem = qitemEval
-      (qitem.isDefined && (qitem.get.data.size == len), "ok", "wrong or missing queue item")
-    }
-  }
-
-  def put(q: PersistentQueue, bytes: Int, n: Int) {
-    val data = new Array[Byte](bytes)
-    data(0) = n.toByte
-    q.add(data)
   }
 
   "PersistentQueue" should {
@@ -265,152 +245,6 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
         val q2 = new PersistentQueue("test1", folderName, config2, timer)
         q2.config.maxJournalSize mustEqual 123.bytes
         q2.config.maxMemorySize mustEqual new QueueBuilder().maxMemorySize
-      }
-    }
-
-    "drop into read-behind mode" in {
-      "on insert" in {
-        withTempFolder {
-          val config1 = new QueueBuilder {
-            maxMemorySize = 1.kilobyte
-          }.apply()
-          val q = new PersistentQueue("things", folderName, config1, timer)
-
-          q.setup
-          for (i <- 0 until 10) {
-            put(q, 128, i)
-            q.inReadBehind mustEqual (i >= 8)
-          }
-          q.inReadBehind mustBe true
-          q.length mustEqual 10
-          q.bytes mustEqual 1280
-          q.memoryLength mustEqual 8
-          q.memoryBytes mustEqual 1024
-
-          // read 1 item. queue should pro-actively read the next item in from disk.
-          val d0 = q.remove.get.data
-          d0(0) mustEqual 0
-          q.inReadBehind mustBe true
-          q.length mustEqual 9
-          q.bytes mustEqual 1152
-          q.memoryLength mustEqual 8
-          q.memoryBytes mustEqual 1024
-
-          // adding a new item should be ok
-          put(q, 128, 10)
-          q.inReadBehind mustBe true
-          q.length mustEqual 10
-          q.bytes mustEqual 1280
-          q.memoryLength mustEqual 8
-          q.memoryBytes mustEqual 1024
-
-          // read again.
-          val d1 = q.remove.get.data
-          d1(0) mustEqual 1
-          q.inReadBehind mustBe true
-          q.length mustEqual 9
-          q.bytes mustEqual 1152
-          q.memoryLength mustEqual 8
-          q.memoryBytes mustEqual 1024
-
-          // and again.
-          val d2 = q.remove.get.data
-          d2(0) mustEqual 2
-          q.inReadBehind mustBe true
-          q.length mustEqual 8
-          q.bytes mustEqual 1024
-          q.memoryLength mustEqual 8
-          q.memoryBytes mustEqual 1024
-
-          for (i <- 3 until 11) {
-            val d = q.remove.get.data
-            d(0) mustEqual i
-            q.inReadBehind mustBe false
-            q.length mustEqual 10 - i
-            q.bytes mustEqual 128 * (10 - i)
-            q.memoryLength mustEqual 10 - i
-            q.memoryBytes mustEqual 128 * (10 - i)
-          }
-        }
-      }
-
-      "on startup" in {
-        withTempFolder {
-          val config = new QueueBuilder {
-            maxMemorySize = 1.kilobyte
-          }.apply()
-          val q = new PersistentQueue("things", folderName, config, timer)
-
-          q.setup
-          for (i <- 0 until 10) {
-            put(q, 128, i)
-            q.inReadBehind mustEqual (i >= 8)
-          }
-          q.inReadBehind mustBe true
-          q.length mustEqual 10
-          q.bytes mustEqual 1280
-          q.memoryLength mustEqual 8
-          q.memoryBytes mustEqual 1024
-          q.close
-
-          val q2 = new PersistentQueue("things", folderName, config, timer)
-          q2.setup
-
-          q2.inReadBehind mustBe true
-          q2.length mustEqual 10
-          q2.bytes mustEqual 1280
-          q2.memoryLength mustEqual 8
-          q2.memoryBytes mustEqual 1024
-
-          for (i <- 0 until 10) {
-            val d = q2.remove.get.data
-            d(0) mustEqual i
-            q2.inReadBehind mustEqual (i < 2)
-            q2.length mustEqual 9 - i
-            q2.bytes mustEqual 128 * (9 - i)
-            q2.memoryLength mustEqual (if (i < 2) 8 else 9 - i)
-            q2.memoryBytes mustEqual (if (i < 2) 1024 else 128 * (9 - i))
-          }
-        }
-      }
-
-      "during journal processing, then return to ordinary times" in {
-        withTempFolder {
-          val config = new QueueBuilder {
-            maxMemorySize = 1.kilobyte
-          }.apply()
-          val q = new PersistentQueue("things", folderName, config, timer)
-
-          q.setup
-          for (i <- 0 until 10) {
-            val data = new Array[Byte](128)
-            data(0) = i.toByte
-            q.add(data)
-            q.inReadBehind mustEqual (i >= 8)
-          }
-          q.inReadBehind mustBe true
-          q.length mustEqual 10
-          q.bytes mustEqual 1280
-          q.memoryLength mustEqual 8
-          q.memoryBytes mustEqual 1024
-          for (i <- 0 until 10) {
-            q.remove
-          }
-          q.inReadBehind mustBe false
-          q.length mustEqual 0
-          q.bytes mustEqual 0
-          q.memoryLength mustEqual 0
-          q.memoryBytes mustEqual 0
-          q.close
-
-          val q2 = new PersistentQueue("things", folderName, config, timer)
-          q2.setup
-          q2.inReadBehind mustBe false
-          q2.length mustEqual 0
-          q2.bytes mustEqual 0
-          q2.memoryLength mustEqual 0
-          q2.memoryBytes mustEqual 0
-        }
       }
     }
 
