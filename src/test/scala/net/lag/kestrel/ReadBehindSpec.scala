@@ -50,8 +50,7 @@ class ReadBehindSpec extends Specification with TempFolder with TestLogging with
         q.memoryBytes mustEqual 1024
 
         // read 1 item. queue should pro-actively read the next item in from disk.
-        val d0 = q.remove.get.data
-        d0(0) mustEqual 0
+        q.remove() must beSomeQItem(128, 0)
         q.inReadBehind mustBe true
         q.length mustEqual 9
         q.bytes mustEqual 1152
@@ -67,8 +66,7 @@ class ReadBehindSpec extends Specification with TempFolder with TestLogging with
         q.memoryBytes mustEqual 1024
 
         // read again.
-        val d1 = q.remove.get.data
-        d1(0) mustEqual 1
+        q.remove() must beSomeQItem(128, 1)
         q.inReadBehind mustBe true
         q.length mustEqual 9
         q.bytes mustEqual 1152
@@ -76,8 +74,7 @@ class ReadBehindSpec extends Specification with TempFolder with TestLogging with
         q.memoryBytes mustEqual 1024
 
         // and again.
-        val d2 = q.remove.get.data
-        d2(0) mustEqual 2
+        q.remove() must beSomeQItem(128, 2)
         q.inReadBehind mustBe true
         q.length mustEqual 8
         q.bytes mustEqual 1024
@@ -85,8 +82,7 @@ class ReadBehindSpec extends Specification with TempFolder with TestLogging with
         q.memoryBytes mustEqual 1024
 
         for (i <- 3 until 11) {
-          val d = q.remove.get.data
-          d(0) mustEqual i
+          q.remove() must beSomeQItem(128, i)
           q.inReadBehind mustBe false
           q.length mustEqual 10 - i
           q.bytes mustEqual 128 * (10 - i)
@@ -199,12 +195,13 @@ class ReadBehindSpec extends Specification with TempFolder with TestLogging with
           q.remove() must beSomeQItem(128, i)
         }
         q.inReadBehind mustBe false
-        q.close
+        q.close()
 
         val q2 = new PersistentQueue("things", folderName, config, timer)
         q2.setup
         q2.inReadBehind mustBe false
         q2.length mustEqual 0
+        q2.close()
       }
     }
   }

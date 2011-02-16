@@ -190,7 +190,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
           rollJournal()
         }
         if (queueSize >= config.maxMemorySize.inBytes) {
-          log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
+          log.info("Dropping to read-behind for queue '%s' (%s)", name, queueSize.bytes.toHuman)
           journal.startReadBehind
         }
       }
