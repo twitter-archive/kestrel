@@ -45,7 +45,6 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
     }
 
     def pop(name: String): Option[Int] = synchronized {
-      // i admit to being a bit boggled that scala Queue doesn't have a pop() method.
       val rv = transactions(name).headOption
       rv.foreach { x => transactions(name).remove(0) }
       rv
