@@ -206,9 +206,10 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
             f(item)
           case (JournalItem.EndOfFile, _) =>
             // move to next file and try again.
+            val oldFilename = readerFilename.get
             readerFilename = Journal.journalAfter(new File(queuePath), queueName, readerFilename.get)
             reader = Some(new FileInputStream(new File(queuePath, readerFilename.get)).getChannel)
-            log.debug("Read-behind on '%s' moving to file %s", queueName, readerFilename.get)
+            log.debug("Read-behind on '%s' moving from file %s to %s", queueName, oldFilename, readerFilename.get)
             fillReadBehind(f)
             packerSemaphore.release()
           case (_, _) =>

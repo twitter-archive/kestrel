@@ -168,6 +168,27 @@ class ReadBehindSpec extends Specification with TempFolder with TestLogging with
       }
     }
 
+    "cope with read-behind on the primary journal file after it gets moved" in {
+      withTempFolder {
+        val config = new QueueBuilder {
+          maxMemorySize = 512.bytes
+          maxJournalSize = 1.kilobyte
+          multifileJournal = true
+        }.apply()
+        val q = new PersistentQueue("things", folderName, config, timer)
+
+        q.setup
+        for (i <- 0 until 10) {
+          put(q, 128, i)
+          q.inReadBehind mustEqual (i >= 4)
+        }
+        for (i <- 0 until 10) {
+          q.remove() must beSomeQItem(128, i)
+        }
+        q.close()
+      }
+    }
+
     "follow read-behind from several files back" in {
       withTempFolder {
         val config = new QueueBuilder {
