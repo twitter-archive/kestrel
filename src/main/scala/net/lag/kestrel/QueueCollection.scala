@@ -116,7 +116,7 @@ class QueueCollection(queueFolder: String, private var queueConfigs: ConfigMap) 
         } else if (expiry < 1000000) {
           now + (expiry * 1000)
         } else {
-          expiry
+          expiry * 1000L
         }
         val result = q.add(item, normalizedExpiry)
         if (result) totalAdded.incr()

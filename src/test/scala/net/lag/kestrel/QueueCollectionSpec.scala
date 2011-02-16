@@ -209,7 +209,7 @@ class QueueCollectionSpec extends Specification with TestHelper {
         qc.queue("jobs").get.length mustEqual 1
         qc.queue("expired").get.length mustEqual 0
 
-        Time.advance(1.second)
+        Time.advance(2.seconds)
         qc.queue("jobs").get.length mustEqual 1
         qc.queue("expired").get.length mustEqual 0
         qc.receive("jobs") mustEqual None
