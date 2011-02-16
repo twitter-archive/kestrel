@@ -217,7 +217,6 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
   def replayFile(name: String, filename: String)(f: JournalItem => Unit): Unit = {
     size = 0
     var lastUpdate = 0L
-    val TEN_MB = 10L * 1024 * 1024
     try {
       val in = new FileInputStream(filename).getChannel
       try {
@@ -229,9 +228,9 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
             case (x, itemsize) =>
               size += itemsize
               f(x)
-              if (size / TEN_MB > lastUpdate) {
-                lastUpdate = size / TEN_MB
-                log.info("Continuing to read '%s' journal (%s); %d MB so far...", name, filename, lastUpdate * 10)
+              if (size > lastUpdate + 10.megabytes.inBytes) {
+                log.info("Continuing to read '%s' journal (%s); %s so far...", name, filename, size.bytes.toHuman)
+                lastUpdate = size
               }
           }
         } while (!done)
