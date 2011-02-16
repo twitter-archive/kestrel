@@ -137,6 +137,23 @@ extends NettyHandler[TextRequest](channelGroup, queueCollection, maxOpenTransact
               channel.write(ErrorResponse("Too many open transactions; limit=" + maxOpenTransactions))
           }
         }
+      case "peek" =>
+        // peek <queue> [timeout]
+        if (request.args.size < 1) {
+          channel.write(ErrorResponse("Queue name required."))
+        } else {
+          val queueName = request.args(0)
+          try {
+            val timeout = request.args.drop(1).headOption.map { _.toInt.milliseconds.fromNow }
+            closeAllTransactions(queueName)
+            getItem(queueName, timeout, false, true) { item =>
+              channel.write(ItemResponse(item.map { _.data }))
+            }
+          } catch {
+            case e: NumberFormatException =>
+              channel.write(ErrorResponse("Error parsing timeout."))
+          }
+        }
       case "monitor" =>
         // monitor <queue> <timeout>
         if (request.args.size < 2) {
@@ -149,6 +166,26 @@ extends NettyHandler[TextRequest](channelGroup, queueCollection, maxOpenTransact
             channel.write(ItemResponse(item.map { _.data }))
           }
         }
+      case "confirm" =>
+        // confirm <queue> <count>
+        if (request.args.size < 2) {
+          channel.write(ErrorResponse("Queue name & timeout required."))
+        } else {
+          val queueName = request.args(0)
+          val count = request.args(1).toInt
+          if (closeTransactions(queueName, count)) {
+            channel.write(CountResponse(count))
+          } else {
+            channel.write(ErrorResponse("Not that many transactions open."))
+          }
+        }
+      case "flush" =>
+        if (request.args.size < 1) {
+          channel.write(ErrorResponse("Queue name required."))
+        } else {
+          flush(request.args(0))
+          channel.write(CountResponse(0))
+        }
       case "quit" =>
         channel.close()
       case "shutdown" =>
@@ -156,8 +193,6 @@ extends NettyHandler[TextRequest](channelGroup, queueCollection, maxOpenTransact
         channel.write(CountResponse(0))
       case x =>
         channel.write(ErrorResponse("Unknown command: " + x))
-// peek <queue> [timeout]
-// confirm <queue> <count>
     }
   }
 
