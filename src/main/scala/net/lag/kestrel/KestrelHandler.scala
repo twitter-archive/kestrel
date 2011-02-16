@@ -18,7 +18,7 @@
 package net.lag.kestrel
 
 import scala.collection.mutable
-import com.twitter.admin.BackgroundProcess
+import com.twitter.admin.{BackgroundProcess, ServiceTracker}
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.stats.Stats
@@ -45,7 +45,6 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
     }
 
     def pop(name: String): Option[Int] = synchronized {
-      // i admit to being a bit boggled that scala Queue doesn't have a pop() method.
       val rv = transactions(name).headOption
       rv.foreach { x => transactions(name).remove(0) }
       rv
@@ -141,8 +140,7 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
     xids.size
   }
 
-  // will do a continuous transactional fetch on a queue until time runs out or transactions are
-  // full.
+  // will do a continuous transactional fetch on a queue until time runs out or transactions are full.
   final def monitorUntil(key: String, timeLimit: Time)(f: Option[QItem] => Unit) {
     if (timeLimit <= Time.now || pendingTransactions.size(key) >= maxOpenTransactions) {
       f(None)
@@ -214,7 +212,7 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
   protected def shutdown() = {
     BackgroundProcess {
       Thread.sleep(100)
-      Kestrel.kestrel.shutdown()
+      ServiceTracker.shutdown()
     }
   }
 }

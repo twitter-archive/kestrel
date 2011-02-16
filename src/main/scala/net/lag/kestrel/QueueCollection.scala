@@ -23,12 +23,13 @@ import scala.collection.mutable
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.stats.Stats
-import com.twitter.util.{Duration, Time}
+import com.twitter.util.{Duration, Time, Timer}
 import config._
 
 class InaccessibleQueuePath extends Exception("Inaccessible queue path: Must be a directory and writable")
 
-class QueueCollection(queueFolder: String, @volatile private var defaultQueueConfig: QueueConfig,
+class QueueCollection(queueFolder: String, timer: Timer,
+                      @volatile private var defaultQueueConfig: QueueConfig,
                       @volatile var queueBuilders: List[QueueBuilder]) {
   private val log = Logger.get(getClass.getName)
 
@@ -50,7 +51,7 @@ class QueueCollection(queueFolder: String, @volatile private var defaultQueueCon
   private def buildQueue(name: String, realName: String, path: String) = {
     val config = queueConfigMap.getOrElse(name, defaultQueueConfig)
     log.info("Setting up queue %s: %s", realName, config)
-    new PersistentQueue(realName, path, config, Some(this.apply))
+    new PersistentQueue(realName, path, config, timer, Some(this.apply))
   }
 
   // preload any queues
@@ -127,7 +128,7 @@ class QueueCollection(queueFolder: String, @volatile private var defaultQueueCon
    * Retrieve an item from a queue and pass it to a continuation. If no item is available within
    * the requested time, or the server is shutting down, None is passed.
    */
-  def remove(key: String, timeout: Option[Time], transaction: Boolean, peek: Boolean)(f: Option[QItem] => Unit): Unit = {
+  def remove(key: String, deadline: Option[Time], transaction: Boolean, peek: Boolean)(f: Option[QItem] => Unit): Unit = {
     queue(key) match {
       case None =>
         Stats.incr("get_misses")
@@ -136,13 +137,15 @@ class QueueCollection(queueFolder: String, @volatile private var defaultQueueCon
         if (peek) {
           f(q.peek())
         } else {
-          q.removeReact(timeout, transaction) {
-            case None =>
-              Stats.incr("get_misses")
-              f(None)
-            case Some(item) =>
-              Stats.incr("get_hits")
-              f(Some(item))
+          q.waitRemove(deadline, transaction) { item =>
+            item match {
+              case None =>
+                Stats.incr("get_misses")
+                f(None)
+              case Some(item) =>
+                Stats.incr("get_hits")
+                f(Some(item))
+            }
           }
         }
     }
@@ -224,8 +227,7 @@ class QueueCollection(queueFolder: String, @volatile private var defaultQueueCon
   }
 
   /**
-   * Shutdown this queue collection. All actors are asked to exit, and
-   * any future queue requests will fail.
+   * Shutdown this queue collection. Any future queue requests will fail.
    */
   def shutdown(): Unit = synchronized {
     if (shuttingDown) {

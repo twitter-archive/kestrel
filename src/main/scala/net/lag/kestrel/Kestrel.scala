@@ -21,21 +21,46 @@ import java.net.InetSocketAddress
 import java.util.concurrent.{CountDownLatch, Executors, ExecutorService, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.{immutable, mutable}
-import com.twitter.actors.{Actor, Scheduler}
-import com.twitter.actors.Actor._
 import com.twitter.admin.{RuntimeEnvironment, Service, ServiceTracker}
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
-import com.twitter.naggati.{ActorHandler, NettyMessage}
 import com.twitter.naggati.codec.MemcacheCodec
 import com.twitter.stats.Stats
-import com.twitter.util.{Duration, Eval, Time}
+import com.twitter.util.{Duration, Eval, Time, Timer => TTimer, TimerTask => TTimerTask}
 import org.jboss.netty.bootstrap.ServerBootstrap
 import org.jboss.netty.channel.{Channel, ChannelFactory, ChannelPipelineFactory, Channels}
 import org.jboss.netty.channel.group.DefaultChannelGroup
 import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory
 import org.jboss.netty.util.{HashedWheelTimer, Timeout, Timer, TimerTask}
 import config._
+
+
+// FIXME move me!
+class NettyTimer(underlying: Timer) extends TTimer {
+  def schedule(when: Time)(f: => Unit): TTimerTask = {
+    val timeout = underlying.newTimeout(new TimerTask {
+      def run(to: Timeout) {
+        if (!to.isCancelled) f
+      }
+    }, (when - Time.now).inMilliseconds max 0, TimeUnit.MILLISECONDS)
+    toTimerTask(timeout)
+  }
+
+  def schedule(when: Time, period: Duration)(f: => Unit): TTimerTask = {
+    val task = schedule(when) {
+      f
+      schedule(when + period, period)(f)
+    }
+    task
+  }
+
+  def stop() { underlying.stop() }
+
+  private[this] def toTimerTask(task: Timeout) = new TTimerTask {
+    def cancel() { task.cancel() }
+  }
+}
+
 
 class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
               listenAddress: String, memcacheListenPort: Option[Int], textListenPort: Option[Int],
@@ -53,27 +78,20 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
   var textAcceptor: Option[Channel] = None
   val channelGroup = new DefaultChannelGroup("channels")
 
-  private val deathSwitch = new CountDownLatch(1)
-
   def start() {
     log.info("Kestrel config: listenAddress=%s memcachePort=%s textPort=%s queuePath=%s " +
              "protocol=%s expirationTimerFrequency=%s clientTimeout=%s maxOpenTransactions=%d",
              listenAddress, memcacheListenPort, textListenPort, queuePath, protocol,
              expirationTimerFrequency, clientTimeout, maxOpenTransactions)
 
-    queueCollection = new QueueCollection(queuePath, defaultQueueConfig, builders)
+    // this means no timeout will be at better granularity than 10ms.
+    timer = new HashedWheelTimer(10, TimeUnit.MILLISECONDS)
+    queueCollection = new QueueCollection(queuePath, new NettyTimer(timer), defaultQueueConfig, builders)
     queueCollection.loadQueues()
-    // FIXME: reload?
 
     // netty setup:
-    timer = new HashedWheelTimer()
     executor = Executors.newCachedThreadPool()
     channelFactory = new NioServerSocketChannelFactory(executor, executor)
-    val filter: NettyMessage.Filter = immutable.Set(
-      classOf[NettyMessage.MessageReceived],
-      classOf[NettyMessage.ExceptionCaught],
-      classOf[NettyMessage.ChannelIdle],
-      classOf[NettyMessage.ChannelDisconnected])
 
     val memcachePipelineFactory = new ChannelPipelineFactory() {
       def getPipeline() = {
@@ -81,10 +99,8 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
           case Protocol.Ascii => MemcacheCodec.asciiCodec
           case Protocol.Binary => throw new Exception("Binary protocol not supported yet.")
         }
-        val actorHandler = new ActorHandler(filter, { channel =>
-          new MemcacheHandler(channel, channelGroup, queueCollection, maxOpenTransactions, clientTimeout)
-        })
-        Channels.pipeline(protocolCodec, actorHandler)
+        val handler = new MemcacheHandler(channelGroup, queueCollection, maxOpenTransactions, clientTimeout)
+        Channels.pipeline(protocolCodec, handler)
       }
     }
     memcacheAcceptor = memcacheListenPort.map { port =>
@@ -95,10 +111,8 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
     val textPipelineFactory = new ChannelPipelineFactory() {
       def getPipeline() = {
         val protocolCodec = TextCodec.decoder
-        val actorHandler = new ActorHandler(filter, { channel =>
-          new TextHandler(channel, channelGroup, queueCollection, maxOpenTransactions, clientTimeout)
-        })
-        Channels.pipeline(protocolCodec, actorHandler)
+        val handler = new TextHandler(channelGroup, queueCollection, maxOpenTransactions, clientTimeout)
+        Channels.pipeline(protocolCodec, handler)
       }
     }
     textAcceptor = textListenPort.map { port =>
@@ -120,15 +134,10 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
       }
       expirationTask.run(null)
     }
-
-    actor {
-      deathSwitch.await()
-    }
   }
 
   def shutdown() {
     log.info("Shutting down!")
-    deathSwitch.countDown()
 
     memcacheAcceptor.foreach { _.close().awaitUninterruptibly() }
     textAcceptor.foreach { _.close().awaitUninterruptibly() }
@@ -140,14 +149,12 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
     executor.awaitTermination(5, TimeUnit.SECONDS)
     timer.stop()
     timer = null
-    Scheduler.shutdown
     log.info("Goodbye.")
   }
 
   override def reload() {
     try {
       log.info("Reloading %s ...", Kestrel.runtime.configFile)
-      Logger.configure(Kestrel.runtime.loggingConfigFile)
       Eval[KestrelConfig](Kestrel.runtime.configFile).reload(this)
     } catch {
       case e: Eval.CompilerException =>
@@ -179,9 +186,6 @@ object Kestrel {
   var runtime: RuntimeEnvironment = null
 
   private val startTime = Time.now
-
-  // voodoo?
-  @volatile var scheduler = Scheduler.impl
 
   // track concurrent sessions
   val sessions = new AtomicInteger()

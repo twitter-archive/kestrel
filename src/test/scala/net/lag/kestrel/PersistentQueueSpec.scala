@@ -20,15 +20,14 @@ package net.lag.kestrel
 import java.io.{File, FileInputStream}
 import java.util.concurrent.CountDownLatch
 import scala.collection.mutable
-import com.twitter.actors.Actor.actor
 import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
-import com.twitter.util.{TempFolder, Time}
-import org.specs._
+import com.twitter.util.{Duration, TempFolder, Time, Timer, TimerTask}
+import org.specs.Specification
 import org.specs.matcher.Matcher
 import config._
 
-class PersistentQueueSpec extends Specification with TempFolder with TestLogging {
+class PersistentQueueSpec extends Specification with TempFolder with TestLogging with QueueMatchers {
   def dumpJournal(qname: String): String = {
     var rv = new mutable.ListBuffer[JournalItem]
     new Journal(new File(folderName, qname).getCanonicalPath, false).replay(qname) { item => rv += item }
@@ -47,30 +46,12 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
     } mkString ", "
   }
 
-  def beSomeQItem(s: String) = new Matcher[Option[QItem]] {
-    def apply(qitemEval: => Option[QItem]) = {
-      val qitem = qitemEval
-      (qitem.isDefined && (new String(qitem.get.data) == s), "ok", "wrong or missing queue item")
-    }
-  }
-
-  def beSomeQItem(len: Int) = new Matcher[Option[QItem]] {
-    def apply(qitemEval: => Option[QItem]) = {
-      val qitem = qitemEval
-      (qitem.isDefined && (qitem.get.data.size == len), "ok", "wrong or missing queue item")
-    }
-  }
-
-  def put(q: PersistentQueue, bytes: Int, n: Int) {
-    val data = new Array[Byte](bytes)
-    data(0) = n.toByte
-    q.add(data)
-  }
-
   "PersistentQueue" should {
+    val timer = new FakeTimer()
+
     "add and remove one item" in {
       withTempFolder {
-        val q = new PersistentQueue("work", folderName, new QueueBuilder().apply())
+        val q = new PersistentQueue("work", folderName, new QueueBuilder().apply(), timer)
         q.setup
 
         q.length mustEqual 0
@@ -103,7 +84,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
         val config = new QueueBuilder {
           maxItemSize = 128.bytes
         }.apply()
-        val q = new PersistentQueue("work", folderName, config)
+        val q = new PersistentQueue("work", folderName, config, timer)
         q.setup()
         q.length mustEqual 0
         q.add(new Array[Byte](127)) mustEqual true
@@ -115,7 +96,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
 
     "flush all items" in {
       withTempFolder {
-        val q = new PersistentQueue("work", folderName, new QueueBuilder().apply())
+        val q = new PersistentQueue("work", folderName, new QueueBuilder().apply(), timer)
         q.setup()
 
         q.length mustEqual 0
@@ -143,7 +124,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
         val config = new QueueBuilder {
           maxJournalSize = 64.bytes
         }.apply()
-        val q = new PersistentQueue("rolling", folderName, config)
+        val q = new PersistentQueue("rolling", folderName, config, timer)
         q.setup()
 
         q.add(new Array[Byte](32))
@@ -173,7 +154,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
         val config = new QueueBuilder {
           maxJournalSize = 64.bytes
         }.apply()
-        val q = new PersistentQueue("rolling", folderName, config)
+        val q = new PersistentQueue("rolling", folderName, config, timer)
         q.setup()
 
         q.add(new Array[Byte](32))
@@ -201,7 +182,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
 
     "recover the journal after a restart" in {
       withTempFolder {
-        val q = new PersistentQueue("rolling", folderName, new QueueBuilder().apply())
+        val q = new PersistentQueue("rolling", folderName, new QueueBuilder().apply(), timer)
         q.setup
         q.add("first".getBytes)
         q.add("second".getBytes)
@@ -209,7 +190,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
         q.journalSize mustEqual 5 + 6 + 16 + 16 + 5 + 5 + 1
         q.close
 
-        val q2 = new PersistentQueue("rolling", folderName, new QueueBuilder().apply())
+        val q2 = new PersistentQueue("rolling", folderName, new QueueBuilder().apply(), timer)
         q2.setup
         q2.journalSize mustEqual 5 + 6 + 16 + 16 + 5 + 5 + 1
         new String(q2.remove.get.data) mustEqual "second"
@@ -217,7 +198,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
         q2.length mustEqual 0
         q2.close
 
-        val q3 = new PersistentQueue("rolling", folderName, new QueueBuilder().apply())
+        val q3 = new PersistentQueue("rolling", folderName, new QueueBuilder().apply(), timer)
         q3.setup
         q3.journalSize mustEqual 5 + 6 + 16 + 16 + 5 + 5 + 1 + 1
         q3.length mustEqual 0
@@ -230,7 +211,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
           val config = new QueueBuilder {
             maxAge = 3.seconds
           }.apply()
-          val q = new PersistentQueue("weather_updates", folderName, config)
+          val q = new PersistentQueue("weather_updates", folderName, config, timer)
           q.setup()
           q.add("sunny".getBytes) mustEqual true
           q.length mustEqual 1
@@ -255,187 +236,61 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
         val config1 = new QueueBuilder {
           maxMemorySize = 123.bytes
         }.apply()
-        val q1 = new PersistentQueue("test1", folderName, config1)
+        val q1 = new PersistentQueue("test1", folderName, config1, timer)
         q1.config.maxJournalSize mustEqual new QueueBuilder().maxJournalSize
         q1.config.maxMemorySize mustEqual 123.bytes
         val config2 = new QueueBuilder {
           maxJournalSize = 123.bytes
         }.apply()
-        val q2 = new PersistentQueue("test1", folderName, config2)
+        val q2 = new PersistentQueue("test1", folderName, config2, timer)
         q2.config.maxJournalSize mustEqual 123.bytes
         q2.config.maxMemorySize mustEqual new QueueBuilder().maxMemorySize
       }
     }
 
-    "drop into read-behind mode" in {
-      "on insert" in {
+    "handle timeout reads" in {
+      "success" in {
         withTempFolder {
           val config1 = new QueueBuilder {
             maxMemorySize = 1.kilobyte
           }.apply()
-          val q = new PersistentQueue("things", folderName, config1)
-
+          val q = new PersistentQueue("things", folderName, config1, timer)
           q.setup
-          for (i <- 0 until 10) {
-            put(q, 128, i)
-            q.inReadBehind mustEqual (i >= 8)
+
+          var rv: Option[String] = None
+
+          val deadline = 250.milliseconds.fromNow
+          q.waitRemove(Some(deadline), false) { item =>
+            rv = item.map { x => new String(x.data) }
           }
-          q.inReadBehind mustBe true
-          q.length mustEqual 10
-          q.bytes mustEqual 1280
-          q.memoryLength mustEqual 8
-          q.memoryBytes mustEqual 1024
+          timer.deadline mustEqual deadline
 
-          // read 1 item. queue should pro-actively read the next item in from disk.
-          val d0 = q.remove.get.data
-          d0(0) mustEqual 0
-          q.inReadBehind mustBe true
-          q.length mustEqual 9
-          q.bytes mustEqual 1152
-          q.memoryLength mustEqual 8
-          q.memoryBytes mustEqual 1024
-
-          // adding a new item should be ok
-          put(q, 128, 10)
-          q.inReadBehind mustBe true
-          q.length mustEqual 10
-          q.bytes mustEqual 1280
-          q.memoryLength mustEqual 8
-          q.memoryBytes mustEqual 1024
-
-          // read again.
-          val d1 = q.remove.get.data
-          d1(0) mustEqual 1
-          q.inReadBehind mustBe true
-          q.length mustEqual 9
-          q.bytes mustEqual 1152
-          q.memoryLength mustEqual 8
-          q.memoryBytes mustEqual 1024
-
-          // and again.
-          val d2 = q.remove.get.data
-          d2(0) mustEqual 2
-          q.inReadBehind mustBe true
-          q.length mustEqual 8
-          q.bytes mustEqual 1024
-          q.memoryLength mustEqual 8
-          q.memoryBytes mustEqual 1024
-
-          for (i <- 3 until 11) {
-            val d = q.remove.get.data
-            d(0) mustEqual i
-            q.inReadBehind mustBe false
-            q.length mustEqual 10 - i
-            q.bytes mustEqual 128 * (10 - i)
-            q.memoryLength mustEqual 10 - i
-            q.memoryBytes mustEqual 128 * (10 - i)
-          }
-        }
-      }
-
-      "on startup" in {
-        withTempFolder {
-          val config = new QueueBuilder {
-            maxMemorySize = 1.kilobyte
-          }.apply()
-          val q = new PersistentQueue("things", folderName, config)
-
-          q.setup
-          for (i <- 0 until 10) {
-            put(q, 128, i)
-            q.inReadBehind mustEqual (i >= 8)
-          }
-          q.inReadBehind mustBe true
-          q.length mustEqual 10
-          q.bytes mustEqual 1280
-          q.memoryLength mustEqual 8
-          q.memoryBytes mustEqual 1024
-          q.close
-
-          val q2 = new PersistentQueue("things", folderName, config)
-          q2.setup
-
-          q2.inReadBehind mustBe true
-          q2.length mustEqual 10
-          q2.bytes mustEqual 1280
-          q2.memoryLength mustEqual 8
-          q2.memoryBytes mustEqual 1024
-
-          for (i <- 0 until 10) {
-            val d = q2.remove.get.data
-            d(0) mustEqual i
-            q2.inReadBehind mustEqual (i < 2)
-            q2.length mustEqual 9 - i
-            q2.bytes mustEqual 128 * (9 - i)
-            q2.memoryLength mustEqual (if (i < 2) 8 else 9 - i)
-            q2.memoryBytes mustEqual (if (i < 2) 1024 else 128 * (9 - i))
-          }
-        }
-      }
-
-      "during journal processing, then return to ordinary times" in {
-        withTempFolder {
-          val config = new QueueBuilder {
-            maxMemorySize = 1.kilobyte
-          }.apply()
-          val q = new PersistentQueue("things", folderName, config)
-
-          q.setup
-          for (i <- 0 until 10) {
-            val data = new Array[Byte](128)
-            data(0) = i.toByte
-            q.add(data)
-            q.inReadBehind mustEqual (i >= 8)
-          }
-          q.inReadBehind mustBe true
-          q.length mustEqual 10
-          q.bytes mustEqual 1280
-          q.memoryLength mustEqual 8
-          q.memoryBytes mustEqual 1024
-          for (i <- 0 until 10) {
-            q.remove
-          }
-          q.inReadBehind mustBe false
-          q.length mustEqual 0
-          q.bytes mustEqual 0
-          q.memoryLength mustEqual 0
-          q.memoryBytes mustEqual 0
-          q.close
-
-          val q2 = new PersistentQueue("things", folderName, config)
-          q2.setup
-          q2.inReadBehind mustBe false
-          q2.length mustEqual 0
-          q2.bytes mustEqual 0
-          q2.memoryLength mustEqual 0
-          q2.memoryBytes mustEqual 0
-        }
-      }
-    }
-
-    "handle timeout reads" in {
-      withTempFolder {
-        val config1 = new QueueBuilder {
-          maxMemorySize = 1.kilobyte
-        }.apply()
-        val q = new PersistentQueue("things", folderName, config1)
-        q.setup
-
-        actor {
-          Thread.sleep(100)
+          rv mustEqual None
           q.add("hello".getBytes)
+          rv mustEqual Some("hello")
         }
+      }
 
-        var rv: String = null
-        val latch = new CountDownLatch(1)
-        actor {
-          q.removeReact(Some(250.milliseconds.fromNow), false) { item =>
-            rv = new String(item.get.data)
-            latch.countDown
+      "timeout" in {
+        withTempFolder {
+          val config1 = new QueueBuilder {
+            maxMemorySize = 1.kilobyte
+          }.apply()
+          val q = new PersistentQueue("things", folderName, config1, timer)
+          q.setup
+
+          var rv: Option[String] = Some("foo")
+
+          val deadline = 250.milliseconds.fromNow
+          q.waitRemove(Some(deadline), false) { item =>
+            rv = item.map { x => new String(x.data) }
           }
+          timer.deadline mustEqual deadline
+
+          rv mustEqual Some("foo")
+          timer.timeout()
+          rv mustEqual None
         }
-        latch.await
-        rv mustEqual "hello"
       }
     }
 
@@ -444,7 +299,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
         val config = new QueueBuilder {
           maxMemorySize = 1.kilobyte
         }.apply()
-        val q = new PersistentQueue("things", folderName, config)
+        val q = new PersistentQueue("things", folderName, config, timer)
 
         q.setup
         q.add("house".getBytes)
@@ -478,7 +333,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
           "add(5:0:house), add(3:0:cat), remove-tentative, remove-tentative, unremove(1), confirm-remove(2), remove"
 
         // and journal is replayed correctly.
-        val q2 = new PersistentQueue("things", folderName, config)
+        val q2 = new PersistentQueue("things", folderName, config, timer)
         q2.setup
         q2.length mustEqual 0
         q2.bytes mustEqual 0
@@ -487,7 +342,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
 
     "recover a journal with open transactions" in {
       withTempFolder {
-        val q = new PersistentQueue("things", folderName, new QueueBuilder().apply())
+        val q = new PersistentQueue("things", folderName, new QueueBuilder().apply(), timer)
         q.setup
         q.add("one".getBytes)
         q.add("two".getBytes)
@@ -509,7 +364,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
         q.confirmRemove(item4.get.xid)
         q.close
 
-        val q2 = new PersistentQueue("things", folderName, new QueueBuilder().apply())
+        val q2 = new PersistentQueue("things", folderName, new QueueBuilder().apply(), timer)
         q2.setup
         q2.length mustEqual 3
         q2.openTransactionCount mustEqual 0
@@ -526,7 +381,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
           maxJournalSize = 1.kilobyte
           maxJournalOverflow = 3
         }.apply()
-        val q = new PersistentQueue("things", folderName, config)
+        val q = new PersistentQueue("things", folderName, config, timer)
         q.setup
         q.add(new Array[Byte](512))
         // can't roll the journal normally, cuz there's always one item left.
@@ -557,7 +412,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
           maxJournalSize = 1.kilobyte
           maxJournalOverflow = 3
         }.apply()
-        val q = new PersistentQueue("things", folderName, config)
+        val q = new PersistentQueue("things", folderName, config, timer)
         q.setup
         for (i <- 0 until 8) {
           q.add(new Array[Byte](512))
@@ -571,7 +426,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
 
     "report an age of zero on an empty queue" in {
       withTempFolder {
-        val q = new PersistentQueue("things", folderName, new QueueBuilder().apply())
+        val q = new PersistentQueue("things", folderName, new QueueBuilder().apply(), timer)
         q.setup
         put(q, 128, 0)
         Thread.sleep(10)
@@ -584,12 +439,14 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
 
 
   "PersistentQueue with no journal" should {
+    val timer = new FakeTimer()
+
     "create no journal" in {
       withTempFolder {
         val config = new QueueBuilder {
           keepJournal = false
         }.apply()
-        val q = new PersistentQueue("mem", folderName, config)
+        val q = new PersistentQueue("mem", folderName, config, timer)
         q.setup
 
         q.add("coffee".getBytes)
@@ -603,12 +460,12 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
         val config = new QueueBuilder {
           keepJournal = false
         }.apply()
-        val q = new PersistentQueue("mem", folderName, config)
+        val q = new PersistentQueue("mem", folderName, config, timer)
         q.setup
         q.add("coffee".getBytes)
         q.close
 
-        val q2 = new PersistentQueue("mem", folderName, config)
+        val q2 = new PersistentQueue("mem", folderName, config, timer)
         q2.setup
         q2.remove mustEqual None
       }
@@ -617,12 +474,14 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
 
 
   "PersistentQueue with item/size limit" should {
+    val timer = new FakeTimer()
+
     "honor max_items" in {
       withTempFolder {
         val config = new QueueBuilder {
           maxItems = 1
         }.apply()
-        val q = new PersistentQueue("weather_updates", folderName, config)
+        val q = new PersistentQueue("weather_updates", folderName, config, timer)
         q.setup
         q.add("sunny".getBytes) mustEqual true
         q.add("rainy".getBytes) mustEqual false
@@ -636,7 +495,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
         val config = new QueueBuilder {
           maxSize = 510.bytes
         }.apply()
-        val q = new PersistentQueue("weather_updates", folderName, config)
+        val q = new PersistentQueue("weather_updates", folderName, config, timer)
         q.setup
         q.add(("a" * 256).getBytes) mustEqual true
         q.add(("b" * 256).getBytes) mustEqual true
@@ -653,7 +512,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
           maxItems = 3
           discardOldWhenFull = true
         }.apply()
-        val q = new PersistentQueue("weather_updates", folderName, config)
+        val q = new PersistentQueue("weather_updates", folderName, config, timer)
         q.setup
         q.add("sunny".getBytes) mustEqual true
         q.add("rainy".getBytes) mustEqual true
@@ -666,13 +525,15 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
   }
 
   "PersistentQueue with item expiry" should {
+    val timer = new FakeTimer()
+
     "expire items into the ether" in {
       withTempFolder {
         Time.withCurrentTimeFrozen { time =>
           val config = new QueueBuilder {
             keepJournal = false
           }.apply()
-          val q = new PersistentQueue("wu_tang", folderName, config)
+          val q = new PersistentQueue("wu_tang", folderName, config, timer)
           q.setup()
           val expiry = Time.now + 1.second
           q.add("rza".getBytes, Some(expiry)) mustEqual true
@@ -693,8 +554,8 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
           val config = new QueueBuilder {
             keepJournal = false
           }.apply()
-          val r = new PersistentQueue("rappers", folderName, config)
-          val q = new PersistentQueue("wu_tang", folderName, config)
+          val r = new PersistentQueue("rappers", folderName, config, timer)
+          val q = new PersistentQueue("wu_tang", folderName, config, timer)
           r.setup()
           q.setup()
           q.expireQueue = Some(r)

@@ -31,12 +31,11 @@ import org.jboss.netty.channel.group.ChannelGroup
  * Memcache protocol handler for a kestrel connection.
  */
 class MemcacheHandler(
-  channel: Channel,
   channelGroup: ChannelGroup,
   queueCollection: QueueCollection,
   maxOpenTransactions: Int,
   clientTimeout: Option[Duration])
-extends NettyHandler[MemcacheRequest](channel, channelGroup, queueCollection, maxOpenTransactions, clientTimeout) {
+extends NettyHandler[MemcacheRequest](channelGroup, queueCollection, maxOpenTransactions, clientTimeout) {
   protected final def handle(request: MemcacheRequest) = {
     request.line(0) match {
       case "get" =>

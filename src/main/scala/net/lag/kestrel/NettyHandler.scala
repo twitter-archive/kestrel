@@ -20,69 +20,65 @@ package net.lag.kestrel
 import java.io.IOException
 import java.net.InetSocketAddress
 import scala.collection.mutable
-import com.twitter.actors.Actor
-import com.twitter.actors.Actor._
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.naggati.{NettyMessage, ProtocolError}
 import com.twitter.util.{Duration, Time}
-import org.jboss.netty.channel.Channel
+import org.jboss.netty.channel._
 import org.jboss.netty.channel.group.ChannelGroup
-import org.jboss.netty.handler.timeout.IdleStateHandler
+import org.jboss.netty.handler.timeout._
 
 /**
- * Kestrel handler that uses netty/actors. Wraps up common netty/actor code so you only receive a
+ * Kestrel handler that uses netty. Wraps up common netty code so you only receive a
  * message or an exception.
  */
 abstract class NettyHandler[M](
-  val channel: Channel,
   val channelGroup: ChannelGroup,
   queueCollection: QueueCollection,
   maxOpenTransactions: Int,
   clientTimeout: Option[Duration])
-extends KestrelHandler(queueCollection, maxOpenTransactions) with Actor {
+extends KestrelHandler(queueCollection, maxOpenTransactions) with ChannelUpstreamHandler {
   val log = Logger.get(getClass.getName)
 
-  private val remoteAddress = channel.getRemoteAddress.asInstanceOf[InetSocketAddress]
-
-  if (clientTimeout.isDefined) {
-    channel.getPipeline.addFirst("idle", new IdleStateHandler(Kestrel.kestrel.timer, 0, 0, clientTimeout.get.inSeconds.toInt))
-  }
-
-  channelGroup.add(channel)
-  log.debug("New session %d from %s:%d", sessionId, remoteAddress.getHostName, remoteAddress.getPort)
-  start()
+  private var remoteAddress: InetSocketAddress = null
+  var channel: Channel = null
 
   protected def clientDescription: String = {
     "%s:%d".format(remoteAddress.getHostName, remoteAddress.getPort)
   }
 
-  def act = {
-    loop {
-      react {
-        case NettyMessage.MessageReceived(message) =>
-          handle(message.asInstanceOf[M])
-
-        case NettyMessage.ExceptionCaught(cause) =>
-          cause match {
-            case _: ProtocolError =>
-              handleProtocolError()
-            case _: IOException =>
-              log.debug("I/O Exception on session %d: %s", sessionId, cause.toString)
-            case e =>
-              log.error(cause, "Exception caught on session %d: %s", sessionId, cause.toString)
-              handleException(e)
-          }
-          channel.close()
-
-        case NettyMessage.ChannelDisconnected() =>
+  def handleUpstream(context: ChannelHandlerContext, event: ChannelEvent) {
+    event match {
+      case m: MessageEvent =>
+        handle(m.getMessage().asInstanceOf[M])
+      case e: ExceptionEvent =>
+        e.getCause() match {
+          case _: ProtocolError =>
+            handleProtocolError()
+          case e: IOException =>
+            log.debug("I/O Exception on session %d: %s", sessionId, e.toString)
+          case e =>
+            log.error(e, "Exception caught on session %d: %s", sessionId, e.toString)
+            handleException(e)
+        }
+        e.getChannel().close()
+      case s: ChannelStateEvent =>
+        if ((s.getState() == ChannelState.CONNECTED) && (s.getValue() eq null)) {
           finish()
-          exit()
-
-        case NettyMessage.ChannelIdle(status) =>
-          log.debug("Idle timeout on session %s", channel)
-          channel.close()
-      }
+        } else if ((s.getState() == ChannelState.OPEN) && (s.getValue() == true)) {
+          channel = s.getChannel()
+          remoteAddress = channel.getRemoteAddress.asInstanceOf[InetSocketAddress]
+          if (clientTimeout.isDefined) {
+            channel.getPipeline.addFirst("idle", new IdleStateHandler(Kestrel.kestrel.timer, 0, 0, clientTimeout.get.inSeconds.toInt))
+          }
+          channelGroup.add(channel)
+          log.debug("New session %d from %s:%d", sessionId, remoteAddress.getHostName, remoteAddress.getPort)
+        }
+      case i: IdleStateEvent =>
+        log.debug("Idle timeout on session %s", channel)
+        channel.close()
+      case e =>
+        context.sendUpstream(e)
     }
   }
 

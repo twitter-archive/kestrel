@@ -43,7 +43,7 @@ Put items into a queue. Response will be success/failure.
 Get items from a queue. Response will be one or more items. All fetched items are "transactional" --
 if you disconnect before confirming them, they may be given to other consumers. Any fetch operation
 is an implicit confirmation of a previous fetch operation, or in other words, every fetch operation
-closes the previous transaction and opens a new one.
+closes the previous transaction and opens a new one. Timeout is in milliseconds.
 
     peek <queue> [timeout]
 
@@ -55,6 +55,10 @@ You can explicitly confirm previous fetches if you like.
 
     confirm <queue> <count>
 
+Flush (empty) a queue.
+
+    flush <queue>
+
 ## Maintenance
 
 Various maintenance tasks work:
@@ -65,7 +69,8 @@ And you can close your connection explicitly:
 
     quit
 
-flush
+## To-do
+
 delete
 flush_all
 flush_expired

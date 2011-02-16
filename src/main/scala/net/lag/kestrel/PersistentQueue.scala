@@ -20,23 +20,21 @@ package net.lag.kestrel
 import java.io._
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.channels.FileChannel
-import java.util.concurrent.CountDownLatch
+import java.util.LinkedHashSet
+import java.util.concurrent.{CountDownLatch, Executor}
+import scala.collection.JavaConversions
 import scala.collection.mutable
-import com.twitter.actors.{Actor, TIMEOUT}
 import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.stats.Stats
-import com.twitter.util.{Duration, Time}
+import com.twitter.util.{Duration, Future, Promise, Time, Timer, TimerTask, Try}
 import config._
 
 class PersistentQueue(val name: String, persistencePath: String, @volatile var config: QueueConfig,
-                      queueLookup: Option[(String => Option[PersistentQueue])]) {
-  def this(name: String, persistencePath: String, config: QueueConfig) =
-    this(name, persistencePath, config, None)
-
-  private case class Waiter(actor: Actor)
-  private case object ItemArrived
+                      timer: Timer, queueLookup: Option[(String => Option[PersistentQueue])]) {
+  def this(name: String, persistencePath: String, config: QueueConfig, timer: Timer) =
+    this(name, persistencePath, config, timer, None)
 
   private val log = Logger.get(getClass.getName)
 
@@ -69,9 +67,6 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
 
   private var closed = false
   private var paused = false
-
-  // clients waiting on an item in this queue
-  private val waiters = new mutable.ListBuffer[Waiter]
 
   private var journal =
     new Journal(new File(persistencePath).getCanonicalPath, name, config.syncJournal, config.multifileJournal)
@@ -175,35 +170,35 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   /**
    * Add a value to the end of the queue, transactionally.
    */
-  def add(value: Array[Byte], expiry: Option[Time]): Boolean = synchronized {
-    if (closed || value.size > config.maxItemSize.inBytes) return false
-    if (config.fanoutOnly && !isFanout) return true
-    while (queueLength >= config.maxItems || queueSize >= config.maxSize.inBytes) {
-      if (!config.discardOldWhenFull) return false
-      _remove(false)
-      totalDiscarded.incr()
-      if (config.keepJournal) journal.remove()
-    }
+  def add(value: Array[Byte], expiry: Option[Time]): Boolean = {
+    synchronized {
+      if (closed || value.size > config.maxItemSize.inBytes) return false
+      if (config.fanoutOnly && !isFanout) return true
+      while (queueLength >= config.maxItems || queueSize >= config.maxSize.inBytes) {
+        if (!config.discardOldWhenFull) return false
+        _remove(false)
+        totalDiscarded.incr()
+        if (config.keepJournal) journal.remove()
+      }
 
-    val now = Time.now
-    val item = QItem(now, adjustExpiry(now, expiry), value, 0)
-    if (config.keepJournal && !journal.inReadBehind) {
-      if (journal.size > config.maxJournalSize.inBytes * config.maxJournalOverflow &&
-          queueSize < config.maxJournalSize.inBytes) {
-        // force re-creation of the journal.
-        rollJournal()
+      val now = Time.now
+      val item = QItem(now, adjustExpiry(now, expiry), value, 0)
+      if (config.keepJournal && !journal.inReadBehind) {
+        if (journal.size > config.maxJournalSize.inBytes * config.maxJournalOverflow &&
+            queueSize < config.maxJournalSize.inBytes) {
+          // force re-creation of the journal.
+          rollJournal()
+        }
+        if (queueSize >= config.maxMemorySize.inBytes) {
+          log.info("Dropping to read-behind for queue '%s' (%s)", name, queueSize.bytes.toHuman)
+          journal.startReadBehind
+        }
       }
-      if (queueSize >= config.maxMemorySize.inBytes) {
-        log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
-        journal.startReadBehind
-      }
+      checkRotateJournal()
+      _add(item)
+      if (config.keepJournal) journal.add(item)
     }
-    checkRotateJournal()
-    _add(item)
-    if (config.keepJournal) journal.add(item)
-    if (waiters.size > 0) {
-      waiters.remove(0).actor ! ItemArrived
-    }
+    waiters.trigger()
     true
   }
 
@@ -253,83 +248,61 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
    */
   def remove(): Option[QItem] = remove(false)
 
-  def operateReact(op: => Option[QItem], timeout: Option[Time])(f: Option[QItem] => Unit): Unit = {
-    operateOrWait(op, timeout) match {
-      case (item, None) =>
-        f(item)
-      case (None, Some(w)) =>
-        val actorTimeout = if (timeout.isDefined) (timeout.get - Time.now).inMilliseconds else 0
-        Actor.self.reactWithin(actorTimeout max 0) {
-          case ItemArrived => operateReact(op, timeout)(f)
-          case TIMEOUT => synchronized {
-            waiters -= w
-            // race: someone could have done an add() between the timeout and grabbing the lock.
-            Actor.self.reactWithin(0) {
-              case ItemArrived => f(op)
-              case TIMEOUT => f(op)
-            }
-          }
+  // clients waiting on an item in this queue
+  final class DeadlineQueue(timer: Timer) {
+    case class Waiter(var timerTask: TimerTask, awaken: () => Unit)
+    private val queue = JavaConversions.asScalaSet(new LinkedHashSet[Waiter])
+
+    def add(deadline: Time, awaken: () => Unit, onTimeout: () => Unit) {
+      val waiter = Waiter(null, awaken)
+      val timerTask = timer.schedule(deadline) {
+        if (synchronized { queue.remove(waiter) }) onTimeout()
+      }
+      waiter.timerTask = timerTask
+      synchronized { queue.add(waiter) }
+    }
+
+    def trigger() {
+      synchronized {
+        queue.headOption.map { waiter =>
+          queue.remove(waiter)
+          waiter
         }
-      case _ => throw new RuntimeException()
+      }.foreach { _.awaken() }
+    }
+
+    def triggerAll() {
+      synchronized {
+        val rv = queue.toArray
+        queue.clear()
+        rv
+      }.foreach { _.awaken() }
+    }
+
+    def size() = {
+      synchronized { queue.size }
+    }
+  }
+  private val waiters = new DeadlineQueue(timer)
+
+  private def waitOperation(op: => Option[QItem], deadline: Option[Time], receiver: Option[QItem] => Unit) {
+    synchronized {
+      val item = op
+      if (!item.isDefined && !closed && !paused && deadline.isDefined && deadline.get > Time.now) {
+        // if we get woken up, try again with the same deadline.
+        waiters.add(deadline.get, { () => waitOperation(op, deadline, receiver) }, { () => receiver(None) })
+      } else {
+        receiver(item)
+      }
     }
   }
 
-  def operateReceive(op: => Option[QItem], timeout: Option[Time]): Option[QItem] = {
-    operateOrWait(op, timeout) match {
-      case (item, None) =>
-        item
-      case (None, Some(w)) =>
-        val actorTimeout = if (timeout.isDefined) (timeout.get - Time.now).inMilliseconds else 0
-        val gotSomething = Actor.self.receiveWithin(actorTimeout max 0) {
-          case ItemArrived => true
-          case TIMEOUT => false
-        }
-        if (gotSomething) {
-          operateReceive(op, timeout)
-        } else {
-          synchronized { waiters -= w }
-          // race: someone could have done an add() between the timeout and grabbing the lock.
-          Actor.self.receiveWithin(0) {
-            case ItemArrived =>
-            case TIMEOUT =>
-          }
-          op
-        }
-      case _ => throw new RuntimeException()
-    }
+  def waitRemove(deadline: Option[Time], transaction: Boolean)(receiver: Option[QItem] => Unit) {
+    waitOperation(remove(transaction), deadline, receiver)
   }
 
-  def removeReact(timeout: Option[Time], transaction: Boolean)(f: Option[QItem] => Unit): Unit = {
-    operateReact(remove(transaction), timeout)(f)
-  }
-
-  def removeReceive(timeout: Option[Time], transaction: Boolean): Option[QItem] = {
-    operateReceive(remove(transaction), timeout)
-  }
-
-  def peekReact(timeout: Option[Time])(f: Option[QItem] => Unit): Unit = {
-    operateReact(peek, timeout)(f)
-  }
-
-  def peekReceive(timeout: Option[Time]): Option[QItem] = {
-    operateReceive(peek, timeout)
-  }
-
-  /**
-   * Perform an operation on the next item from the queue, if there is one.
-   * If the queue is closed, returns immediately. Otherwise, if a timeout is passed in, the
-   * current actor is added to the wait-list, and will receive `ItemArrived` when an item is
-   * available (or the queue is closed).
-   */
-  private def operateOrWait(op: => Option[QItem], timeout: Option[Time]): (Option[QItem], Option[Waiter]) = synchronized {
-    val item = op
-    if (!item.isDefined && !closed && !paused && timeout.isDefined) {
-      val w = Waiter(Actor.self)
-      waiters += w
-      (None, Some(w))
-    } else {
-      (item, None)
-    }
+  def waitPeek(deadline: Option[Time], transaction: Boolean)(receiver: Option[QItem] => Unit) {
+    waitOperation(peek, deadline, receiver)
   }
 
   /**
@@ -341,9 +314,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       if (!closed) {
         if (config.keepJournal) journal.unremove(xid)
         _unremove(xid)
-        if (waiters.size > 0) {
-          waiters.remove(0).actor ! ItemArrived
-        }
+        waiters.trigger()
       }
     }
   }
@@ -367,18 +338,12 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   def close(): Unit = synchronized {
     closed = true
     if (config.keepJournal) journal.close()
-    for (w <- waiters) {
-      w.actor ! ItemArrived
-    }
-    waiters.clear()
+    waiters.triggerAll()
   }
 
   def pauseReads(): Unit = synchronized {
     paused = true
-    for (w <- waiters) {
-      w.actor ! ItemArrived
-    }
-    waiters.clear()
+    waiters.triggerAll()
   }
 
   def resumeReads(): Unit = synchronized {
