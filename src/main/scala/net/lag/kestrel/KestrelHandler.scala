@@ -17,335 +17,202 @@
 
 package net.lag.kestrel
 
-import java.io.IOException
-import java.net.InetSocketAddress
-import java.nio.ByteOrder
-import com.twitter.actors.Actor
-import com.twitter.actors.Actor._
 import scala.collection.mutable
-import com.twitter.xrayspecs.Time
-import com.twitter.xrayspecs.TimeConversions._
-import net.lag.configgy.{Config, Configgy, RuntimeEnvironment}
-import net.lag.logging.Logger
-import net.lag.naggati.{IoHandlerActorAdapter, MinaMessage, ProtocolError}
-import org.apache.mina.core.buffer.IoBuffer
-import org.apache.mina.core.session.{IdleStatus, IoSession}
-import org.apache.mina.transport.socket.SocketSessionConfig
+import com.twitter.admin.{BackgroundProcess, ServiceTracker}
+import com.twitter.conversions.time._
+import com.twitter.logging.Logger
+import com.twitter.stats.Stats
+import com.twitter.util.{Duration, Time}
 
+class TooManyOpenTransactionsException extends Exception("Too many open transactions.")
+object TooManyOpenTransactionsException extends TooManyOpenTransactionsException
 
-class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
-  private val log = Logger.get
+/**
+ * Common implementations of kestrel commands that don't depend on which protocol you're using.
+ */
+abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactions: Int) {
+  private val log = Logger.get(getClass.getName)
 
-  private val IDLE_TIMEOUT = 60
-  private val sessionID = KestrelStats.sessionID.incr
-  private val remoteAddress = session.getRemoteAddress.asInstanceOf[InetSocketAddress]
+  val sessionId = Kestrel.sessionId.incrementAndGet()
 
-  private var pendingTransaction: Option[(String, Int)] = None
-
-  // used internally to indicate a client error: tried to close a transaction on the wrong queue.
-  private class MismatchedQueueException extends Exception
-
-
-  session.getConfig.setReadBufferSize(2048)
-  IoHandlerActorAdapter.filter(session) -= MinaMessage.SessionOpened
-  IoHandlerActorAdapter.filter(session) -= classOf[MinaMessage.MessageSent]
-
-  // config can be null in unit tests
-  val idleTimeout = if (config == null) IDLE_TIMEOUT else config.getInt("timeout", IDLE_TIMEOUT)
-  if (idleTimeout > 0) {
-    session.getConfig.setIdleTime(IdleStatus.BOTH_IDLE, idleTimeout)
-  }
-
-  KestrelStats.sessions.incr
-  KestrelStats.totalConnections.incr
-  log.debug("New session %d from %s:%d", sessionID, remoteAddress.getHostName, remoteAddress.getPort)
-  start
-
-  def act = {
-    loop {
-      react {
-        case MinaMessage.MessageReceived(msg) =>
-          handle(msg.asInstanceOf[memcache.Request])
-
-        case MinaMessage.ExceptionCaught(cause) => {
-          cause.getCause match {
-            case _: ProtocolError => writeResponse("CLIENT_ERROR\r\n")
-            case _: IOException =>
-              log.debug("I/O Exception on session %d: %s", sessionID, cause.toString)
-            case _ =>
-              log.error(cause, "Exception caught on session %d: %s", sessionID, cause.toString)
-              writeResponse("ERROR\r\n")
-          }
-          session.close(false)
-        }
-
-        case MinaMessage.SessionClosed =>
-          log.debug("End of session %d", sessionID)
-          abortAnyTransaction
-          KestrelStats.sessions.decr
-          exit()
-
-        case MinaMessage.SessionIdle(status) =>
-          log.debug("Idle timeout on session %s", session)
-          session.close(false)
+  object pendingTransactions {
+    private val transactions = new mutable.HashMap[String, mutable.ListBuffer[Int]] {
+      override def default(key: String) = {
+        val rv = new mutable.ListBuffer[Int]
+        this(key) = rv
+        rv
       }
     }
-  }
 
-  private def writeResponse(out: String) = {
-    val bytes = out.getBytes
-    session.write(new memcache.Response(IoBuffer.wrap(bytes)))
-  }
-
-  private def writeResponse(out: String, data: Array[Byte]) = {
-    val bytes = out.getBytes
-    val buffer = IoBuffer.allocate(bytes.length + data.length + 7)
-    buffer.put(bytes)
-    buffer.put(data)
-    buffer.put("\r\nEND\r\n".getBytes)
-    buffer.flip
-    KestrelStats.bytesWritten.incr(buffer.capacity)
-    session.write(new memcache.Response(buffer))
-  }
-
-  private def handle(request: memcache.Request) = {
-    request.line(0) match {
-      case "GET" => get(request.line(1))
-      case "SET" =>
-        try {
-          set(request.line(1), request.line(2).toInt, request.line(3).toInt, request.data.get)
-        } catch {
-          case e: NumberFormatException =>
-            throw new ProtocolError("bad request: " + request)
-        }
-      case "STATS" => stats
-      case "SHUTDOWN" => shutdown
-      case "RELOAD" =>
-        Configgy.reload
-        writeResponse("Reloaded config.\r\n")
-      case "FLUSH" =>
-        flush(request.line(1))
-      case "FLUSH_ALL" =>
-        for (qName <- Kestrel.queues.queueNames) {
-          Kestrel.queues.flush(qName)
-        }
-        writeResponse("Flushed all queues.\r\n")
-      case "DUMP_CONFIG" =>
-        dumpConfig()
-      case "DUMP_STATS" =>
-        dumpStats()
-      case "DELETE" =>
-        delete(request.line(1))
-      case "FLUSH_EXPIRED" =>
-        flushExpired(request.line(1))
-      case "FLUSH_ALL_EXPIRED" =>
-        val flushed = Kestrel.queues.flushAllExpired()
-        writeResponse("%d\r\n".format(flushed))
-      case "VERSION" =>
-        version()
-      case "QUIT" =>
-        quit()
-    }
-  }
-
-  private def get(name: String): Unit = {
-    var key = name
-    var timeout = 0
-    var closing = false
-    var opening = false
-    var aborting = false
-    var peeking = false
-
-    if (name contains '/') {
-      val options = name.split("/")
-      key = options(0)
-      for (i <- 1 until options.length) {
-        val opt = options(i)
-        if (opt startsWith "t=") {
-          timeout = opt.substring(2).toInt
-        }
-        if (opt == "close") closing = true
-        if (opt == "open") opening = true
-        if (opt == "abort") aborting = true
-        if (opt == "peek") peeking = true
-      }
-    }
-    log.debug("get -> q=%s t=%d open=%s close=%s abort=%s peek=%s", key, timeout, opening, closing, aborting, peeking)
-
-    if ((key.length == 0) || ((peeking || aborting) && (opening || closing)) || (peeking && aborting)) {
-      writeResponse("CLIENT_ERROR\r\n")
-      session.close(false)
-      return
+    def pop(name: String): Option[Int] = synchronized {
+      val rv = transactions(name).headOption
+      rv.foreach { x => transactions(name).remove(0) }
+      rv
     }
 
-    try {
-      if (aborting) {
-        if (!abortTransaction(key)) {
-          log.warning("Attempt to abort a non-existent transaction on '%s' (sid %d, %s:%d)",
-                      key, sessionID, remoteAddress.getHostName, remoteAddress.getPort)
-        }
-        writeResponse("END\r\n")
+    def popN(name: String, count: Int): Option[Seq[Int]] = synchronized {
+      if (transactions(name).size < count) {
+        None
       } else {
-        if (closing) {
-          if (!closeTransaction(key)) {
-            log.debug("Attempt to close a non-existent transaction on '%s' (sid %d, %s:%d)",
-                      key, sessionID, remoteAddress.getHostName, remoteAddress.getPort)
-            // let the client continue. it may be optimistically closing previous transactions as
-            // it randomly jumps servers.
-          }
-          if (!opening) writeResponse("END\r\n")
-        }
-        if (opening || !closing) {
-          if (pendingTransaction.isDefined && !peeking) {
-            log.warning("Attempt to perform a non-transactional fetch with an open transaction on " +
-                        " '%s' (sid %d, %s:%d)", key, sessionID, remoteAddress.getHostName,
-                        remoteAddress.getPort)
-            writeResponse("ERROR\r\n")
-            session.close(false)
-            return
-          }
-          if (peeking) {
-            KestrelStats.peekRequests.incr
-          } else {
-            KestrelStats.getRequests.incr
-          }
-          Kestrel.queues.remove(key, timeout, opening, peeking) {
-            case None =>
-              writeResponse("END\r\n")
-            case Some(item) =>
-              log.debug("get <- %s", item)
-              if (opening) pendingTransaction = Some((key, item.xid))
-              writeResponse("VALUE %s 0 %d\r\n".format(key, item.data.length), item.data)
-          }
-        }
+        Some((0 until count).map { x => transactions(name).remove(0) })
       }
-    } catch {
-      case e: MismatchedQueueException =>
-        log.warning("Attempt to close a transaction on the wrong queue '%s' (sid %d, %s:%d)",
-                    key, sessionID, remoteAddress.getHostName, remoteAddress.getPort)
-        writeResponse("ERROR\r\n")
-        session.close(false)
+    }
+
+    def add(name: String, xid: Int) = synchronized {
+      transactions(name) += xid
+    }
+
+    def size(name: String): Int = synchronized { transactions(name).size }
+
+    def cancelAll() {
+      synchronized {
+        transactions.foreach { case (name, xids) =>
+          xids.foreach { xid => queues.unremove(name, xid) }
+        }
+        transactions.clear()
+      }
+    }
+
+    def popAll(name: String): Seq[Int] = {
+      synchronized {
+        val xids = transactions(name).toArray
+        transactions(name).clear()
+        xids
+      }
+    }
+  }
+
+  Kestrel.sessions.incrementAndGet()
+  Stats.incr("total_connections")
+
+  protected def clientDescription: String
+
+  // usually called when netty sends a disconnect signal.
+  protected def finish() {
+    log.debug("End of session %d", sessionId)
+    abortAnyTransaction()
+    Kestrel.sessions.decrementAndGet()
+  }
+
+  protected def flushAllQueues() {
+    queues.queueNames.foreach { qName => queues.flush(qName) }
+  }
+
+  // returns true if a transaction was actually aborted.
+  def abortTransaction(key: String): Boolean = {
+    pendingTransactions.pop(key) match {
+      case None =>
+        log.warning("Attempt to abort a non-existent transaction on '%s' (sid %d, %s)",
+                    key, sessionId, clientDescription)
+        false
+      case Some(xid) =>
+        log.debug("abort -> q=%s", key)
+        queues.unremove(key, xid)
+        true
     }
   }
 
   // returns true if a transaction was actually closed.
-  private def closeTransaction(name: String): Boolean = {
-    pendingTransaction match {
-      case None => false
-      case Some((qname, xid)) =>
-        if (qname != name) {
-          throw new MismatchedQueueException
-        } else {
-          Kestrel.queues.confirmRemove(qname, xid)
-          pendingTransaction = None
-        }
+  def closeTransaction(key: String): Boolean = {
+    pendingTransactions.pop(key) match {
+      case None =>
+        false
+      case Some(xid) =>
+        log.debug("confirm -> q=%s", key)
+        queues.confirmRemove(key, xid)
         true
     }
   }
 
-  private def abortTransaction(name: String): Boolean = {
-    pendingTransaction match {
-      case None => false
-      case Some((qname, xid)) =>
-        if (qname != name) {
-          throw new MismatchedQueueException
-        } else {
-          Kestrel.queues.unremove(qname, xid)
-          pendingTransaction = None
-        }
+  def closeTransactions(key: String, count: Int): Boolean = {
+    pendingTransactions.popN(key, count) match {
+      case None =>
+        false
+      case Some(xids) =>
+        xids.foreach { xid => queues.confirmRemove(key, xid) }
         true
     }
   }
 
-  private def abortAnyTransaction() = {
-    pendingTransaction map { case (qname, xid) => Kestrel.queues.unremove(qname, xid) }
-    pendingTransaction = None
+  def closeAllTransactions(key: String): Int = {
+    val xids = pendingTransactions.popAll(key)
+    xids.foreach { xid => queues.confirmRemove(key, xid) }
+    xids.size
   }
 
-  private def set(name: String, flags: Int, expiry: Int, data: Array[Byte]) = {
-    log.debug("set -> q=%s flags=%d expiry=%d size=%d", name, flags, expiry, data.length)
-    KestrelStats.setRequests.incr
-    if (Kestrel.queues.add(name, data, expiry)) {
-      writeResponse("STORED\r\n")
+  // will do a continuous transactional fetch on a queue until time runs out or transactions are full.
+  final def monitorUntil(key: String, timeLimit: Time)(f: Option[QItem] => Unit) {
+    if (timeLimit <= Time.now || pendingTransactions.size(key) >= maxOpenTransactions) {
+      f(None)
     } else {
-      writeResponse("NOT_STORED\r\n")
+      queues.remove(key, Some(timeLimit), true, false) {
+        case None =>
+          f(None)
+        case x @ Some(item) =>
+          pendingTransactions.add(key, item.xid)
+          f(x)
+          monitorUntil(key, timeLimit)(f)
+      }
     }
   }
 
-  private def flush(name: String) = {
-    log.debug("flush -> q=%s", name)
-    Kestrel.queues.flush(name)
-    writeResponse("END\r\n")
-  }
-
-  private def delete(name: String) = {
-    log.debug("delete -> q=%s", name)
-    Kestrel.queues.delete(name)
-    writeResponse("END\r\n")
-  }
-
-  private def flushExpired(name: String) = {
-    log.debug("flush_expired -> q=%s", name)
-    writeResponse("%d\r\n".format(Kestrel.queues.flushExpired(name)))
-  }
-
-  private def stats() = {
-    var report = new mutable.ArrayBuffer[(String, String)]
-    report += (("uptime", Kestrel.uptime.toString))
-    report += (("time", (Time.now.inMilliseconds / 1000).toString))
-    report += (("version", Kestrel.runtime.jarVersion))
-    report += (("curr_items", Kestrel.queues.currentItems.toString))
-    report += (("total_items", Kestrel.queues.totalAdded.toString))
-    report += (("bytes", Kestrel.queues.currentBytes.toString))
-    report += (("curr_connections", KestrelStats.sessions.toString))
-    report += (("total_connections", KestrelStats.totalConnections.toString))
-    report += (("cmd_get", KestrelStats.getRequests.toString))
-    report += (("cmd_set", KestrelStats.setRequests.toString))
-    report += (("cmd_peek", KestrelStats.peekRequests.toString))
-    report += (("get_hits", Kestrel.queues.queueHits.toString))
-    report += (("get_misses", Kestrel.queues.queueMisses.toString))
-    report += (("bytes_read", KestrelStats.bytesRead.toString))
-    report += (("bytes_written", KestrelStats.bytesWritten.toString))
-
-    for (qName <- Kestrel.queues.queueNames) {
-      report ++= Kestrel.queues.stats(qName).map { case (k, v) => ("queue_" + qName + "_" + k, v) }
+  def getItem(key: String, timeout: Option[Time], opening: Boolean, peeking: Boolean)(f: Option[QItem] => Unit) {
+    if (opening && pendingTransactions.size(key) >= maxOpenTransactions) {
+      log.warning("Attempt to open too many transactions on '%s' (sid %d, %s)", key, sessionId,
+                  clientDescription)
+      throw TooManyOpenTransactionsException
     }
 
-    val summary = {
-      for ((key, value) <- report) yield "STAT %s %s".format(key, value)
-    }.mkString("", "\r\n", "\r\nEND\r\n")
-    writeResponse(summary)
-  }
-
-  private def dumpConfig() = {
-    val dump = new mutable.ListBuffer[String]
-    for (qName <- Kestrel.queues.queueNames) {
-      dump += "queue '" + qName + "' {"
-      dump += Kestrel.queues.dumpConfig(qName).mkString("  ", "\r\n  ", "")
-      dump += "}"
+    log.debug("get -> q=%s t=%s open=%s peek=%s", key, timeout, opening, peeking)
+    if (peeking) {
+      Stats.incr("cmd_peek")
+    } else {
+      Stats.incr("cmd_get")
     }
-    writeResponse(dump.mkString("", "\r\n", "\r\nEND\r\n"))
-  }
-
-  private def dumpStats() = {
-    val dump = new mutable.ListBuffer[String]
-    for (qName <- Kestrel.queues.queueNames) {
-      dump += "queue '" + qName + "' {"
-      dump += Kestrel.queues.stats(qName).map { case (k, v) => k + "=" + v }.mkString("  ", "\r\n  ", "")
-      dump += "}"
+    queues.remove(key, timeout, opening, peeking) {
+      case None =>
+        f(None)
+      case Some(item) =>
+        log.debug("get <- %s", item)
+        if (opening) pendingTransactions.add(key, item.xid)
+        f(Some(item))
     }
-    writeResponse(dump.mkString("", "\r\n", "\r\nEND\r\n"))
   }
 
-  private def version() = {
-    writeResponse("VERSION " + Kestrel.runtime.jarVersion + "\r\n")
+  protected def abortAnyTransaction() = {
+    pendingTransactions.cancelAll()
   }
 
-  private def shutdown() = {
-    Kestrel.shutdown
+  def setItem(key: String, flags: Int, expiry: Option[Time], data: Array[Byte]) = {
+    log.debug("set -> q=%s flags=%d expiry=%s size=%d", key, flags, expiry, data.length)
+    Stats.incr("cmd_set")
+    queues.add(key, data, expiry)
   }
 
-  private def quit() = {
-    session.close(false)
+  protected def flush(key: String) = {
+    log.debug("flush -> q=%s", key)
+    queues.flush(key)
+  }
+
+  protected def rollJournal(key: String) {
+    log.debug("roll -> q=%s", key)
+    queues.rollJournal(key)
+  }
+
+  protected def delete(key: String) = {
+    log.debug("delete -> q=%s", key)
+    queues.delete(key)
+  }
+
+  protected def flushExpired(key: String) = {
+    log.debug("flush_expired -> q=%s", key)
+    queues.flushExpired(key)
+  }
+
+  protected def shutdown() = {
+    BackgroundProcess {
+      Thread.sleep(100)
+      ServiceTracker.shutdown()
+    }
   }
 }

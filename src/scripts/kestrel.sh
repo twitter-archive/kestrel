@@ -3,24 +3,29 @@
 # kestrel init.d script.
 #
 # All java services require the same directory structure:
-#   /opt/local/$APP_NAME-$VERSION
-#   /var/log/$APP_NAME (chown daemon, chmod 775)
+#   /usr/local/$APP_NAME
+#   /var/log/$APP_NAME
+#   /var/run/$APP_NAME
 
 APP_NAME="kestrel"
 VERSION="@VERSION@"
-APP_HOME="/opt/local/$APP_NAME/current"
-AS_USER="daemon"
+APP_HOME="/usr/local/$APP_NAME/current"
 DAEMON="/usr/local/bin/daemon"
-QUEUE_PATH="/var/spool/kestrel"
 
-HEAP_OPTS="-Xmx2048m -Xms1024m -XX:NewSize=256m"
+JAR_NAME="$APP_NAME-$VERSION.jar"
+STAGE="production"
+
+HEAP_OPTS="-Xmx4096m -Xms4096m -XX:NewSize=768m"
 JMX_OPTS="-Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.port=22134 -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false"
-# add JMX_OPTS below if you want jmx support.
-JAVA_OPTS="-server -verbosegc -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution -XX:+UseConcMarkSweepGC -XX:+UseParNewGC $HEAP_OPTS"
+GC_OPTS="-verbosegc -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCDateStamps -XX:+UseConcMarkSweepGC -XX:+UseParNewGC"
+GC_LOG="-Xloggc:/var/log/$APP_NAME/gc.log"
+DEBUG_OPTS="-XX:ErrorFile=/var/log/$APP_NAME/java_error%p.log"
+JAVA_OPTS="-server -Dstage=$STAGE $GC_OPTS $GC_LOG $HEAP_OPTS $JMX_OPTS $DEBUG_OPTS"
 
-pidfile="/var/run/$APP_NAME.pid"
-daemon_args="--name $APP_NAME --pidfile $pidfile"
-daemon_start_args="--user $AS_USER --stdout=/var/log/$APP_NAME/stdout --stderr=/var/log/$APP_NAME/error"
+pidfile="/var/run/$APP_NAME/$APP_NAME.pid"
+daemon_pidfile="/var/run/$APP_NAME/$APP_NAME-daemon.pid"
+daemon_args="--name $APP_NAME --pidfile $daemon_pidfile --core --chdir /"
+daemon_start_args="--stdout=/var/log/$APP_NAME/stdout --stderr=/var/log/$APP_NAME/error"
 
 function running() {
   $DAEMON $daemon_args --running
@@ -38,16 +43,6 @@ function find_java() {
   done
 }
 
-
-# dirs under /var/run can go away between reboots.
-for p in /var/run/$APP_NAME /var/log/$APP_NAME $QUEUE_PATH; do
-  if [ ! -d $p ]; then
-    mkdir -p $p
-    chmod 775 $p
-    chown $AS_USER $p >/dev/null 2>&1 || true
-  fi
-done
-
 find_java
 
 
@@ -55,9 +50,9 @@ case "$1" in
   start)
     echo -n "Starting $APP_NAME... "
 
-    if [ ! -r $APP_HOME/$APP_NAME-$VERSION.jar ]; then
+    if [ ! -r $APP_HOME/$JAR_NAME ]; then
       echo "FAIL"
-      echo "*** $APP_NAME jar missing: $APP_HOME/$APP_NAME-$VERSION.jar - not starting"
+      echo "*** $APP_NAME jar missing: $APP_HOME/$JAR_NAME - not starting"
       exit 1
     fi
     if [ ! -x $JAVA_HOME/bin/java ]; then
@@ -70,8 +65,9 @@ case "$1" in
       exit 0
     fi
     
-    ulimit -n 8192 || echo -n " (no ulimit)"
-    $DAEMON $daemon_args $daemon_start_args -- ${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar ${APP_HOME}/${APP_NAME}-${VERSION}.jar
+    ulimit -n 32768 || echo -n " (no ulimit)"
+    ulimit -c unlimited || echo -n " (no coredump)"
+    $DAEMON $daemon_args $daemon_start_args -- sh -c "echo "'$$'" > $pidfile; exec ${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar ${APP_HOME}/${JAR_NAME}"
     tries=0
     while ! running; do
       tries=$((tries + 1))
@@ -95,9 +91,23 @@ case "$1" in
     tries=0
     while running; do
       tries=$((tries + 1))
-      if [ $tries -ge 5 ]; then
-        echo "FAIL"
-        exit 1
+      if [ $tries -ge 15 ]; then
+        echo "FAILED SOFT SHUTDOWN, TRYING HARDER"
+        if [ -f $pidfile ]; then
+          kill $(cat $pidfile)
+        else
+          echo "CAN'T FIND PID, TRY KILL MANUALLY"
+          exit 1
+        fi
+        hardtries=0
+        while running; do
+          hardtries=$((hardtries + 1))
+          if [ $hardtries -ge 5 ]; then
+            echo "FAILED HARD SHUTDOWN, TRY KILL -9 MANUALLY"
+            kill -9 $(cat $pidfile)
+          fi
+          sleep 1
+        done
       fi
       sleep 1
     done

@@ -17,26 +17,22 @@
 
 package net.lag.kestrel
 
-import _root_.java.io.{File, FileInputStream}
-import _root_.scala.util.Sorting
-import _root_.com.twitter.xrayspecs.Time
-import _root_.com.twitter.xrayspecs.TimeConversions._
-import _root_.net.lag.configgy.Config
-import _root_.org.specs._
+import java.io.{File, FileInputStream}
+import scala.util.Sorting
+import com.twitter.util.{TempFolder, Time, Timer}
+import com.twitter.conversions.time._
+import com.twitter.stats.Stats
+import org.specs.Specification
+import config._
 
-
-class QueueCollectionSpec extends Specification with TestHelper {
-
+class QueueCollectionSpec extends Specification with TempFolder with TestLogging {
   private var qc: QueueCollection = null
 
-  private def sorted[T <% Ordered[T]](list: List[T]): List[T] = {
-    val dest = list.toArray
-    Sorting.quickSort(dest)
-    dest.toList
-  }
-
+  val config = new QueueBuilder().apply()
 
   "QueueCollection" should {
+    val timer = new FakeTimer()
+
     doAfter {
       if (qc ne null) {
         qc.shutdown
@@ -45,16 +41,17 @@ class QueueCollectionSpec extends Specification with TestHelper {
 
     "create a queue" in {
       withTempFolder {
-        qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+        Stats.clearAll()
+        qc = new QueueCollection(folderName, timer, config, Nil)
         qc.queueNames mustEqual Nil
 
         qc.add("work1", "stuff".getBytes)
         qc.add("work2", "other stuff".getBytes)
 
-        sorted(qc.queueNames) mustEqual List("work1", "work2")
+        qc.queueNames.sorted mustEqual List("work1", "work2")
         qc.currentBytes mustEqual 16
         qc.currentItems mustEqual 2
-        qc.totalAdded() mustEqual 2
+        Stats.getCounter("total_items")() mustEqual 2
 
         new String(qc.receive("work1").get) mustEqual "stuff"
         qc.receive("work1") mustEqual None
@@ -63,13 +60,13 @@ class QueueCollectionSpec extends Specification with TestHelper {
 
         qc.currentBytes mustEqual 0
         qc.currentItems mustEqual 0
-        qc.totalAdded() mustEqual 2
+        Stats.getCounter("total_items")() mustEqual 2
       }
     }
 
     "load from journal" in {
       withTempFolder {
-        qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+        qc = new QueueCollection(folderName, timer, config, Nil)
         qc.add("ducklings", "huey".getBytes)
         qc.add("ducklings", "dewey".getBytes)
         qc.add("ducklings", "louie".getBytes)
@@ -78,7 +75,7 @@ class QueueCollectionSpec extends Specification with TestHelper {
         qc.currentItems mustEqual 3
         qc.shutdown
 
-        qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+        qc = new QueueCollection(folderName, timer, config, Nil)
         qc.queueNames mustEqual Nil
         new String(qc.receive("ducklings").get) mustEqual "huey"
         // now the queue should be suddenly instantiated:
@@ -87,40 +84,54 @@ class QueueCollectionSpec extends Specification with TestHelper {
       }
     }
 
+    "force-roll a journal" in {
+      withTempFolder {
+        qc = new QueueCollection(folderName, timer, config, Nil)
+        qc.add("test", "one".getBytes)
+        qc.add("test", "two".getBytes)
+        qc.receive("test")
+        qc.queue("test").get.journalSize mustEqual 49
+        qc.rollJournal("test")
+        qc.queue("test").get.journalSize mustEqual 29
+      }
+    }
+
     "queue hit/miss tracking" in {
       withTempFolder {
-        qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+        Stats.clearAll()
+        qc = new QueueCollection(folderName, timer, config, Nil)
         qc.add("ducklings", "ugly1".getBytes)
         qc.add("ducklings", "ugly2".getBytes)
-        qc.queueHits() mustEqual 0
-        qc.queueMisses() mustEqual 0
+        Stats.getCounter("get_hits")() mustEqual 0
+        Stats.getCounter("get_misses")() mustEqual 0
 
         new String(qc.receive("ducklings").get) mustEqual "ugly1"
-        qc.queueHits() mustEqual 1
-        qc.queueMisses() mustEqual 0
+        Stats.getCounter("get_hits")() mustEqual 1
+        Stats.getCounter("get_misses")() mustEqual 0
         qc.receive("zombie") mustEqual None
-        qc.queueHits() mustEqual 1
-        qc.queueMisses() mustEqual 1
+        Stats.getCounter("get_hits")() mustEqual 1
+        Stats.getCounter("get_misses")() mustEqual 1
 
         new String(qc.receive("ducklings").get) mustEqual "ugly2"
-        qc.queueHits() mustEqual 2
-        qc.queueMisses() mustEqual 1
+        Stats.getCounter("get_hits")() mustEqual 2
+        Stats.getCounter("get_misses")() mustEqual 1
         qc.receive("ducklings") mustEqual None
-        qc.queueHits() mustEqual 2
-        qc.queueMisses() mustEqual 2
+        Stats.getCounter("get_hits")() mustEqual 2
+        Stats.getCounter("get_misses")() mustEqual 2
         qc.receive("ducklings") mustEqual None
-        qc.queueHits() mustEqual 2
-        qc.queueMisses() mustEqual 3
+        Stats.getCounter("get_hits")() mustEqual 2
+        Stats.getCounter("get_misses")() mustEqual 3
       }
     }
 
     "proactively load existing queue files" in {
       withTempFolder {
         new File(folderName + "/apples").createNewFile()
-        new File(folderName + "/oranges").createNewFile()
-        qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+        new File(folderName + "/oranges.101").createNewFile()
+        new File(folderName + "/oranges.133").createNewFile()
+        qc = new QueueCollection(folderName, timer, config, Nil)
         qc.loadQueues()
-        sorted(qc.queueNames) mustEqual List("apples", "oranges")
+        qc.queueNames.sorted mustEqual List("apples", "oranges")
       }
     }
 
@@ -129,9 +140,9 @@ class QueueCollectionSpec extends Specification with TestHelper {
         new File(folderName + "/apples").createNewFile()
         new File(folderName + "/oranges").createNewFile()
         new File(folderName + "/oranges~~900").createNewFile()
-        qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+        qc = new QueueCollection(folderName, timer, config, Nil)
         qc.loadQueues()
-        sorted(qc.queueNames) mustEqual List("apples", "oranges")
+        qc.queueNames.sorted mustEqual List("apples", "oranges")
       }
     }
 
@@ -139,19 +150,19 @@ class QueueCollectionSpec extends Specification with TestHelper {
       withTempFolder {
         new File(folderName + "/apples").createNewFile()
         new File(folderName + "/oranges").createNewFile()
-        qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+        qc = new QueueCollection(folderName, timer, config, Nil)
         qc.loadQueues()
         qc.delete("oranges")
 
-        sorted(new File(folderName).list().toList) mustEqual List("apples")
-        sorted(qc.queueNames) mustEqual List("apples")
+        new File(folderName).list().toList.sorted mustEqual List("apples")
+        qc.queueNames.sorted mustEqual List("apples")
       }
     }
 
     "fanout queues" in {
       "generate on the fly" in {
         withTempFolder {
-          qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+          qc = new QueueCollection(folderName, timer, config, Nil)
           qc.add("jobs", "job1".getBytes)
           qc.receive("jobs+client1") mustEqual None
           qc.add("jobs", "job2".getBytes)
@@ -166,7 +177,7 @@ class QueueCollectionSpec extends Specification with TestHelper {
         withTempFolder {
           new File(folderName + "/jobs").createNewFile()
           new File(folderName + "/jobs+client1").createNewFile()
-          qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+          qc = new QueueCollection(folderName, timer, config, Nil)
           qc.loadQueues()
           qc.add("jobs", "job1".getBytes)
           new String(qc.receive("jobs+client1").get) mustEqual "job1"
@@ -182,40 +193,77 @@ class QueueCollectionSpec extends Specification with TestHelper {
         withTempFolder {
           new File(folderName + "/jobs").createNewFile()
           new File(folderName + "/jobs+client1").createNewFile()
-          qc = new QueueCollection(folderName, Config.fromMap(Map.empty))
+          qc = new QueueCollection(folderName, timer, config, Nil)
           qc.loadQueues()
           qc.add("jobs", "job1".getBytes)
 
           qc.delete("jobs+client1")
 
-          sorted(new File(folderName).list().toList) mustEqual List("jobs")
+          new File(folderName).list().toList.sorted mustEqual List("jobs")
           new String(qc.receive("jobs").get) mustEqual "job1"
 
           qc.add("jobs", "job2".getBytes)
-          sorted(new File(folderName).list().toList) mustEqual List("jobs")
+          new File(folderName).list().toList.sorted mustEqual List("jobs")
           new String(qc.receive("jobs").get) mustEqual "job2"
+        }
+      }
+
+      "pass through fanout-only master" in {
+        withTempFolder {
+          new File(folderName + "/jobs+client1").createNewFile()
+          val jobConfig = new QueueBuilder() {
+            name = "jobs"
+            fanoutOnly = true
+          }
+          qc = new QueueCollection(folderName, timer, config, List(jobConfig))
+          qc.loadQueues()
+          qc.add("jobs", "job1".getBytes)
+          qc.receive("jobs") mustEqual None
+          new String(qc.receive("jobs+client1").get) mustEqual "job1"
+        }
+      }
+    }
+
+    "expire items when (and only when) they are expired" in {
+      withTempFolder {
+        Time.withCurrentTimeFrozen { time =>
+          new File(folderName + "/expired").createNewFile()
+          qc = new QueueCollection(folderName, timer, config, Nil)
+          qc.loadQueues()
+
+          qc.add("expired", "hello".getBytes, Some(5.seconds.fromNow))
+          time.advance(4.seconds)
+          new String(qc.receive("expired").get) mustEqual "hello"
+          qc.add("expired", "hello".getBytes, Some(5.seconds.fromNow))
+          time.advance(6.seconds)
+          qc.receive("expired") mustEqual None
         }
       }
     }
 
     "move expired items from one queue to another" in {
       withTempFolder {
-        new File(folderName + "/jobs").createNewFile()
-        new File(folderName + "/expired").createNewFile()
-        qc = new QueueCollection(folderName, Config.fromMap(Map("jobs.move_expired_to" -> "expired")))
-        Kestrel.queues = qc
-        qc.loadQueues()
-        qc.add("jobs", "hello".getBytes, 1)
-        qc.queue("jobs").get.length mustEqual 1
-        qc.queue("expired").get.length mustEqual 0
+        Time.withCurrentTimeFrozen { time =>
+          new File(folderName + "/jobs").createNewFile()
+          new File(folderName + "/expired").createNewFile()
+          val expireConfig = new QueueBuilder() {
+            name = "jobs"
+            expireToQueue = "expired"
+          }
+          qc = new QueueCollection(folderName, timer, config, List(expireConfig))
+          qc.loadQueues()
+          qc.add("jobs", "hello".getBytes, Some(1.second.fromNow))
+          qc.queue("jobs").get.length mustEqual 1
+          qc.queue("expired").get.length mustEqual 0
 
-        Time.advance(2.seconds)
-        qc.queue("jobs").get.length mustEqual 1
-        qc.queue("expired").get.length mustEqual 0
-        qc.receive("jobs") mustEqual None
-        qc.queue("jobs").get.length mustEqual 0
-        qc.queue("expired").get.length mustEqual 1
-        new String(qc.receive("expired").get) mustEqual "hello"
+          time.advance(2.seconds)
+          qc.queue("jobs").get.length mustEqual 1
+          qc.queue("expired").get.length mustEqual 0
+          qc.receive("jobs") mustEqual None
+          qc.queue("jobs").get.length mustEqual 0
+          qc.queue("expired").get.length mustEqual 1
+          new String(qc.receive("expired").get) mustEqual "hello"
+        }
       }
     }
   }

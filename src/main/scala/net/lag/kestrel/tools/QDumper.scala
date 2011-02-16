@@ -15,12 +15,13 @@
  * limitations under the License.
  */
 
-package net.lag.kestrel.tools
+package net.lag.kestrel
+package tools
 
 import java.io.{FileNotFoundException, IOException}
 import scala.collection.mutable
-import com.twitter.xrayspecs.Time
-
+import com.twitter.conversions.time._
+import com.twitter.util.Time
 
 class QueueDumper(filename: String) {
   var offset = 0L
@@ -64,7 +65,7 @@ class QueueDumper(filename: String) {
   }
 
   def dumpItem(item: JournalItem) {
-    val now = Time.now.inMilliseconds
+    val now = Time.now
     if (!QDumper.quiet) print("%08x  ".format(offset & 0xffffffffL))
     item match {
       case JournalItem.Add(qitem) =>
@@ -73,14 +74,17 @@ class QueueDumper(filename: String) {
           if (qitem.xid > 0) {
             print(" xid=%d".format(qitem.xid))
           }
-          if (qitem.expiry > 0) {
-            if (qitem.expiry - now < 0) {
+          if (qitem.expiry.isDefined) {
+            if (qitem.expiry.get - now < 0.milliseconds) {
               print(" expired")
             } else {
-              print(" exp=%d".format(qitem.expiry - now))
+              print(" exp=%s".format(qitem.expiry.get - now))
             }
           }
           println()
+        }
+        if (QDumper.dump) {
+          println("    " + new String(qitem.data, "ISO-8859-1"))
         }
         queue += qitem.data.size
       case JournalItem.Remove =>
@@ -96,11 +100,11 @@ class QueueDumper(filename: String) {
         if (!QDumper.quiet) println("XID %d".format(xid))
         currentXid = xid
       case JournalItem.Unremove(xid) =>
-        queue.unget(openTransactions.removeKey(xid).get)
+        queue.unget(openTransactions.remove(xid).get)
         if (!QDumper.quiet) println("CAN %d".format(xid))
       case JournalItem.ConfirmRemove(xid) =>
         if (!QDumper.quiet) println("ACK %d".format(xid))
-        openTransactions.removeKey(xid)
+        openTransactions.remove(xid)
       case x =>
         if (!QDumper.quiet) println(x)
     }
@@ -111,6 +115,7 @@ class QueueDumper(filename: String) {
 object QDumper {
   val filenames = new mutable.ListBuffer[String]
   var quiet = false
+  var dump = false
 
   def usage() {
     println()
@@ -119,6 +124,7 @@ object QDumper {
     println()
     println("options:")
     println("    -q      quiet: don't describe every line, just the summary")
+    println("    -d      dump contents of added items")
     println()
   }
 
@@ -129,6 +135,9 @@ object QDumper {
       System.exit(0)
     case "-q" :: xs =>
       quiet = true
+      parseArgs(xs)
+    case "-d" :: xs =>
+      dump = true
       parseArgs(xs)
     case x :: xs =>
       filenames += x

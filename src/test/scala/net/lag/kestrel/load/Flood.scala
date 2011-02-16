@@ -17,38 +17,28 @@
 
 package net.lag.kestrel.load
 
-import _root_.java.net._
-import _root_.java.nio._
-import _root_.java.nio.channels._
-import _root_.scala.collection.mutable
-import _root_.net.lag.extensions._
-
+import java.net._
+import java.nio._
+import java.nio.channels._
+import scala.collection.mutable
+import com.twitter.conversions.string._
 
 /**
  * Spam a kestrel server with 1M copies of a pop song lyric, to see how
  * quickly it can absorb them.
  */
-object Flood {
+object Flood extends LoadTesting {
   private val DATA = "x" * 1024
 
   private val EXPECT = ByteBuffer.wrap("STORED\r\n".getBytes)
 
   def put(socket: SocketChannel, queueName: String, n: Int, data: String) = {
     val spam = ByteBuffer.wrap(("set " + queueName + " 0 0 " + data.length + "\r\n" + data + "\r\n").getBytes)
-    val buffer = ByteBuffer.allocate(8)
+    val buffer = ByteBuffer.allocate(EXPECT.limit)
 
     for (i <- 0 until n) {
-      spam.rewind
-      while (spam.position < spam.limit) {
-        socket.write(spam)
-      }
-      buffer.rewind
-      while (buffer.position < buffer.limit) {
-        socket.read(buffer)
-      }
-      buffer.rewind
-      EXPECT.rewind
-      if (buffer != EXPECT) {
+      send(socket, spam)
+      if (receive(socket, buffer) != EXPECT) {
         // the "!" is important.
         throw new Exception("Unexpected response at " + i + "!")
       }
@@ -59,38 +49,17 @@ object Flood {
     val req = ByteBuffer.wrap(("get " + queueName + "\r\n").getBytes)
     val expectEnd = ByteBuffer.wrap("END\r\n".getBytes)
     val expectData = ByteBuffer.wrap(("VALUE " + queueName + " 0 " + data.length + "\r\n" + data + "\r\nEND\r\n").getBytes)
-    val buffer = ByteBuffer.allocate(expectData.capacity)
+    val expecting = new Expecting(expectEnd, expectData)
 
     var count = 0
     var misses = 0
     while (count < n) {
-      req.rewind
-      while (req.position < req.limit) {
-        socket.write(req)
-      }
-      buffer.rewind
-      while (buffer.position < expectEnd.limit) {
-        socket.read(buffer)
-      }
-      val oldpos = buffer.position
-      buffer.flip
-      expectEnd.rewind
-      if (buffer == expectEnd) {
+      send(socket, req)
+      val got = expecting(socket)
+      if (got == expectEnd) {
         // nothing yet. poop. :(
         misses += 1
       } else {
-        buffer.position(oldpos)
-        buffer.limit(buffer.capacity)
-        while (buffer.position < expectData.limit) {
-          socket.read(buffer)
-        }
-        buffer.rewind
-        expectData.rewind
-        if (buffer != expectData) {
-          val bad = new Array[Byte](buffer.capacity)
-          buffer.get(bad)
-          throw new Exception("Unexpected response! thr=" + Thread.currentThread + " -> " + new String(bad))
-        }
         count += 1
       }
     }

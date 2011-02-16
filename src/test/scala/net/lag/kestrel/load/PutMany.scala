@@ -17,12 +17,11 @@
 
 package net.lag.kestrel.load
 
-import _root_.java.net._
-import _root_.java.nio._
-import _root_.java.nio.channels._
-import _root_.scala.collection.mutable
-import _root_.net.lag.extensions._
-
+import java.net._
+import java.nio._
+import java.nio.channels._
+import scala.collection.mutable
+import com.twitter.conversions.string._
 
 /**
  * Spam a kestrel server with 1M copies of a pop song lyric, to see how
@@ -134,7 +133,7 @@ object PutMany {
     val duration = System.currentTimeMillis - startTime
     Console.println("Finished in %d msec (%.1f usec/put throughput).".format(duration, duration * 1000.0 / totalCount))
 
-    val sortedTimings = timings.toList.sort { (a, b) => a < b }
+    val sortedTimings = timings.toList.sorted
     val average = sortedTimings.foldLeft(0L) { _ + _ } / sortedTimings.size.toDouble / 1000.0
     val min = sortedTimings(0) / 1000.0
     val max = sortedTimings(sortedTimings.size - 1) / 1000.0

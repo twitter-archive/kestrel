@@ -17,16 +17,13 @@
 
 package net.lag.kestrel
 
-import java.util.concurrent.atomic.AtomicLong
+import org.specs.Specification
+import com.twitter.logging.{Level, Logger}
 
-class Counter {
-  private val value = new AtomicLong(0)
-
-  def apply() = value.get
-  def set(n: Long) = value.set(n)
-  def incr() = value.addAndGet(1)
-  def incr(n: Long) = value.addAndGet(n)
-  def decr() = value.addAndGet(-1)
-  def decr(n: Long) = value.addAndGet(-n)
-  override def toString = value.get.toString
+trait TestLogging { self: Specification =>
+  new SpecContext {
+    beforeSpec {
+      Logger.get("").setLevel(Logger.FATAL)
+    }
+  }
 }

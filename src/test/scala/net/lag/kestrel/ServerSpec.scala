@@ -17,60 +17,82 @@
 
 package net.lag.kestrel
 
-import _root_.java.io._
-import _root_.java.net.Socket
-import _root_.scala.collection.Map
-import _root_.com.twitter.xrayspecs.Time
-import _root_.com.twitter.xrayspecs.TimeConversions._
-import _root_.net.lag.configgy.Config
-import _root_.net.lag.logging.Logger
-import _root_.org.specs._
+import java.io._
+import java.net.Socket
+import scala.collection.Map
+import scala.util.Random
+import com.twitter.admin.RuntimeEnvironment
+import com.twitter.conversions.storage._
+import com.twitter.conversions.time._
+import com.twitter.logging.Logger
+import com.twitter.util.{TempFolder, Time}
+import org.specs.Specification
+import config._
 
-
-class ServerSpec extends Specification with TestHelper {
-
+class ServerSpec extends Specification with TempFolder with TestLogging {
   val PORT = 22199
-  var config: Config = null
+  var kestrel: Kestrel = null
+
+  val runtime = RuntimeEnvironment(this, Array())
+  Kestrel.runtime = runtime
 
   def makeServer = {
-    config = new Config
-    config("host") = "localhost"
-    config("port") = PORT
-    config("queue_path") = canonicalFolderName
-    config("max_journal_size") = 16 * 1024
-    config("log.console") = true
-    config("log.level") = "debug"
-    config("log.filename") = "/tmp/foo"
-
+    val defaultConfig = new QueueBuilder() {
+      maxJournalSize = 16.kilobytes
+    }.apply()
     // make a queue specify max_items and max_age
-    config("queues.weather_updates.max_items") = 1500000
-    config("queues.weather_updates.max_age") = 1800
-
-    Kestrel.startup(config)
+    val weatherUpdatesConfig = new QueueBuilder() {
+      name = "weather_updates"
+      maxItems = 1500000
+      maxAge = 1800.seconds
+    }
+    kestrel = new Kestrel(defaultConfig, List(weatherUpdatesConfig), "localhost",
+                          Some(PORT), None, canonicalFolderName, Protocol.Ascii, None, None, 1)
+    kestrel.start()
   }
 
 
   "Server" should {
     doAfter {
-      Kestrel.shutdown
+      kestrel.shutdown()
+      kestrel = null
     }
 
     "configure per-queue" in {
       withTempFolder {
         makeServer
-        Kestrel.queues.queue("starship").map(_.maxItems()) mustEqual Some(Math.MAX_INT)
-        Kestrel.queues.queue("starship").map(_.maxAge()) mustEqual Some(0)
-        Kestrel.queues.queue("weather_updates").map(_.maxItems()) mustEqual Some(1500000)
-        Kestrel.queues.queue("weather_updates").map(_.maxAge()) mustEqual Some(1800)
-        config("queues.starship.max_items") = 9999
-        Kestrel.queues.queue("starship").map(_.maxItems()) mustEqual Some(9999)
+        val starship = kestrel.queueCollection("starship").get
+        val weatherUpdates = kestrel.queueCollection("weather_updates").get
+        starship.config.maxItems mustEqual Int.MaxValue
+        starship.config.maxAge mustEqual None
+        weatherUpdates.config.maxItems mustEqual 1500000
+        weatherUpdates.config.maxAge mustEqual Some(1800.seconds)
+      }
+    }
+
+    "reload" in {
+      withTempFolder {
+        makeServer
+        val starship = kestrel.queueCollection("starship").get
+        val weatherUpdates = kestrel.queueCollection("weather_updates").get
+        starship.config.maxItems mustEqual Int.MaxValue
+        weatherUpdates.config.maxItems mustEqual 1500000
+        new KestrelConfig {
+          default.maxItems = 9999
+          queues = new QueueBuilder {
+            name = "starship"
+            maxItems = 50
+          }
+        }.reload(kestrel)
+        starship.config.maxItems mustEqual 50
+        weatherUpdates.config.maxItems mustEqual 9999
       }
     }
 
     "set and get one entry" in {
       withTempFolder {
         makeServer
-        val v = (Math.random * 0x7fffffff).toInt
+        val v = (Random.nextInt * 0x7fffffff).toInt
         val client = new TestClient("localhost", PORT)
         client.get("test_one_entry") mustEqual ""
         client.set("test_one_entry", v.toString) mustEqual "STORED"
@@ -81,14 +103,16 @@ class ServerSpec extends Specification with TestHelper {
 
     "set with expiry" in {
       withTempFolder {
-        makeServer
-        val v = (Math.random * 0x7fffffff).toInt
-        val client = new TestClient("localhost", PORT)
-        client.get("test_set_with_expiry") mustEqual ""
-        client.set("test_set_with_expiry", (v + 2).toString, Time.now.inSeconds) mustEqual "STORED"
-        client.set("test_set_with_expiry", v.toString) mustEqual "STORED"
-        Time.advance(1.second)
-        client.get("test_set_with_expiry") mustEqual v.toString
+        Time.withCurrentTimeFrozen { time =>
+          makeServer
+          val v = (Random.nextInt * 0x7fffffff).toInt
+          val client = new TestClient("localhost", PORT)
+          client.get("test_set_with_expiry") mustEqual ""
+          client.set("test_set_with_expiry", (v + 2).toString, Time.now.inSeconds) mustEqual "STORED"
+          client.set("test_set_with_expiry", v.toString) mustEqual "STORED"
+          time.advance(1.second)
+          client.get("test_set_with_expiry") mustEqual v.toString
+        }
       }
     }
 
@@ -110,7 +134,7 @@ class ServerSpec extends Specification with TestHelper {
     "commit a transactional get" in {
       withTempFolder {
         makeServer
-        val v = (Math.random * 0x7fffffff).toInt
+        val v = (Random.nextInt * 0x7fffffff).toInt
         val client = new TestClient("localhost", PORT)
         client.set("commit", v.toString) mustEqual "STORED"
 
@@ -148,7 +172,7 @@ class ServerSpec extends Specification with TestHelper {
     "abort a transactional get" in {
       withTempFolder {
         makeServer
-        val v = (Math.random * 0x7fffffff).toInt
+        val v = (Random.nextInt * 0x7fffffff).toInt
         val client = new TestClient("localhost", PORT)
         client.set("abort", v.toString) mustEqual "STORED"
 
@@ -179,7 +203,7 @@ class ServerSpec extends Specification with TestHelper {
     "auto-rollback a transaction on disconnect" in {
       withTempFolder {
         makeServer
-        val v = (Math.random * 0x7fffffff).toInt
+        val v = (Random.nextInt * 0x7fffffff).toInt
         val client = new TestClient("localhost", PORT)
         client.set("auto-rollback", v.toString) mustEqual "STORED"
 
@@ -195,7 +219,7 @@ class ServerSpec extends Specification with TestHelper {
 
         // oops, client2 dies before committing!
         client2.disconnect
-        waitUntil { client3.stats("queue_auto-rollback_bytes") == v.toString.length.toString } mustBe true
+        client3.stats("queue_auto-rollback_bytes") must eventually(be_==(v.toString.length.toString))
         stats = client3.stats
         stats("queue_auto-rollback_items") mustEqual "1"
         stats("queue_auto-rollback_open_transactions") mustEqual "0"
@@ -214,7 +238,7 @@ class ServerSpec extends Specification with TestHelper {
     "auto-commit cycles of transactional gets" in {
       withTempFolder {
         makeServer
-        val v = (Math.random * 0x7fffffff).toInt
+        val v = (Random.nextInt * 0x7fffffff).toInt
         val client = new TestClient("localhost", PORT)
         client.set("auto-commit", v.toString) mustEqual "STORED"
         client.set("auto-commit", (v + 1).toString) mustEqual "STORED"
@@ -227,7 +251,7 @@ class ServerSpec extends Specification with TestHelper {
         client2.disconnect
 
         val client3 = new TestClient("localhost", PORT)
-        waitUntil { client3.stats("queue_auto-commit_bytes") == v.toString.length.toString } mustBe true
+        client3.stats("queue_auto-commit_bytes") must eventually(be_==(v.toString.length.toString))
         client3.get("auto-commit") mustEqual (v + 2).toString
 
         var stats = client3.stats
@@ -239,14 +263,16 @@ class ServerSpec extends Specification with TestHelper {
 
     "age" in {
       withTempFolder {
-        makeServer
-        val client = new TestClient("localhost", PORT)
-        client.set("test_age", "nibbler") mustEqual "STORED"
-        client.set("test_age", "nibbler2") mustEqual "STORED"
-        Time.advance(1.second)
-        client.get("test_age") mustEqual "nibbler"
-        client.stats.contains("queue_test_age_age") mustEqual true
-        client.stats("queue_test_age_age").toInt >= 1000 mustEqual true
+        Time.withCurrentTimeFrozen { time =>
+          makeServer
+          val client = new TestClient("localhost", PORT)
+          client.set("test_age", "nibbler") mustEqual "STORED"
+          client.set("test_age", "nibbler2") mustEqual "STORED"
+          time.advance(1.second)
+          client.get("test_age") mustEqual "nibbler"
+          client.stats.contains("queue_test_age_age") mustEqual true
+          client.stats("queue_test_age_age").toInt >= 1000 mustEqual true
+        }
       }
     }
 
@@ -299,7 +325,7 @@ class ServerSpec extends Specification with TestHelper {
                                "bytes_written", "cmd_set", "get_misses", "total_connections",
                                "curr_connections", "curr_items", "uptime", "get_hits", "total_items",
                                "bytes_read")
-        for (val key <- basicStats) { stats contains key mustEqual true }
+        for (key <- basicStats) { stats contains key mustEqual true }
       }
     }
 
@@ -313,7 +339,7 @@ class ServerSpec extends Specification with TestHelper {
     "disconnect and reconnect correctly" in {
       withTempFolder {
         makeServer
-        val v = (Math.random * 0x7fffffff).toInt
+        val v = (Random.nextInt * 0x7fffffff).toInt
         val client = new TestClient("localhost", PORT)
         client.set("disconnecting", v.toString)
         client.disconnect
@@ -324,29 +350,31 @@ class ServerSpec extends Specification with TestHelper {
 
     "flush expired items" in {
       withTempFolder {
-        makeServer
-        val client = new TestClient("localhost", PORT)
-        client.set("q1", "1", 1)
-        client.set("q2", "2", 1)
-        client.set("q2", "2", 1)
-        client.set("q3", "3", 1)
-        client.stats("queue_q1_items") mustEqual "1"
-        client.stats("queue_q2_items") mustEqual "2"
-        client.stats("queue_q3_items") mustEqual "1"
+        Time.withCurrentTimeFrozen { time =>
+          makeServer
+          val client = new TestClient("localhost", PORT)
+          client.set("q1", "1", 1)
+          client.set("q2", "2", 1)
+          client.set("q2", "2", 1)
+          client.set("q3", "3", 1)
+          client.stats("queue_q1_items") mustEqual "1"
+          client.stats("queue_q2_items") mustEqual "2"
+          client.stats("queue_q3_items") mustEqual "1"
 
-        Time.advance(5.seconds)
+          time.advance(5.seconds)
 
-        client.out.write("flush_expired q1\n".getBytes)
-        client.readline mustEqual "1"
-        client.stats("queue_q1_items") mustEqual "0"
-        client.stats("queue_q2_items") mustEqual "2"
-        client.stats("queue_q3_items") mustEqual "1"
+          client.out.write("flush_expired q1\n".getBytes)
+          client.readline mustEqual "1"
+          client.stats("queue_q1_items") mustEqual "0"
+          client.stats("queue_q2_items") mustEqual "2"
+          client.stats("queue_q3_items") mustEqual "1"
 
-        client.out.write("flush_all_expired\n".getBytes)
-        client.readline mustEqual "3"
-        client.stats("queue_q1_items") mustEqual "0"
-        client.stats("queue_q2_items") mustEqual "0"
-        client.stats("queue_q3_items") mustEqual "0"
+          client.out.write("flush_all_expired\n".getBytes)
+          client.readline mustEqual "3"
+          client.stats("queue_q1_items") mustEqual "0"
+          client.stats("queue_q2_items") mustEqual "0"
+          client.stats("queue_q3_items") mustEqual "0"
+        }
       }
     }
   }

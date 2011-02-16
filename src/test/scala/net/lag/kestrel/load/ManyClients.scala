@@ -17,12 +17,11 @@
 
 package net.lag.kestrel.load
 
-import _root_.java.net._
-import _root_.java.nio._
-import _root_.java.nio.channels._
-import _root_.java.util.concurrent.atomic._
-import _root_.net.lag.extensions._
-
+import java.net._
+import java.nio._
+import java.nio.channels._
+import java.util.concurrent.atomic._
+import com.twitter.conversions.string._
 
 /**
  * Have one producer trickle in pop lyrics at a steady but slow rate, while

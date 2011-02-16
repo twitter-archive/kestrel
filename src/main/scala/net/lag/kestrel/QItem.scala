@@ -18,10 +18,9 @@
 package net.lag.kestrel
 
 import java.nio.{ByteBuffer, ByteOrder}
-import com.twitter.xrayspecs.Time
+import com.twitter.util.Time
 
-
-case class QItem(addTime: Long, expiry: Long, data: Array[Byte], var xid: Int) {
+case class QItem(addTime: Time, expiry: Option[Time], data: Array[Byte], var xid: Int) {
   def pack(opcode: Byte, withXid: Boolean): ByteBuffer = {
     val headerSize = if (withXid) 9 else 5
     val buffer = ByteBuffer.allocate(data.length + 16 + headerSize)
@@ -31,8 +30,12 @@ case class QItem(addTime: Long, expiry: Long, data: Array[Byte], var xid: Int) {
       buffer.putInt(xid)
     }
     buffer.putInt(data.length + 16)
-    buffer.putLong(addTime)
-    buffer.putLong(expiry)
+    buffer.putLong(addTime.inMilliseconds)
+    if (expiry.isDefined) {
+      buffer.putLong(expiry.get.inMilliseconds)
+    } else {
+      buffer.putLong(0)
+    }
     buffer.put(data)
     buffer.flip()
     buffer
@@ -44,10 +47,10 @@ object QItem {
     val buffer = ByteBuffer.wrap(data)
     val bytes = new Array[Byte](data.length - 16)
     buffer.order(ByteOrder.LITTLE_ENDIAN)
-    val addTime = buffer.getLong
+    val addTime = Time.fromMilliseconds(buffer.getLong)
     val expiry = buffer.getLong
     buffer.get(bytes)
-    QItem(addTime, expiry, bytes, 0)
+    QItem(addTime, if (expiry == 0) None else Some(Time.fromMilliseconds(expiry)), bytes, 0)
   }
 
   def unpackOldAdd(data: Array[Byte]): QItem = {
@@ -56,6 +59,6 @@ object QItem {
     buffer.order(ByteOrder.LITTLE_ENDIAN)
     val expiry = buffer.getInt
     buffer.get(bytes)
-    QItem(Time.now.inMilliseconds, if (expiry == 0) 0 else expiry * 1000, bytes, 0)
+    QItem(Time.now, if (expiry == 0) None else Some(Time.fromSeconds(expiry)), bytes, 0)
   }
 }
