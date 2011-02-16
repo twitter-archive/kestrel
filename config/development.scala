@@ -53,6 +53,9 @@ new KestrelConfig {
     name = "spam"
     multifileJournal = true
   } :: new QueueBuilder {
+    name = "spam0"
+    multifileJournal = true
+  } :: new QueueBuilder {
     name = "hello"
     fanoutOnly = true
   }
