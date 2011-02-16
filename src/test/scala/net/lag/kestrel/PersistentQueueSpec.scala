@@ -24,11 +24,10 @@ import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
 import com.twitter.util.{Duration, TempFolder, Time, Timer, TimerTask}
 import org.specs.Specification
-import org.specs.mock.{ClassMocker, JMocker}
 import org.specs.matcher.Matcher
 import config._
 
-class PersistentQueueSpec extends Specification with JMocker with ClassMocker with TempFolder with TestLogging {
+class PersistentQueueSpec extends Specification with TempFolder with TestLogging {
   def dumpJournal(qname: String): String = {
     var rv = new mutable.ListBuffer[JournalItem]
     new Journal(new File(folderName, qname).getCanonicalPath, false).replay(qname) { item => rv += item }

@@ -23,7 +23,6 @@ import com.twitter.conversions.time._
 import com.twitter.stats.Stats
 import com.twitter.util.{TempFolder, Time, Timer}
 import org.specs.Specification
-import org.specs.mock.{ClassMocker, JMocker}
 import org.specs.matcher.Matcher
 import config._
 
@@ -32,7 +31,7 @@ class FakeKestrelHandler(queues: QueueCollection, maxOpenTransactions: Int)
   protected def clientDescription: String = "none"
 }
 
-class KestrelHandlerSpec extends Specification with ClassMocker with JMocker with TempFolder with TestLogging {
+class KestrelHandlerSpec extends Specification with TempFolder with TestLogging {
   val config = new QueueBuilder().apply()
 
   case class beString(expected: String) extends Matcher[Option[QItem]]() {
@@ -44,7 +43,7 @@ class KestrelHandlerSpec extends Specification with ClassMocker with JMocker wit
 
   "KestrelHandler" should {
     var queues: QueueCollection = null
-    val timer = mock[Timer]
+    val timer = new FakeTimer()
 
     doAfter {
       queues.shutdown()

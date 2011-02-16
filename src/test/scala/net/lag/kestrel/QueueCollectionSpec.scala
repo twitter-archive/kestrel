@@ -23,16 +23,15 @@ import com.twitter.util.{TempFolder, Time, Timer}
 import com.twitter.conversions.time._
 import com.twitter.stats.Stats
 import org.specs.Specification
-import org.specs.mock.{ClassMocker, JMocker}
 import config._
 
-class QueueCollectionSpec extends Specification with JMocker with ClassMocker with TempFolder with TestLogging {
+class QueueCollectionSpec extends Specification with TempFolder with TestLogging {
   private var qc: QueueCollection = null
 
   val config = new QueueBuilder().apply()
 
   "QueueCollection" should {
-    val timer = mock[Timer]
+    val timer = new FakeTimer()
 
     doAfter {
       if (qc ne null) {
