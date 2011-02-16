@@ -127,7 +127,7 @@ extends NettyHandler[MemcacheRequest](channelGroup, queueCollection, maxOpenTran
       for (i <- 1 until options.length) {
         val opt = options(i)
         if (opt startsWith "t=") {
-          timeout = Some(opt.substring(2).toInt.seconds.fromNow)
+          timeout = Some(opt.substring(2).toInt.milliseconds.fromNow)
         }
         if (opt == "close") closing = true
         if (opt == "open") opening = true
