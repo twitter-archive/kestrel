@@ -28,34 +28,6 @@ import org.specs.mock.{ClassMocker, JMocker}
 import org.specs.matcher.Matcher
 import config._
 
-class FakeTimer extends Timer {
-  val timerTask = new TimerTask {
-    var cancelled = false
-
-    def cancel() { cancelled = true }
-  }
-
-  var deadline: Time = Time.epoch
-  var repeat: Option[Duration] = None
-  var timeout: () => Unit = { () => }
-
-  def schedule(when: Time)(f: => Unit): TimerTask = {
-    deadline = when
-    repeat = None
-    timeout = { () => f }
-    timerTask
-  }
-
-  def schedule(when: Time, period: Duration)(f: => Unit): TimerTask = {
-    deadline = when
-    repeat = Some(period)
-    timeout = { () => f }
-    timerTask
-  }
-
-  def stop() { }
-}
-
 class PersistentQueueSpec extends Specification with JMocker with ClassMocker with TempFolder with TestLogging {
   def dumpJournal(qname: String): String = {
     var rv = new mutable.ListBuffer[JournalItem]
