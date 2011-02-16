@@ -22,6 +22,7 @@ import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.channels.FileChannel
 import java.util.concurrent.Semaphore
 import com.twitter.admin.BackgroundProcess
+import com.twitter.conversions.storage._
 import com.twitter.logging.Logger
 import com.twitter.util.Time
 
@@ -392,7 +393,7 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
   private def pack() {
     val filenames = Journal.journalsBefore(new File(queuePath), queueName, readerFilename.getOrElse(queueName))
     if (filenames.size > 1) {
-      log.info("Packing journals for '%s' ...", queueName)
+      log.info("Packing journals for '%s': %s", queueName, filenames)
       val tmpFile = new File(queuePath, queueName + "~~" + Time.now.inMilliseconds)
       val packer = new JournalPacker(filenames.map { new File(queuePath, _).getAbsolutePath },
                                      tmpFile.getAbsolutePath)
@@ -401,7 +402,7 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
         if (bytes1 == 0 && bytes2 == 0) {
           log.info("Packing '%s' into new journal.", queueName)
         } else {
-          log.info("Packing '%s' -> %d / %d", queueName, bytes1, bytes2)
+          log.info("Packing '%s': %s so far (%s trailing)", queueName, bytes1.bytes.toHuman, bytes2.bytes.toHuman)
         }
       }
 

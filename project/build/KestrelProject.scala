@@ -3,6 +3,8 @@ import com.twitter.sbt._
 
 class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info)
 with SubversionPublisher with DefaultRepos with gh.Issues {
+  val util = "com.twitter" % "util" % "1.6.5"
+
   val ostrich = "com.twitter" % "ostrich" % "3.0.4"
   val naggati = "com.twitter" % "naggati" % "2.0.0-SNAPSHOT"
 
