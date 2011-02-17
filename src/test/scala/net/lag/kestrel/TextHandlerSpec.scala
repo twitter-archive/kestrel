@@ -19,15 +19,14 @@ package net.lag.kestrel
 import java.net.InetSocketAddress
 import com.twitter.conversions.time._
 import com.twitter.naggati.test.TestCodec
-import com.twitter.util.{Future, Time}
+import com.twitter.util.{Future, Promise, Time}
 import org.jboss.netty.buffer.ChannelBuffers
 import org.jboss.netty.channel._
 import org.jboss.netty.channel.group.ChannelGroup
 import org.specs.Specification
-import org.specs.mock.{Mockito}
-import org.mockito.Matchers._  // to use matchers like anyInt()
+import org.specs.mock.{ClassMocker, JMocker}
 
-class TextHandlerSpec extends Specification with Mockito {
+class TextHandlerSpec extends Specification with JMocker with ClassMocker {
   def wrap(s: String) = ChannelBuffers.wrappedBuffer(s.getBytes)
 
   "TextCodec" should {
@@ -88,63 +87,108 @@ class TextHandlerSpec extends Specification with Mockito {
     val qitem = QItem(Time.now, None, "state shirt".getBytes, 23)
 
     "get request" in {
-//      val function = capturingParam[Function[Option[QItem], Unit]]
-
-      channel.getRemoteAddress() returns new InetSocketAddress(0)
-      channelGroup.add(channel) returns true
+      expect {
+        one(channel).getRemoteAddress() willReturn new InetSocketAddress(0)
+        one(channelGroup).add(channel) willReturn true
+      }
 
       val textHandler = new TextHandler(channelGroup, queueCollection, 10, None)
       textHandler.handleUpstream(null, new UpstreamChannelStateEvent(channel, ChannelState.OPEN, true))
 
       "closes transactions" in {
-        queueCollection.remove("test", None, true, false) returns Future.value(Some(qitem))
+        expect {
+          one(queueCollection).remove("test", None, true, false) willReturn Future.value(Some(qitem))
+          one(queueCollection).confirmRemove("test", 100)
+          one(channel).write(ItemResponse(Some(qitem.data)))
+        }
 
         textHandler.pendingTransactions.add("test", 100)
         textHandler.pendingTransactions.peek("test") mustEqual List(100)
         textHandler.handle(TextRequest("get", List("test"), Nil))
         textHandler.pendingTransactions.peek("test") mustEqual List(qitem.xid)
-
-        there was one(queueCollection).remove("test", None, true, false)
-        there was one(queueCollection).confirmRemove("test", 100)
       }
 
       "with timeout" in {
-        Time.withCurrentTimeFrozen { time =>
-          queueCollection.remove("test", Some(500.milliseconds.fromNow), true, false) returns Future.value(Some(qitem))
+        "value ready immediately" in {
+          Time.withCurrentTimeFrozen { time =>
+            expect {
+              one(queueCollection).remove("test", Some(500.milliseconds.fromNow), true, false) willReturn Future.value(Some(qitem))
+              one(channel).write(ItemResponse(Some(qitem.data)))
+            }
 
-          textHandler.handle(TextRequest("get", List("test", "500"), Nil))
+            textHandler.handle(TextRequest("get", List("test", "500"), Nil))
+          }
+        }
 
-          there was one(queueCollection).remove("test", Some(500.milliseconds.fromNow), true, false)
+        "value ready eventually" in {
+          Time.withCurrentTimeFrozen { time =>
+            val promise = new Promise[Option[QItem]]
+
+            expect {
+              one(queueCollection).remove("test", Some(500.milliseconds.fromNow), true, false) willReturn promise
+            }
+
+            textHandler.handle(TextRequest("get", List("test", "500"), Nil))
+
+            expect {
+              one(channel).write(ItemResponse(Some(qitem.data)))
+            }
+
+            promise.setValue(Some(qitem))
+          }
+        }
+
+        "timed out" in {
+          Time.withCurrentTimeFrozen { time =>
+            val promise = new Promise[Option[QItem]]
+
+            expect {
+              one(queueCollection).remove("test", Some(500.milliseconds.fromNow), true, false) willReturn promise
+            }
+
+            textHandler.handle(TextRequest("get", List("test", "500"), Nil))
+
+            expect {
+              one(channel).write(ItemResponse(None))
+            }
+
+            promise.setValue(None)
+          }
         }
       }
 
       "empty queue" in {
-        queueCollection.remove("test", None, true, false) returns Future.value(None)
+        expect {
+          one(queueCollection).remove("test", None, true, false) willReturn Future.value(None)
+          one(channel).write(ItemResponse(None))
+        }
 
         textHandler.handle(TextRequest("get", List("test"), Nil))
-
-        there was one(queueCollection).remove("test", None, true, false)
-        there was one(channel).write(ItemResponse(None))
       }
 
       "item ready" in {
-        queueCollection.remove("test", None, true, false) returns Future.value(Some(qitem))
+        expect {
+          one(queueCollection).remove("test", None, true, false) willReturn Future.value(Some(qitem))
+          one(channel).write(ItemResponse(Some(qitem.data)))
+        }
 
         textHandler.handle(TextRequest("get", List("test"), Nil))
-
-        there was one(channel).write(ItemResponse(Some(qitem.data)))
       }
     }
 
     "put request" in {
-      channel.getRemoteAddress() returns new InetSocketAddress(0)
-      queueCollection.add("test", "hello".getBytes, None) returns true
+      expect {
+        one(channel).getRemoteAddress() willReturn new InetSocketAddress(0)
+        one(channelGroup).add(channel) willReturn true
+        one(queueCollection).add("test", "hello".getBytes, None) willReturn true
+        one(channel).write(CountResponse(1))
+      }
 
       val textHandler = new TextHandler(channelGroup, queueCollection, 10, None)
       textHandler.handleUpstream(null, new UpstreamChannelStateEvent(channel, ChannelState.OPEN, true))
       textHandler.handle(TextRequest("put", List("test"), List("hello".getBytes)))
-
-      there was one(channel).write(CountResponse(1))
     }
+
+    // FIXME: peek, monitor, confirm, flush, quit, shutdown, unknown
   }
 }

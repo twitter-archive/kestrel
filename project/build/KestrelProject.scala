@@ -15,7 +15,6 @@ with SubversionPublisher with DefaultRepos with gh.Issues {
   val objenesis = "org.objenesis" % "objenesis" % "1.1" % "test"
   val hamcrest = "org.hamcrest" % "hamcrest-all" % "1.1" % "test"
 
-  val mockito = "org.mockito" % "mockito-core" % "1.8.4" % "test"
 
   // workaround bug in sbt that hides scala-compiler.
   override def filterScalaJars = false
