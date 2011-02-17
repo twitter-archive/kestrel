@@ -23,7 +23,7 @@ import scala.collection.mutable
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.stats.Stats
-import com.twitter.util.{Duration, Time, Timer}
+import com.twitter.util.{Duration, Future, Time, Timer}
 import config._
 
 class InaccessibleQueuePath extends Exception("Inaccessible queue path: Must be a directory and writable")
@@ -128,34 +128,34 @@ class QueueCollection(queueFolder: String, timer: Timer,
    * Retrieve an item from a queue and pass it to a continuation. If no item is available within
    * the requested time, or the server is shutting down, None is passed.
    */
-  def remove(key: String, deadline: Option[Time], transaction: Boolean, peek: Boolean)(f: Option[QItem] => Unit): Unit = {
+  def remove(key: String, deadline: Option[Time], transaction: Boolean, peek: Boolean): Future[Option[QItem]] = {
     queue(key) match {
       case None =>
-        Stats.incr("get_misses")
-        f(None)
+        Future.value(None)
       case Some(q) =>
-        if (peek) {
-          f(q.peek())
+        val future = if (peek) {
+          q.waitPeek(deadline)
         } else {
-          q.waitRemove(deadline, transaction) { item =>
-            item match {
-              case None =>
-                Stats.incr("get_misses")
-                f(None)
-              case Some(item) =>
-                Stats.incr("get_hits")
-                f(Some(item))
-            }
+          q.waitRemove(deadline, transaction)
+        }
+        future.map { item =>
+          item match {
+            case None =>
+              Stats.incr("get_misses")
+            case Some(_) =>
+              Stats.incr("get_hits")
           }
+          item
         }
     }
   }
 
   // for testing.
+  // FIXME
   def receive(key: String): Option[Array[Byte]] = {
     var rv: Option[Array[Byte]] = None
     val latch = new CountDownLatch(1)
-    remove(key, None, false, false) {
+    remove(key, None, false, false).onSuccess {
       case None =>
         rv = None
         latch.countDown

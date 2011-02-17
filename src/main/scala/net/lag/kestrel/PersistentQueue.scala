@@ -20,9 +20,7 @@ package net.lag.kestrel
 import java.io._
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.channels.FileChannel
-import java.util.LinkedHashSet
 import java.util.concurrent.{CountDownLatch, Executor}
-import scala.collection.JavaConversions
 import scala.collection.mutable
 import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
@@ -70,6 +68,8 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
 
   private var journal =
     new Journal(new File(persistencePath).getCanonicalPath, name, config.syncJournal, config.multifileJournal)
+
+  private val waiters = new DeadlineWaitQueue(timer)
 
   // track tentative removals
   private var xidCounter: Int = 0
@@ -248,61 +248,29 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
    */
   def remove(): Option[QItem] = remove(false)
 
-  // clients waiting on an item in this queue
-  final class DeadlineQueue(timer: Timer) {
-    case class Waiter(var timerTask: TimerTask, awaken: () => Unit)
-    private val queue = JavaConversions.asScalaSet(new LinkedHashSet[Waiter])
-
-    def add(deadline: Time, awaken: () => Unit, onTimeout: () => Unit) {
-      val waiter = Waiter(null, awaken)
-      val timerTask = timer.schedule(deadline) {
-        if (synchronized { queue.remove(waiter) }) onTimeout()
-      }
-      waiter.timerTask = timerTask
-      synchronized { queue.add(waiter) }
-    }
-
-    def trigger() {
-      synchronized {
-        queue.headOption.map { waiter =>
-          queue.remove(waiter)
-          waiter
-        }
-      }.foreach { _.awaken() }
-    }
-
-    def triggerAll() {
-      synchronized {
-        val rv = queue.toArray
-        queue.clear()
-        rv
-      }.foreach { _.awaken() }
-    }
-
-    def size() = {
-      synchronized { queue.size }
-    }
-  }
-  private val waiters = new DeadlineQueue(timer)
-
-  private def waitOperation(op: => Option[QItem], deadline: Option[Time], receiver: Option[QItem] => Unit) {
-    synchronized {
-      val item = op
+  private def waitOperation(op: => Option[QItem], deadline: Option[Time], future: Promise[Option[QItem]]) {
+    val item = op
+    if (synchronized {
       if (!item.isDefined && !closed && !paused && deadline.isDefined && deadline.get > Time.now) {
         // if we get woken up, try again with the same deadline.
-        waiters.add(deadline.get, { () => waitOperation(op, deadline, receiver) }, { () => receiver(None) })
+        waiters.add(deadline.get, { () => waitOperation(op, deadline, future) }, { () => future.setValue(None) })
+        false
       } else {
-        receiver(item)
+        true
       }
-    }
+    }) future.setValue(item)
   }
 
-  def waitRemove(deadline: Option[Time], transaction: Boolean)(receiver: Option[QItem] => Unit) {
-    waitOperation(remove(transaction), deadline, receiver)
+  final def waitRemove(deadline: Option[Time], transaction: Boolean): Future[Option[QItem]] = {
+    val promise = new Promise[Option[QItem]]()
+    waitOperation(remove(transaction), deadline, promise)
+    promise
   }
 
-  def waitPeek(deadline: Option[Time], transaction: Boolean)(receiver: Option[QItem] => Unit) {
-    waitOperation(peek, deadline, receiver)
+  final def waitPeek(deadline: Option[Time]): Future[Option[QItem]] = {
+    val promise = new Promise[Option[QItem]]()
+    waitOperation(peek, deadline, promise)
+    promise
   }
 
   /**

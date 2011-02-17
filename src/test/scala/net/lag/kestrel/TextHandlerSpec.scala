@@ -19,14 +19,15 @@ package net.lag.kestrel
 import java.net.InetSocketAddress
 import com.twitter.conversions.time._
 import com.twitter.naggati.test.TestCodec
-import com.twitter.util.Time
+import com.twitter.util.{Future, Time}
 import org.jboss.netty.buffer.ChannelBuffers
 import org.jboss.netty.channel._
 import org.jboss.netty.channel.group.ChannelGroup
 import org.specs.Specification
-import org.specs.mock.{JMocker, ClassMocker}
+import org.specs.mock.{Mockito}
+import org.mockito.Matchers._  // to use matchers like anyInt()
 
-class TextHandlerSpec extends Specification with JMocker with ClassMocker {
+class TextHandlerSpec extends Specification with Mockito {
   def wrap(s: String) = ChannelBuffers.wrappedBuffer(s.getBytes)
 
   "TextCodec" should {
@@ -84,79 +85,66 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
     val channel = mock[Channel]
     val channelGroup = mock[ChannelGroup]
     val queueCollection = mock[QueueCollection]
-
-    def equal[A](a: A) = will(beEqual(a))
+    val qitem = QItem(Time.now, None, "state shirt".getBytes, 23)
 
     "get request" in {
-      val function = capturingParam[Function[Option[QItem], Unit]]
+//      val function = capturingParam[Function[Option[QItem], Unit]]
 
-      expect {
-        one(channel).getRemoteAddress() willReturn new InetSocketAddress(0)
-        one(channelGroup).add(channel)
-      }
+      channel.getRemoteAddress() returns new InetSocketAddress(0)
+      channelGroup.add(channel) returns true
 
       val textHandler = new TextHandler(channelGroup, queueCollection, 10, None)
       textHandler.handleUpstream(null, new UpstreamChannelStateEvent(channel, ChannelState.OPEN, true))
 
       "closes transactions" in {
-        expect {
-          one(queueCollection).confirmRemove("test", 100)
-          one(queueCollection).remove(equal("test"), equal(None), equal(true), equal(false))(function.capture)
-        }
+        queueCollection.remove("test", None, true, false) returns Future.value(Some(qitem))
 
         textHandler.pendingTransactions.add("test", 100)
-        textHandler.pendingTransactions.size("test") mustEqual 1
+        textHandler.pendingTransactions.peek("test") mustEqual List(100)
         textHandler.handle(TextRequest("get", List("test"), Nil))
-        textHandler.pendingTransactions.size("test") mustEqual 0
+        textHandler.pendingTransactions.peek("test") mustEqual List(qitem.xid)
+
+        there was one(queueCollection).remove("test", None, true, false)
+        there was one(queueCollection).confirmRemove("test", 100)
       }
 
       "with timeout" in {
         Time.withCurrentTimeFrozen { time =>
-          expect {
-            one(queueCollection).remove(equal("test"), equal(Some(500.milliseconds.fromNow)), equal(true), equal(false))(function.capture)
-          }
+          queueCollection.remove("test", Some(500.milliseconds.fromNow), true, false) returns Future.value(Some(qitem))
 
           textHandler.handle(TextRequest("get", List("test", "500"), Nil))
+
+          there was one(queueCollection).remove("test", Some(500.milliseconds.fromNow), true, false)
         }
       }
 
       "empty queue" in {
-        expect {
-          one(queueCollection).remove(equal("test"), equal(None), equal(true), equal(false))(function.capture)
-          one(channel).write(ItemResponse(None))
-        }
+        queueCollection.remove("test", None, true, false) returns Future.value(None)
 
         textHandler.handle(TextRequest("get", List("test"), Nil))
-        function.captured(None)
+
+        there was one(queueCollection).remove("test", None, true, false)
+        there was one(channel).write(ItemResponse(None))
       }
 
       "item ready" in {
-        val response = capturingParam[ItemResponse]
+        queueCollection.remove("test", None, true, false) returns Future.value(Some(qitem))
 
-        expect {
-          one(queueCollection).remove(equal("test"), equal(None), equal(true), equal(false))(function.capture)
-          one(channel).write(response.capture)
-        }
         textHandler.handle(TextRequest("get", List("test"), Nil))
-        function.captured(Some(QItem(Time.epoch, None, "hello".getBytes, 0)))
-        new String(response.captured.data.get) mustEqual "hello"
+
+        there was one(channel).write(ItemResponse(Some(qitem.data)))
       }
     }
 
     "put request" in {
-      val bytes = capturingParam[Array[Byte]]
-
-      expect {
-        one(channel).getRemoteAddress() willReturn new InetSocketAddress(0)
-        one(channelGroup).add(channel)
-        one(queueCollection).add(equal("test"), bytes.capture, equal(None)) willReturn true
-        one(channel).write(CountResponse(1))
-      }
+      channel.getRemoteAddress() returns new InetSocketAddress(0)
+      queueCollection.add("test", "hello".getBytes, None) returns true
 
       val textHandler = new TextHandler(channelGroup, queueCollection, 10, None)
       textHandler.handleUpstream(null, new UpstreamChannelStateEvent(channel, ChannelState.OPEN, true))
       textHandler.handle(TextRequest("put", List("test"), List("hello".getBytes)))
-      new String(bytes.captured) mustEqual "hello"
+
+      there was one(channel).write(CountResponse(1))
     }
   }
 }
