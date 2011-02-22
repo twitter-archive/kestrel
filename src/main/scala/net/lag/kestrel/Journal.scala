@@ -382,7 +382,6 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
   private def write(allowSync: Boolean, items: Any*): Int = {
     byteBuffer.clear
     for (item <- items) item match {
-      case bb: ByteBuffer => byteBuffer.put(bb)
       case b: Byte => byteBuffer.put(b)
       case i: Int => byteBuffer.putInt(i)
     }

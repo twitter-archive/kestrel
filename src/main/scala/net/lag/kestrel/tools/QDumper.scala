@@ -106,10 +106,8 @@ class QueueDumper(filename: String) {
         if (!QDumper.quiet) println("ACK %d".format(xid))
         openTransactions.remove(xid)
       case JournalItem.Continue(qitem, xid) =>
-        if (!QDumper.quiet) println("CNT %d".format(xid))
-        openTransactions.remove(xid)
         if (!QDumper.quiet) {
-          print("CNT %-6d".format(qitem.data.size))
+          print("CON %-6d".format(qitem.data.size))
           if (qitem.xid > 0) {
             print(" xid=%d".format(qitem.xid))
           }
@@ -125,6 +123,7 @@ class QueueDumper(filename: String) {
         if (QDumper.dump) {
           println("    " + new String(qitem.data, "ISO-8859-1"))
         }
+        openTransactions.remove(xid)
         queue += qitem.data.size
       case x =>
         if (!QDumper.quiet) println(x)
