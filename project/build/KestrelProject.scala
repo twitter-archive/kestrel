@@ -7,6 +7,7 @@ with SubversionPublisher with DefaultRepos with gh.Issues {
 
   val ostrich = "com.twitter" % "ostrich" % "3.0.4"
   val naggati = "com.twitter" % "naggati" % "2.0.0"
+  val finagle = "com.twitter" % "finagle-core" % "1.1.25-SNAPSHOT"
 
   val specs = "org.scala-tools.testing" % "specs_2.8.1" % "1.6.7" % "test"
   val jmock = "org.jmock" % "jmock" % "2.4.0" % "test"

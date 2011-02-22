@@ -34,33 +34,8 @@ import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory
 import org.jboss.netty.util.{HashedWheelTimer, Timeout, Timer, TimerTask}
 import config._
 
-
-// FIXME move me!
-class NettyTimer(underlying: Timer) extends TTimer {
-  def schedule(when: Time)(f: => Unit): TTimerTask = {
-    val timeout = underlying.newTimeout(new TimerTask {
-      def run(to: Timeout) {
-        if (!to.isCancelled) f
-      }
-    }, (when - Time.now).inMilliseconds max 0, TimeUnit.MILLISECONDS)
-    toTimerTask(timeout)
-  }
-
-  def schedule(when: Time, period: Duration)(f: => Unit): TTimerTask = {
-    val task = schedule(when) {
-      f
-      schedule(when + period, period)(f)
-    }
-    task
-  }
-
-  def stop() { underlying.stop() }
-
-  private[this] def toTimerTask(task: Timeout) = new TTimerTask {
-    def cancel() { task.cancel() }
-  }
-}
-
+import com.twitter.finagle.builder.ServerBuilder
+import com.twitter.finagle.util.{Timer => FinagleTimer}
 
 class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
               listenAddress: String, memcacheListenPort: Option[Int], textListenPort: Option[Int],
@@ -86,12 +61,8 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
 
     // this means no timeout will be at better granularity than 10ms.
     timer = new HashedWheelTimer(10, TimeUnit.MILLISECONDS)
-    queueCollection = new QueueCollection(queuePath, new NettyTimer(timer), defaultQueueConfig, builders)
+    queueCollection = new QueueCollection(queuePath, new FinagleTimer(timer), defaultQueueConfig, builders)
     queueCollection.loadQueues()
-
-    // netty setup:
-    executor = Executors.newCachedThreadPool()
-    channelFactory = new NioServerSocketChannelFactory(executor, executor)
 
     val memcachePipelineFactory = new ChannelPipelineFactory() {
       def getPipeline() = {
@@ -103,6 +74,28 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
         Channels.pipeline(protocolCodec, handler)
       }
     }
+    val memcachePipelineFactoryCodec = new FinagleCodec[Req, Resp] {
+      val clientPipelineFactory = null
+      val serverPipelineFactory = memcachePipelineFactory
+    }
+    // finagle setup:
+    val builder = ServerBuilder().codec(memcachePipelineFactoryCodec)
+    
+    val service: Service[HttpRequest, HttpResponse] = new Service[HttpRequest, HttpResponse] {
+      def apply(request: HttpRequest) = Future(new DefaultHttpResponse(HTTP_1_1, OK))
+    }
+
+    val address: SocketAddress = new InetSocketAddress(10000)
+
+    val server: Server[HttpRequest, HttpResponse] = ServerBuilder()
+      .codec(Http)
+      .bindTo(address)
+      .build(service)
+    
+    // netty setup:
+    executor = Executors.newCachedThreadPool()
+    channelFactory = new NioServerSocketChannelFactory(executor, executor)
+
     memcacheAcceptor = memcacheListenPort.map { port =>
       val address = new InetSocketAddress(listenAddress, port)
       makeAcceptor(channelFactory, memcachePipelineFactory, address)
