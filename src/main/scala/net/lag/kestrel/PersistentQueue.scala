@@ -195,7 +195,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
         }
       }
       checkRotateJournal()
-      if (xid != None) confirmRemove(xid.get)
+      if (xid != None) openTransactions.removeKey(xid.get)
       _add(item)
       if (config.keepJournal) {
         xid match {
