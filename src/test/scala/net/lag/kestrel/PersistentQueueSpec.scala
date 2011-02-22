@@ -507,6 +507,27 @@ class PersistentQueueSpec extends Specification with TestHelper {
       }
     }
 
+    "continue a queue item" in {
+      withTempFolder {
+        val q = new PersistentQueue(folderName, "things", Config.fromMap(Map.empty))
+        q.setup
+        q.add("one".getBytes)
+
+        val item1 = q.remove(true)
+        new String(item1.get.data) mustEqual "one"
+
+        q.continue(item1.get.xid, "two".getBytes)
+        q.close
+
+        val q2 = new PersistentQueue(folderName, "things", Config.fromMap(Map.empty))
+        q2.setup
+        q2.length mustEqual 1
+        q2.openTransactionCount mustEqual 0
+        new String(q2.remove.get.data) mustEqual "two"
+        q2.length mustEqual 0
+      }
+    }
+
     "recreate the journal file when it gets too big" in {
       withTempFolder {
         val q = makeQueue("things", "max_journal_size" -> "1024", "max_journal_overflow" -> "3")

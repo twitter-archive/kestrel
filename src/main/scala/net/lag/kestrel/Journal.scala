@@ -34,6 +34,7 @@ object JournalItem {
   case class SavedXid(xid: Int) extends JournalItem
   case class Unremove(xid: Int) extends JournalItem
   case class ConfirmRemove(xid: Int) extends JournalItem
+  case class Continue(item: QItem, xid: Int) extends JournalItem
   case object EndOfFile extends JournalItem
 }
 
@@ -65,7 +66,7 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
   private val CMD_UNREMOVE = 5
   private val CMD_CONFIRM_REMOVE = 6
   private val CMD_ADD_XID = 7
-
+  private val CMD_CONTINUE = 8
 
   private def open(file: File): Unit = {
     writer = new FileOutputStream(file, true).getChannel
@@ -81,7 +82,7 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
     open(tmpFile)
     size = 0
     for (item <- openItems) {
-      addWithXid(item)
+      addWithXidAndCommand(CMD_ADD_XID, item)
       removeTentative(false)
     }
     saveXid(xid)
@@ -124,9 +125,13 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
 
   def add(item: QItem): Unit = add(true, item)
 
-  // used only to list pending transactions when recreating the journal.
-  private def addWithXid(item: QItem) = {
-    val blob = item.pack(CMD_ADD_XID.toByte, true)
+  def continue(xid: Int, item: QItem): Unit = {
+    item.xid = xid
+    addWithXidAndCommand(CMD_CONTINUE, item)
+  }
+
+  private def addWithXidAndCommand(command: Int, item: QItem) = {
+    val blob = item.pack(command.toByte, true)
     do {
       writer.write(blob)
     } while (blob.position < blob.limit)
@@ -174,6 +179,7 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
       } else {
         readJournalEntry(rj) match {
           case (JournalItem.Add(item), _) => f(item)
+          case (JournalItem.Continue(item, xid), _) => f(item)
           case (_, _) =>
         }
       }
@@ -267,6 +273,11 @@ class Journal(queuePath: String, syncJournal: => Boolean) {
             val item = QItem.unpack(data)
             item.xid = xid
             (JournalItem.Add(item), 9 + data.length)
+          case CMD_CONTINUE =>
+            val xid = readInt(in)
+            val data = readBlock(in)
+            val item = QItem.unpack(data)
+            (JournalItem.Continue(item, xid), 9 + data.length)
           case n =>
             throw new BrokenItemException(lastPosition, new IOException("invalid opcode in journal: " + n.toInt + " at position " + (in.position - 1)))
         }
