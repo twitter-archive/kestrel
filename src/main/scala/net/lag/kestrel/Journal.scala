@@ -103,7 +103,7 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
   def dump(xid: Int, openItems: Seq[QItem], queue: Iterable[QItem]) {
     size = 0
     for (item <- openItems) {
-      addWithXid(item)
+      addWithXidAndCommand(CMD_ADD_XID, item)
       removeTentative(false)
     }
     saveXid(xid)
@@ -149,12 +149,11 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
 
   def continue(xid: Int, item: QItem): Unit = {
     item.xid = xid
-    size += writeLarge(true, item.pack(CMD_CONTINUE.toByte, true))
+    addWithXidAndCommand(CMD_CONTINUE, item)
   }
 
-  // used only to list pending transactions when recreating the journal.
-  private def addWithXid(item: QItem) = {
-    val blob = item.pack(CMD_ADD_XID.toByte, true)
+  private def addWithXidAndCommand(command: Int, item: QItem) = {
+    val blob = item.pack(command.toByte, true)
     do {
       writer.write(blob)
     } while (blob.position < blob.limit)
@@ -209,6 +208,8 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
       } else {
         readJournalEntry(rj) match {
           case (JournalItem.Add(item), _) =>
+            f(item)
+          case (JournalItem.Continue(item, xid), _) =>
             f(item)
           case (JournalItem.EndOfFile, _) =>
             // move to next file and try again.
@@ -379,36 +380,18 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
   }
 
   private def write(allowSync: Boolean, items: Any*): Int = {
-    writeWithBuffer(allowSync, byteBuffer, items: _*)
-  }
-
-  private def writeLarge(allowSync: Boolean, items: Any*): Int = {
-    val size = items.foldLeft(0)((size: Int, item: Any) => {
-      size + (item match {
-        case bb: ByteBuffer => bb.limit
-        case b: Byte => 1
-        case i: Int => 4
-      })
-    })
-    val largeBuffer = new Array[Byte](size)
-    val largeByteBuffer = ByteBuffer.wrap(largeBuffer)
-    largeByteBuffer.order(ByteOrder.LITTLE_ENDIAN)
-    writeWithBuffer(allowSync, largeByteBuffer, items: _*)
-  }
-
-  private def writeWithBuffer(allowSync: Boolean, buf: ByteBuffer, items: Any*): Int = {
-    buf.clear
+    byteBuffer.clear
     for (item <- items) item match {
-      case bb: ByteBuffer => buf.put(bb)
-      case b: Byte => buf.put(b)
-      case i: Int => buf.putInt(i)
+      case bb: ByteBuffer => byteBuffer.put(bb)
+      case b: Byte => byteBuffer.put(b)
+      case i: Int => byteBuffer.putInt(i)
     }
-    buf.flip
-    while (buf.position < buf.limit) {
-      writer.write(buf)
+    byteBuffer.flip
+    while (byteBuffer.position < byteBuffer.limit) {
+      writer.write(byteBuffer)
     }
     if (allowSync && syncJournal) writer.force(false)
-    buf.limit
+    byteBuffer.limit
   }
 
   def rotate() {
