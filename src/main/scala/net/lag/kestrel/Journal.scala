@@ -462,7 +462,7 @@ object Journal {
       val doomed = timedFiles.takeWhile { f => !(f endsWith ".pack") }
       val packedFile = timedFiles.find { _ endsWith ".pack" }.get
       val postPackedFile = cleanUpFinishedPack(path, doomed, packedFile)
-      List(postPackedFile) ++ (timedFiles.dropWhile { f => !(f endsWith ".pack") }.drop(1))
+      List(postPackedFile) ++ (timedFiles.filter { f => !(doomed.contains(f) || packedFile == f) })
     } else {
       timedFiles
     }
