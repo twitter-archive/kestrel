@@ -260,7 +260,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
           var rv: Option[String] = None
 
           val deadline = 250.milliseconds.fromNow
-          q.waitRemove(Some(deadline), false) { item =>
+          q.waitRemove(Some(deadline), false).onSuccess { item =>
             rv = item.map { x => new String(x.data) }
           }
           timer.deadline mustEqual deadline
@@ -282,7 +282,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
           var rv: Option[String] = Some("foo")
 
           val deadline = 250.milliseconds.fromNow
-          q.waitRemove(Some(deadline), false) { item =>
+          q.waitRemove(Some(deadline), false).onSuccess { item =>
             rv = item.map { x => new String(x.data) }
           }
           timer.deadline mustEqual deadline

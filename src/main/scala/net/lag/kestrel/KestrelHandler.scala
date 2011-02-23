@@ -64,6 +64,8 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
 
     def size(name: String): Int = synchronized { transactions(name).size }
 
+    def peek(name: String): List[Int] = synchronized { transactions(name).toList }
+
     def cancelAll() {
       synchronized {
         transactions.foreach { case (name, xids) =>
@@ -145,7 +147,7 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
     if (timeLimit <= Time.now || pendingTransactions.size(key) >= maxOpenTransactions) {
       f(None)
     } else {
-      queues.remove(key, Some(timeLimit), true, false) {
+      queues.remove(key, Some(timeLimit), true, false).onSuccess {
         case None =>
           f(None)
         case x @ Some(item) =>
@@ -169,7 +171,7 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
     } else {
       Stats.incr("cmd_get")
     }
-    queues.remove(key, timeout, opening, peeking) {
+    queues.remove(key, timeout, opening, peeking).onSuccess {
       case None =>
         f(None)
       case Some(item) =>
