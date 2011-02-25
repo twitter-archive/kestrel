@@ -79,27 +79,28 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
       val serverPipelineFactory = memcachePipelineFactory
     }
     // finagle setup:
-    val builder = ServerBuilder().codec(memcachePipelineFactoryCodec)
-    
+    memcacheListenPort.foreach { port =>
+      val address = new InetSocketAddress(listenAddress, port)
+      val server: Server[MemcacheRequest, MemcacheResponse] = ServerBuilder()
+        .codec(memcachePipelineFactoryCodec)
+        .bindTo(address)
+        .build(service....)
+    }
+
+    memcacheAcceptor = memcacheListenPort.map { port =>
+      makeAcceptor(channelFactory, memcachePipelineFactory, address)
+    }
+
+
+
+
     val service: Service[HttpRequest, HttpResponse] = new Service[HttpRequest, HttpResponse] {
       def apply(request: HttpRequest) = Future(new DefaultHttpResponse(HTTP_1_1, OK))
     }
 
-    val address: SocketAddress = new InetSocketAddress(10000)
 
-    val server: Server[HttpRequest, HttpResponse] = ServerBuilder()
-      .codec(Http)
-      .bindTo(address)
-      .build(service)
-    
-    // netty setup:
-    executor = Executors.newCachedThreadPool()
-    channelFactory = new NioServerSocketChannelFactory(executor, executor)
 
-    memcacheAcceptor = memcacheListenPort.map { port =>
-      val address = new InetSocketAddress(listenAddress, port)
-      makeAcceptor(channelFactory, memcachePipelineFactory, address)
-    }
+
 
     val textPipelineFactory = new ChannelPipelineFactory() {
       def getPipeline() = {
