@@ -18,14 +18,13 @@
 package net.lag.kestrel
 package config
 
-import com.twitter.admin.{RuntimeEnvironment, ServiceTracker}
-import com.twitter.admin.config._
-import com.twitter.config.Config
 import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.logging.config._
-import com.twitter.util.{Duration, StorageUnit}
+import com.twitter.ostrich.admin.{RuntimeEnvironment, ServiceTracker}
+import com.twitter.ostrich.admin.config._
+import com.twitter.util.{Config, Duration, StorageUnit}
 
 case class QueueConfig(
   maxItems: Int,

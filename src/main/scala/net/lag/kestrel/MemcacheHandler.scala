@@ -22,7 +22,7 @@ import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.naggati.ProtocolError
 import com.twitter.naggati.codec.{MemcacheRequest, MemcacheResponse}
-import com.twitter.stats.Stats
+import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{Duration, Time}
 import org.jboss.netty.channel.Channel
 import org.jboss.netty.channel.group.ChannelGroup

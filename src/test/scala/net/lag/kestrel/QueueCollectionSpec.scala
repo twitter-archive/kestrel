@@ -21,7 +21,7 @@ import java.io.{File, FileInputStream}
 import scala.util.Sorting
 import com.twitter.util.{TempFolder, Time, Timer}
 import com.twitter.conversions.time._
-import com.twitter.stats.Stats
+import com.twitter.ostrich.stats.Stats
 import org.specs.Specification
 import config._
 

@@ -18,14 +18,14 @@
 package net.lag.kestrel
 
 import java.net.InetSocketAddress
-import java.util.concurrent.{CountDownLatch, Executors, ExecutorService, TimeUnit}
+import java.util.concurrent.{Executors, ExecutorService, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.{immutable, mutable}
-import com.twitter.admin.{RuntimeEnvironment, Service, ServiceTracker}
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.naggati.codec.MemcacheCodec
-import com.twitter.stats.Stats
+import com.twitter.ostrich.admin.{RuntimeEnvironment, Service, ServiceTracker}
+import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{Duration, Eval, Time, Timer => TTimer, TimerTask => TTimerTask}
 import org.jboss.netty.bootstrap.ServerBootstrap
 import org.jboss.netty.channel.{Channel, ChannelFactory, ChannelPipelineFactory, Channels}

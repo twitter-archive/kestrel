@@ -25,7 +25,7 @@ import scala.collection.mutable
 import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
-import com.twitter.stats.Stats
+import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{Duration, Future, Promise, Time, Timer, TimerTask, Try}
 import config._
 

@@ -21,9 +21,9 @@ import java.io._
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.channels.FileChannel
 import java.util.concurrent.Semaphore
-import com.twitter.admin.BackgroundProcess
 import com.twitter.conversions.storage._
 import com.twitter.logging.Logger
+import com.twitter.ostrich.admin.BackgroundProcess
 import com.twitter.util.Time
 
 case class BrokenItemException(lastValidPosition: Long, cause: Throwable) extends IOException(cause)
