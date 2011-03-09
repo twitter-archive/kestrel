@@ -7,10 +7,10 @@ class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info)
   with gh.Issues
   with IdeaProject
 {
-  val util = "com.twitter" % "util" % "1.7.3"
+  val util = "com.twitter" % "util" % "1.8.1"
 
   val ostrich = "com.twitter" % "ostrich" % "4.0.0"
-  val naggati = "com.twitter" % "naggati" % "2.1.0"
+  val naggati = "com.twitter" % "naggati" % "2.1.1"
 
   val specs = "org.scala-tools.testing" % "specs_2.8.1" % "1.6.7" % "test"
   val jmock = "org.jmock" % "jmock" % "2.4.0" % "test"
