@@ -20,11 +20,11 @@ package net.lag.kestrel
 import java.io._
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.channels.FileChannel
-import java.util.concurrent.Semaphore
 import com.twitter.conversions.storage._
 import com.twitter.logging.Logger
 import com.twitter.ostrich.admin.BackgroundProcess
 import com.twitter.util.Time
+import java.util.concurrent.{LinkedBlockingQueue, ArrayBlockingQueue, Semaphore}
 
 case class BrokenItemException(lastValidPosition: Long, cause: Throwable) extends IOException(cause)
 
@@ -44,6 +44,8 @@ object JournalItem {
  * Codes for working with the journal file for a PersistentQueue.
  */
 class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, multifile: => Boolean) {
+  import Journal._
+
   private val log = Logger.get
 
   private val queueFile = new File(queuePath, queueName)
@@ -118,8 +120,6 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
     reader = None
     readerFilename = None
     closed = true
-    packerSemaphore.release()
-    packer.join()
   }
 
   def erase(): Unit = {
@@ -211,7 +211,7 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
             reader = Some(new FileInputStream(new File(queuePath, readerFilename.get)).getChannel)
             log.debug("Read-behind on '%s' moving from file %s to %s", queueName, oldFilename, readerFilename.get)
             fillReadBehind(f)
-            packerSemaphore.release()
+            packerQueue.add(this)
           case (_, _) =>
         }
       }
@@ -395,15 +395,7 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
     if (readerFilename == Some(queueName)) {
       readerFilename = Some(rotatedFile)
     }
-    packerSemaphore.release()
-  }
-
-  val packerSemaphore = new Semaphore(0)
-  val packer = BackgroundProcess.spawnDaemon("pack:" + queueName) {
-    while (!closed) {
-      packerSemaphore.acquire()
-      if (!closed) pack()
-    }
+    packerQueue.add(this)
   }
 
   private def pack() {
@@ -481,5 +473,12 @@ object Journal {
 
   def journalAfter(path: File, queueName: String, filename: String): Option[String] = {
     journalsForQueue(path, queueName).dropWhile { _ != filename }.drop(1).headOption
+  }
+
+  val packerQueue = new LinkedBlockingQueue[Journal]()
+  lazy val packer = BackgroundProcess.spawnDaemon("journal-packer") {
+    while (true) {
+      packerQueue.take().pack()
+    }
   }
 }
