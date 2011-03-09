@@ -18,6 +18,7 @@
 package net.lag.kestrel
 
 import java.io.FileOutputStream
+import scala.annotation.tailrec
 import scala.collection.mutable
 import com.twitter.logging.Logger
 
@@ -44,6 +45,7 @@ class JournalPacker(filenames: Seq[String], newFilename: String) {
 
   private var statusCallback: ((Long, Long) => Unit) = (_, _) => ()
 
+  @tailrec
   private def advanceAdder(): Option[QItem] = {
     if (!adderStack.isEmpty) {
       Some(adderStack.remove(0))
