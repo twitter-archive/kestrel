@@ -31,7 +31,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
 
   "TextCodec" should {
     "get request" in {
-      val codec = new TestCodec(TextCodec.read, TextCodec.write)
+      val (codec, counter) = TestCodec(TextCodec.read, TextCodec.write)
 
       codec(wrap("get foo\r\n")) mustEqual List(TextRequest("get", List("foo"), Nil))
       codec(wrap("get f")) mustEqual Nil
@@ -42,7 +42,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
     }
 
     "put request" in {
-      val codec = new TestCodec(TextCodec.read, TextCodec.write)
+      val (codec, counter) = TestCodec(TextCodec.read, TextCodec.write)
 
       codec(wrap("put foo:\n")) mustEqual Nil
       codec(wrap("hello\n")) mustEqual Nil
@@ -55,27 +55,27 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
     }
 
     "quit request" in {
-      val codec = new TestCodec(TextCodec.read, TextCodec.write)
+      val (codec, counter) = TestCodec(TextCodec.read, TextCodec.write)
       codec(wrap("QUIT\r\n")) mustEqual List(TextRequest("quit", Nil, Nil))
     }
 
     "success response" in {
-      val codec = new TestCodec(TextCodec.read, TextCodec.write)
+      val (codec, counter) = TestCodec(TextCodec.read, TextCodec.write)
       codec.send(CountResponse(23)) mustEqual List("+23\n")
     }
 
     "error response" in {
-      val codec = new TestCodec(TextCodec.read, TextCodec.write)
+      val (codec, counter) = TestCodec(TextCodec.read, TextCodec.write)
       codec.send(ErrorResponse("Bad karma")) mustEqual List("-Bad karma\n")
     }
 
     "empty response" in {
-      val codec = new TestCodec(TextCodec.read, TextCodec.write)
+      val (codec, counter) = TestCodec(TextCodec.read, TextCodec.write)
       codec.send(ItemResponse(None)) mustEqual List("*\n")
     }
 
     "item response" in {
-      val codec = new TestCodec(TextCodec.read, TextCodec.write)
+      val (codec, counter) = TestCodec(TextCodec.read, TextCodec.write)
       codec.send(ItemResponse(Some("hello".getBytes))) mustEqual List(":hello\n")
     }
   }

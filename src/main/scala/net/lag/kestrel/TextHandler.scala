@@ -30,7 +30,8 @@ import org.jboss.netty.channel.group.ChannelGroup
 object TextCodec {
   val MAX_PUT_BUFFER = 1024
 
-  def apply() = new Codec(read, write)
+  def apply(bytesRead: Int => Unit, bytesWritten: Int => Unit) = new Codec(read, write,
+    bytesRead, bytesWritten)
 
   val read = readLine(true, "ISO-8859-1") { line =>
     if (line.endsWith(":")) {
