@@ -25,6 +25,7 @@ import com.twitter.logging.Logger
 import com.twitter.ostrich.admin.BackgroundProcess
 import com.twitter.util.Time
 import java.util.concurrent.{LinkedBlockingQueue, ArrayBlockingQueue, Semaphore}
+import java.util.concurrent.atomic.AtomicInteger
 
 case class BrokenItemException(lastValidPosition: Long, cause: Throwable) extends IOException(cause)
 
@@ -120,6 +121,7 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
     reader = None
     readerFilename = None
     closed = true
+    waitForPacksToFinish()
   }
 
   def erase(): Unit = {
@@ -211,7 +213,7 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
             reader = Some(new FileInputStream(new File(queuePath, readerFilename.get)).getChannel)
             log.debug("Read-behind on '%s' moving from file %s to %s", queueName, oldFilename, readerFilename.get)
             fillReadBehind(f)
-            packerQueue.add(this)
+            requestPack()
           case (_, _) =>
         }
       }
@@ -395,7 +397,19 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
     if (readerFilename == Some(queueName)) {
       readerFilename = Some(rotatedFile)
     }
+    requestPack()
+  }
+
+  val outstandingPackRequests = new AtomicInteger(0)
+  private def requestPack() {
+    outstandingPackRequests.incrementAndGet()
     packerQueue.add(this)
+  }
+
+  private def waitForPacksToFinish() {
+    while (outstandingPackRequests.get() > 0) {
+      Thread.sleep(10)
+    }
   }
 
   private def pack() {
@@ -434,9 +448,14 @@ object Journal {
 
   def orderedFilesForQueue(path: File, queueName: String): List[String] = {
     val totalFiles = path.list()
-    totalFiles.filter { _ startsWith (queueName + ".") }.sortBy { name =>
-      name.split('.')(1).toLong
-    }.toList
+    if (totalFiles eq null) {
+      // directory is gone.
+      Nil
+    } else {
+      totalFiles.filter { _ startsWith (queueName + ".") }.sortBy { name =>
+        name.split('.')(1).toLong
+      }.toList
+    }
   }
 
   def cleanUpFinishedPack(path: File, oldFiles: Seq[String], packedFile: String) = {
@@ -476,9 +495,11 @@ object Journal {
   }
 
   val packerQueue = new LinkedBlockingQueue[Journal]()
-  lazy val packer = BackgroundProcess.spawnDaemon("journal-packer") {
+  val packer = BackgroundProcess.spawnDaemon("journal-packer") {
     while (true) {
-      packerQueue.take().pack()
+      val j = packerQueue.take()
+      j.pack()
+      j.outstandingPackRequests.decrementAndGet()
     }
   }
 }

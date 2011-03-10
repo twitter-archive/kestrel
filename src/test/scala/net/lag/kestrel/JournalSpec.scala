@@ -121,5 +121,18 @@ class JournalSpec extends Specification with TempFolder with TestLogging {
         }
       }
     }
+
+    "pack old files" in {
+      withTempFolder {
+        val journal = new Journal(folderName, "test", false, true)
+        journal.open()
+        journal.add(QItem(Time.now, None, "".getBytes, 0))
+        journal.rotate()
+        journal.add(QItem(Time.now, None, "".getBytes, 0))
+        journal.rotate()
+        // now wait for the packer to combine the 2 files.
+        Journal.journalsForQueue(new File(folderName), "test").size must eventually(be_==(2))
+      }
+    }
   }
 }
