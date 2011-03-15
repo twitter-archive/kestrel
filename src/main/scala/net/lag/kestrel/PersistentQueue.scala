@@ -172,7 +172,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
    * Add a value to the end of the queue, transactionally.
    */
   def add(value: Array[Byte], expiry: Option[Time]): Boolean = {
-    synchronized {
+    val future = synchronized {
       if (closed || value.size > config.maxItemSize.inBytes) return false
       if (config.fanoutOnly && !isFanout) return true
       while (queueLength >= config.maxItems || queueSize >= config.maxSize.inBytes) {
@@ -197,9 +197,14 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       }
       checkRotateJournal()
       _add(item)
-      if (config.keepJournal) journal.add(item)
+      if (config.keepJournal) {
+        journal.add(item)
+      } else {
+        Future.void
+      }
     }
     waiters.trigger()
+    future()
     true
   }
 

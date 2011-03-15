@@ -26,7 +26,7 @@ import com.twitter.logging.Logger
 import com.twitter.ostrich.admin.BackgroundProcess
 import java.util.concurrent.{LinkedBlockingQueue, ArrayBlockingQueue, Semaphore}
 import java.util.concurrent.atomic.AtomicInteger
-import com.twitter.util.{Duration, Timer, Time}
+import com.twitter.util.{Future, Duration, Timer, Time}
 
 case class BrokenItemException(lastValidPosition: Long, cause: Throwable) extends IOException(cause)
 
@@ -140,14 +140,13 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
 
   def isReplaying(): Boolean = replayer.isDefined
 
-  private def add(allowSync: Boolean, item: QItem): Unit = {
+  private def add(allowSync: Boolean, item: QItem): Future[Unit] = {
     val blob = item.pack(CMD_ADDX.toByte, false)
-    val future = writer.write(blob)
-    if (allowSync) future()
     size += blob.limit
+    writer.write(blob)
   }
 
-  def add(item: QItem): Unit = add(true, item)
+  def add(item: QItem): Future[Unit] = add(true, item)
 
   // used only to list pending transactions when recreating the journal.
   private def addWithXid(item: QItem) = {
