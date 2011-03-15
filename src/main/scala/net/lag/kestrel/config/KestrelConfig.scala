@@ -36,7 +36,7 @@ case class QueueConfig(
   maxJournalOverflow: Int,
   discardOldWhenFull: Boolean,
   keepJournal: Boolean,
-  syncJournal: Boolean,
+  syncJournal: Duration,
   multifileJournal: Boolean,
   expireToQueue: Option[String],
   maxExpireSweep: Int,
@@ -62,7 +62,7 @@ class QueueBuilder extends Config[QueueConfig] {
   var maxJournalOverflow: Int = 10
   var discardOldWhenFull: Boolean = false
   var keepJournal: Boolean = true
-  var syncJournal: Boolean = false
+  var syncJournal: Duration = Duration.MaxValue
   var multifileJournal: Boolean = false
   var expireToQueue: Option[String] = None
   var maxExpireSweep: Int = Int.MaxValue

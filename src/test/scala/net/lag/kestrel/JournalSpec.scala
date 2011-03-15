@@ -18,21 +18,21 @@
 package net.lag.kestrel
 
 import java.io._
-import com.twitter.util.{TempFolder, Time}
 import org.specs.Specification
+import com.twitter.util.{Duration, TempFolder, Time}
 
 class JournalSpec extends Specification with TempFolder with TestLogging {
   "Journal" should {
     "walk" in {
       withTempFolder {
-        val journal = new Journal(folderName + "/a1", false)
+        val journal = new Journal(folderName + "/a1")
         journal.open()
         journal.add(QItem(Time.now, None, new Array[Byte](32), 0))
         journal.add(QItem(Time.now, None, new Array[Byte](64), 0))
         journal.add(QItem(Time.now, None, new Array[Byte](10), 0))
         journal.close()
 
-        val journal2 = new Journal(folderName + "/a1", false)
+        val journal2 = new Journal(folderName + "/a1")
         journal2.walk().map {
           case (item, itemsize) => item match {
             case JournalItem.Add(qitem) => qitem.data.size.toString
@@ -44,7 +44,7 @@ class JournalSpec extends Specification with TempFolder with TestLogging {
 
     "recover from corruption" in {
       withTempFolder {
-        val journal = new Journal(folderName + "/a1", false)
+        val journal = new Journal(folderName + "/a1")
         journal.open()
         journal.add(QItem(Time.now, None, new Array[Byte](32), 0))
         journal.close()
@@ -53,7 +53,7 @@ class JournalSpec extends Specification with TempFolder with TestLogging {
         f.write(127)
         f.close()
 
-        val journal2 = new Journal(folderName + "/a1", false)
+        val journal2 = new Journal(folderName + "/a1")
         journal2.walk().map { case (item, itemsize) => item.toString }.mkString(",") must throwA[BrokenItemException]
       }
     }
@@ -124,7 +124,7 @@ class JournalSpec extends Specification with TempFolder with TestLogging {
 
     "pack old files" in {
       withTempFolder {
-        val journal = new Journal(folderName, "test", null, false, true)
+        val journal = new Journal(folderName, "test", null, Duration.MaxValue, true)
         journal.open()
         journal.add(QItem(Time.now, None, "".getBytes, 0))
         journal.rotate()

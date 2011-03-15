@@ -45,8 +45,8 @@ object JournalItem {
 /**
  * Codes for working with the journal file for a PersistentQueue.
  */
-class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: => Boolean,
-              multifile: => Boolean) {
+class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: Duration,
+              multifile: Boolean) {
   import Journal._
 
   private val log = Logger.get(getClass)
@@ -77,11 +77,13 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: =
   private val CMD_ADD_XID = 7
 
 
-  def this(fullPath: String, syncJournal: => Boolean) =
+  def this(fullPath: String, syncJournal: Duration) =
     this(new File(fullPath).getParent(), new File(fullPath).getName(), null, syncJournal, false)
 
+  def this(fullPath: String) = this(fullPath, Duration.MaxValue)
+
   private def open(file: File): Unit = {
-    writer = new PeriodicSyncFile(file, timer, if (syncJournal) 0.seconds else Duration.MaxValue)
+    writer = new PeriodicSyncFile(file, timer, syncJournal)
   }
 
   def open(): Unit = {
@@ -141,7 +143,7 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: =
   private def add(allowSync: Boolean, item: QItem): Unit = {
     val blob = item.pack(CMD_ADDX.toByte, false)
     val future = writer.write(blob)
-    if (allowSync && syncJournal) future()
+    if (allowSync) future()
     size += blob.limit
   }
 
@@ -374,7 +376,7 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: =
     }
     byteBuffer.flip
     val future = writer.write(byteBuffer)
-    if (allowSync && syncJournal) future()
+    if (allowSync) future()
     byteBuffer.limit
   }
 

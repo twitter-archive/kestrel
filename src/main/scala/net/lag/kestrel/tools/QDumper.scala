@@ -21,7 +21,7 @@ package tools
 import java.io.{FileNotFoundException, IOException}
 import scala.collection.mutable
 import com.twitter.conversions.time._
-import com.twitter.util.Time
+import com.twitter.util.{Duration, Time}
 
 class QueueDumper(filename: String) {
   var offset = 0L
@@ -34,7 +34,7 @@ class QueueDumper(filename: String) {
   val openTransactions = new mutable.HashMap[Int, Int]
 
   def apply() {
-    val journal = new Journal(filename, false)
+    val journal = new Journal(filename, Duration.MaxValue)
     var lastDisplay = 0L
 
     try {
