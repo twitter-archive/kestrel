@@ -21,11 +21,12 @@ import java.io._
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.channels.FileChannel
 import com.twitter.conversions.storage._
+import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.ostrich.admin.BackgroundProcess
-import com.twitter.util.Time
 import java.util.concurrent.{LinkedBlockingQueue, ArrayBlockingQueue, Semaphore}
 import java.util.concurrent.atomic.AtomicInteger
+import com.twitter.util.{Duration, Timer, Time}
 
 case class BrokenItemException(lastValidPosition: Long, cause: Throwable) extends IOException(cause)
 
@@ -44,14 +45,15 @@ object JournalItem {
 /**
  * Codes for working with the journal file for a PersistentQueue.
  */
-class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, multifile: => Boolean) {
+class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: => Boolean,
+              multifile: => Boolean) {
   import Journal._
 
-  private val log = Logger.get
+  private val log = Logger.get(getClass)
 
   private val queueFile = new File(queuePath, queueName)
 
-  private var writer: FileChannel = null
+  private var writer: PeriodicSyncFile = null
   private var reader: Option[FileChannel] = None
   private var readerFilename: Option[String] = None
   private var replayer: Option[FileChannel] = None
@@ -76,10 +78,10 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
 
 
   def this(fullPath: String, syncJournal: => Boolean) =
-    this(new File(fullPath).getParent(), new File(fullPath).getName(), syncJournal, false)
+    this(new File(fullPath).getParent(), new File(fullPath).getName(), null, syncJournal, false)
 
   private def open(file: File): Unit = {
-    writer = new FileOutputStream(file, true).getChannel
+    writer = new PeriodicSyncFile(file, timer, if (syncJournal) 0.seconds else Duration.MaxValue)
   }
 
   def open(): Unit = {
@@ -93,11 +95,11 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
   }
 
   def roll(xid: Int, openItems: Seq[QItem], queue: Iterable[QItem]) {
-    writer.close
+    writer.close()
     val tmpFile = new File(queuePath, queueName + "~~" + Time.now.inMilliseconds)
     open(tmpFile)
     dump(xid, openItems, queue)
-    writer.close
+    writer.close()
     tmpFile.renameTo(queueFile)
     open
   }
@@ -112,11 +114,10 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
     for (item <- queue) {
       add(false, item)
     }
-    if (syncJournal) writer.force(false)
   }
 
   def close(): Unit = {
-    writer.close
+    writer.close()
     reader.foreach { _.close }
     reader = None
     readerFilename = None
@@ -127,7 +128,7 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
   def erase(): Unit = {
     try {
       close()
-      queueFile.delete
+      queueFile.delete()
     } catch {
       case _ =>
     }
@@ -139,10 +140,8 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
 
   private def add(allowSync: Boolean, item: QItem): Unit = {
     val blob = item.pack(CMD_ADDX.toByte, false)
-    do {
-      writer.write(blob)
-    } while (blob.position < blob.limit)
-    if (allowSync && syncJournal) writer.force(false)
+    val future = writer.write(blob)
+    if (allowSync && syncJournal) future()
     size += blob.limit
   }
 
@@ -151,9 +150,7 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
   // used only to list pending transactions when recreating the journal.
   private def addWithXid(item: QItem) = {
     val blob = item.pack(CMD_ADD_XID.toByte, true)
-    do {
-      writer.write(blob)
-    } while (blob.position < blob.limit)
+    writer.write(blob)
     // only called from roll(), so the journal does not need to be synced after a write.
     size += blob.limit
   }
@@ -376,10 +373,8 @@ class Journal(queuePath: String, queueName: String, syncJournal: => Boolean, mul
       case i: Int => byteBuffer.putInt(i)
     }
     byteBuffer.flip
-    while (byteBuffer.position < byteBuffer.limit) {
-      writer.write(byteBuffer)
-    }
-    if (allowSync && syncJournal) writer.force(false)
+    val future = writer.write(byteBuffer)
+    if (allowSync && syncJournal) future()
     byteBuffer.limit
   }
 

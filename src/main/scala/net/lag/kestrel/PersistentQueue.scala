@@ -67,7 +67,8 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   private var paused = false
 
   private var journal =
-    new Journal(new File(persistencePath).getCanonicalPath, name, config.syncJournal, config.multifileJournal)
+    new Journal(new File(persistencePath).getCanonicalPath, name, timer, config.syncJournal,
+      config.multifileJournal)
 
   private val waiters = new DeadlineWaitQueue(timer)
 
