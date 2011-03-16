@@ -81,3 +81,24 @@ cover the 4-byte expiration and the 1-byte data.
 
   Used by read-behind for state in rewriting the journal file. If not in read-behind,
   this really marks the end of this journal file and time to move to the next one.
+
+
+## Multiple journal files
+
+The latest journal file for a queue is named simply `(name)` with no dots in it. For example,
+the latest journal file for queue "cars" is named `cars`.
+
+As the journal is rotated, the current timestamp is appended. A rotated journal for cars might be
+named `cars.904`. When recovering the journals on restart, kestrel replays all the rolled journal
+files in timestamp order (earliest first), and then the non-timestamped file last (if it exists).
+They are treated exactly the same as if they were chunks of a larger, contiguous file.
+
+Journals with `~~` in their filename are temporary. If found on restart, they can be ignored.
+
+If previous rolled journal files are packed together, the state will initially be written into a
+temporary file, and then renamed to end with `.(timestamp).pack`. The timestamp means that any
+rolled journal with timestamp less than or equal to the pack-file timestamp is now dead and
+should be deleted. For example, if `cars.950.pack` exists, then `cars.904` and `cars.950` should
+be ignored and deleted, but `cars.951` is still valid. Normally, if it doesn't crash,
+the packing process will delete these older files after creating the pack file. Then it will
+rename the pack file to remove the ".pack" extension.

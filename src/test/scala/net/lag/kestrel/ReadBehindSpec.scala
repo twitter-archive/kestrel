@@ -173,7 +173,6 @@ class ReadBehindSpec extends Specification with TempFolder with TestLogging with
         val config = new QueueBuilder {
           maxMemorySize = 512.bytes
           maxJournalSize = 1.kilobyte
-          multifileJournal = true
         }.apply()
         val q = new PersistentQueue("things", folderName, config, timer)
 
@@ -194,7 +193,6 @@ class ReadBehindSpec extends Specification with TempFolder with TestLogging with
         val config = new QueueBuilder {
           maxMemorySize = 1.kilobyte
           maxJournalSize = 512.bytes
-          multifileJournal = true
         }.apply()
         val q = new PersistentQueue("things", folderName, config, timer)
 

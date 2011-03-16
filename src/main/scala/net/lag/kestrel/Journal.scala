@@ -27,6 +27,7 @@ import com.twitter.ostrich.admin.BackgroundProcess
 import java.util.concurrent.{LinkedBlockingQueue, ArrayBlockingQueue, Semaphore}
 import java.util.concurrent.atomic.AtomicInteger
 import com.twitter.util.{Future, Duration, Timer, Time}
+import annotation.tailrec
 
 case class BrokenItemException(lastValidPosition: Long, cause: Throwable) extends IOException(cause)
 
@@ -39,14 +40,14 @@ object JournalItem {
   case class SavedXid(xid: Int) extends JournalItem
   case class Unremove(xid: Int) extends JournalItem
   case class ConfirmRemove(xid: Int) extends JournalItem
+  case class StateDump(xid: Int, count: Int) extends JournalItem
   case object EndOfFile extends JournalItem
 }
 
 /**
  * Codes for working with the journal file for a PersistentQueue.
  */
-class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: Duration,
-              multifile: Boolean) {
+class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: Duration) {
   import Journal._
 
   private val log = Logger.get(getClass)
@@ -75,10 +76,11 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
   private val CMD_UNREMOVE = 5
   private val CMD_CONFIRM_REMOVE = 6
   private val CMD_ADD_XID = 7
+  private val CMD_STATE_DUMP = 8
 
 
   def this(fullPath: String, syncJournal: Duration) =
-    this(new File(fullPath).getParent(), new File(fullPath).getName(), null, syncJournal, false)
+    this(new File(fullPath).getParent(), new File(fullPath).getName(), null, syncJournal)
 
   def this(fullPath: String) = this(fullPath, Duration.MaxValue)
 
@@ -96,13 +98,17 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
     }).foldLeft(0L) { (sum, f) => sum + f.length() }
   }
 
-  def roll(xid: Int, openItems: Seq[QItem], queue: Iterable[QItem]) {
+  def rewrite(xid: Int, openItems: Seq[QItem], queue: Iterable[QItem]) {
     writer.close()
-    val tmpFile = new File(queuePath, queueName + "~~" + Time.now.inMilliseconds)
+    val now = Time.now.inMilliseconds
+    val tmpFile = new File(queuePath, queueName + "~~" + now)
+    val packFile = new File(queuePath, queueName + "." + now + ".pack")
     open(tmpFile)
     dump(xid, openItems, queue)
     writer.close()
-    tmpFile.renameTo(queueFile)
+    tmpFile.renameTo(packFile)
+    // force cleanup:
+    Journal.orderedFilesForQueue(new File(queuePath), queueName)
     open
   }
 
@@ -115,6 +121,14 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
     saveXid(xid)
     for (item <- queue) {
       add(false, item)
+    }
+  }
+
+  def writeState(xid: Int, openItems: Seq[QItem]) {
+    size += write(true, CMD_STATE_DUMP.toByte, xid, openItems.size)
+    for (item <- openItems) {
+      addWithXid(item)
+      removeTentative(false)
     }
   }
 
@@ -204,6 +218,8 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
         readJournalEntry(rj) match {
           case (JournalItem.Add(item), _) =>
             f(item)
+          case (JournalItem.StateDump(xid, count), _) =>
+            // ... FIXME ...
           case (JournalItem.EndOfFile, _) =>
             // move to next file and try again.
             val oldFilename = readerFilename.get
@@ -236,7 +252,10 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
         var done = false
         do {
           readJournalEntry(in) match {
-            case (JournalItem.EndOfFile, _) => done = true
+            case (JournalItem.EndOfFile, _) =>
+              done = true
+            case (JournalItem.StateDump(xid, count), _) =>
+              done = true
             case (x, itemsize) =>
               size += itemsize
               f(x)
@@ -313,6 +332,10 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
             val item = QItem.unpack(data)
             item.xid = xid
             (JournalItem.Add(item), 9 + data.length)
+          case CMD_STATE_DUMP =>
+            val xid = readInt(in)
+            val count = readInt(in)
+            (JournalItem.StateDump(xid, count), 9)
           case n =>
             throw new BrokenItemException(lastPosition, new IOException("invalid opcode in journal: " + n.toInt + " at position " + (in.position - 1)))
         }
@@ -425,9 +448,10 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
       }
 
       log.info("Packing '%s' -- erasing old files.", queueName)
-      val packFile = new File(queuePath, queueName + ".0.pack")
+      val finalTimestamp = filenames.last.split('.')(1).toLong
+      val packFile = new File(queuePath, queueName + "." + finalTimestamp + ".pack")
       tmpFile.renameTo(packFile)
-      Journal.cleanUpFinishedPack(new File(queuePath), filenames, packFile.getAbsolutePath)
+      Journal.orderedFilesForQueue(new File(queuePath), queueName)
       log.info("Packing '%s' done: %s", queueName, Journal.journalsForQueue(new File(queuePath), queueName).mkString(", "))
     }
   }
@@ -442,44 +466,57 @@ object Journal {
     }
   }
 
+  private def cleanUpPackedFiles(path: File, files: List[(String, Long)]): Boolean = {
+    val packFile = files.find { case (filename, timestamp) =>
+      filename endsWith ".pack"
+    }
+    if (packFile.isDefined) {
+      val (packFilename, packTimestamp) = packFile.get
+      val doomed = files.filter { case (filename, timestamp) =>
+        (timestamp <= packTimestamp) && !(filename endsWith ".pack")
+      }
+      doomed.foreach { case (filename, timestamp) =>
+        new File(path, filename).delete()
+      }
+      val newFilename = packFilename.substring(0, packFilename.length - 5)
+      new File(path, packFilename).renameTo(new File(path, newFilename))
+      true
+    } else {
+      false
+    }
+  }
+
+  /**
+   *
+   */
+  @tailrec
   def orderedFilesForQueue(path: File, queueName: String): List[String] = {
     val totalFiles = path.list()
     if (totalFiles eq null) {
       // directory is gone.
       Nil
     } else {
-      totalFiles.filter { _ startsWith (queueName + ".") }.sortBy { name =>
-        name.split('.')(1).toLong
+      val timedFiles = totalFiles.filter {
+        _.startsWith(queueName + ".")
+      }.map { filename =>
+        (filename, filename.split('.')(1).toLong)
+      }.sortBy { case (filename, timestamp) =>
+        timestamp
       }.toList
-    }
-  }
 
-  def cleanUpFinishedPack(path: File, oldFiles: Seq[String], packedFile: String) = {
-    oldFiles.foreach { f => new File(path, f).delete() }
-    val postPackedFile = packedFile.substring(0, packedFile.length - 5)
-    new File(path, packedFile) renameTo new File(path, postPackedFile)
-    postPackedFile
+      if (cleanUpPackedFiles(path, timedFiles)) {
+        // probably only recurses once ever.
+        orderedFilesForQueue(path, queueName)
+      } else {
+        timedFiles.map { case (filename, timestamp) => filename } ++
+          totalFiles.filter { _ == queueName }
+      }
+    }
   }
 
   def journalsForQueue(path: File, queueName: String): List[String] = {
-    val timedFiles = orderedFilesForQueue(path, queueName)
-    val fixedTimedFiles: List[String] = if (timedFiles.exists { _ endsWith ".pack" }) {
-      // incomplete packing job died after creating the combined file, before erasing the others.
-      // finish the job.
-      val doomed = timedFiles.takeWhile { f => !(f endsWith ".pack") }
-      val packedFile = timedFiles.find { _ endsWith ".pack" }.get
-      val postPackedFile = cleanUpFinishedPack(path, doomed, packedFile)
-      List(postPackedFile) ++ (timedFiles.filter { f => !(doomed.contains(f) || packedFile == f) })
-    } else {
-      timedFiles
-    }
-    val currentFile = path.list().filter { _ == queueName }
-    val rv = fixedTimedFiles ++ currentFile
-    if (rv.size == 0) {
-      List(queueName)
-    } else {
-      rv
-    }
+    val rv = orderedFilesForQueue(path, queueName)
+    if (rv.size == 0) List(queueName) else rv
   }
 
   def journalsBefore(path: File, queueName: String, filename: String): Seq[String] = {
