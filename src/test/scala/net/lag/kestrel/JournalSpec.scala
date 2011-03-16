@@ -150,6 +150,10 @@ class JournalSpec extends Specification with TempFolder with TestLogging {
         journal.add(QItem(Time.now, None, "".getBytes, 0))
         journal.size mustEqual 21
         journal.archivedSize mustEqual 21
+
+        journal.rewrite(0, Nil, Nil)
+        journal.size mustEqual 5
+        journal.archivedSize mustEqual 0
       }
     }
   }
