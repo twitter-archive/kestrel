@@ -93,7 +93,7 @@ class JournalSpec extends Specification with TempFolder with TestLogging {
           new FileOutputStream(folderName + "/test.50")
           new FileOutputStream(folderName + "/test.100")
           Journal.journalsForQueue(new File(folderName), "test").toList mustEqual
-            List("test.50", "test.100")
+            List("test.50", "test.100", "test")
         }
       }
 

@@ -132,20 +132,20 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
         q.length mustEqual 2
         q.totalItems() mustEqual 2
         q.bytes mustEqual 32 + 64
-        (q.journalSize > 96) mustBe true
+        (q.journalTotalSize > 96) mustBe true
 
         q.remove()
         q.length mustEqual 1
         q.totalItems() mustEqual 2
         q.bytes mustEqual 64
-        (q.journalSize > 96) mustBe true
+        (q.journalTotalSize > 96) mustBe true
 
         // now it should rotate:
         q.remove()
         q.length mustEqual 0
         q.totalItems() mustEqual 2
         q.bytes mustEqual 0
-        (q.journalSize < 10) mustBe true
+        (q.journalTotalSize < 10) mustBe true
       }
     }
 
@@ -385,24 +385,22 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
         q.setup
         q.add(new Array[Byte](512))
         // can't roll the journal normally, cuz there's always one item left.
-        for (i <- 0 until 5) {
+        for (i <- 0 until 4) {
           q.add(new Array[Byte](512))
-          // last remove will be an incomplete transaction:
-          q.remove(i == 4) must beSomeQItem(512)
+          q.remove(false) must beSomeQItem(512)
         }
-        q.length mustEqual 1
-        q.openTransactionCount mustEqual 1
-        q.journalSize mustEqual (512 * 6) + (6 * 21) + 5
-
-        // next add should force a recreate.
         q.add(new Array[Byte](512))
         q.length mustEqual 2
-        q.openTransactionCount mustEqual 1
-        q.journalSize mustEqual ((512 + 16) * 3) + 9 + 1 + 5 + (5 * 2)
+        q.journalSize mustEqual (512 * 6) + (6 * 21) + 4
 
-        // journal should contain exactly: one unfinished transaction, 2 items.
+        // next remove should force a recreate, because the queue size will be 512.
+        q.remove(false) must beSomeQItem(512)
+        q.length mustEqual 1
+        q.journalSize mustEqual (512 + 21) + 5
+
+        // journal should contain exactly 1 item.
         q.close
-        dumpJournal("things") mustEqual "add(512:1), remove-tentative, xid(1), add(512:0), add(512:0)"
+        dumpJournal("things") mustEqual "xid(0), add(512:0)"
       }
     }
 

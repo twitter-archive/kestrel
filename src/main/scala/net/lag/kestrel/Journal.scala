@@ -60,7 +60,12 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
   private var replayer: Option[FileChannel] = None
   private var replayerFilename: Option[String] = None
 
+  // size of the current file, so far
   var size: Long = 0
+
+  // size of the previous files combined
+  @volatile var archivedSize: Long = 0
+
   @volatile var closed: Boolean = false
 
   // small temporary buffer for formatting operations into the journal:
@@ -92,23 +97,30 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
     open(queueFile)
   }
 
-  def totalSize: Long = {
-    (queueFile :: Journal.orderedFilesForQueue(new File(queuePath), queueName).map {
-      new File(queuePath, _)
-    }).foldLeft(0L) { (sum, f) => sum + f.length() }
+  def cleanup() {
+    // has the side effect of cleaning up old files.
+    val files = Journal.archivedFilesForQueue(new File(queuePath), queueName)
+    archivedSize = files.foldLeft(0L) { (sum, filename) =>
+      sum + new File(queuePath, filename).length()
+    }
   }
 
   def rewrite(xid: Int, openItems: Seq[QItem], queue: Iterable[QItem]) {
     writer.close()
     val now = Time.now.inMilliseconds
     val tmpFile = new File(queuePath, queueName + "~~" + now)
-    val packFile = new File(queuePath, queueName + "." + now + ".pack")
     open(tmpFile)
     dump(xid, openItems, queue)
     writer.close()
+
+    val packFile = new File(queuePath, queueName + "." + now + ".pack")
     tmpFile.renameTo(packFile)
-    // force cleanup:
-    Journal.orderedFilesForQueue(new File(queuePath), queueName)
+    cleanup()
+
+    val postPackFile = new File(queuePath, queueName + "." + now)
+    postPackFile.renameTo(queueFile)
+    cleanup()
+
     open
   }
 
@@ -451,7 +463,7 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
       val finalTimestamp = filenames.last.split('.')(1).toLong
       val packFile = new File(queuePath, queueName + "." + finalTimestamp + ".pack")
       tmpFile.renameTo(packFile)
-      Journal.orderedFilesForQueue(new File(queuePath), queueName)
+      journal.cleanup()
       log.info("Packing '%s' done: %s", queueName, Journal.journalsForQueue(new File(queuePath), queueName).mkString(", "))
     }
   }
@@ -487,15 +499,22 @@ object Journal {
   }
 
   /**
-   *
+   * Find all the archived (non-current) journal files for a queue, sort them in replay order (by
+   * timestamp), and erase the remains of any unfinished business that we find along the way.
    */
   @tailrec
-  def orderedFilesForQueue(path: File, queueName: String): List[String] = {
+  def archivedFilesForQueue(path: File, queueName: String): List[String] = {
     val totalFiles = path.list()
     if (totalFiles eq null) {
       // directory is gone.
       Nil
     } else {
+      totalFiles.filter {
+        _.startsWith(queueName + "~~")
+      }.foreach { filename =>
+        new File(path, filename).delete()
+      }
+
       val timedFiles = totalFiles.filter {
         _.startsWith(queueName + ".")
       }.map { filename =>
@@ -506,17 +525,15 @@ object Journal {
 
       if (cleanUpPackedFiles(path, timedFiles)) {
         // probably only recurses once ever.
-        orderedFilesForQueue(path, queueName)
+        archivedFilesForQueue(path, queueName)
       } else {
-        timedFiles.map { case (filename, timestamp) => filename } ++
-          totalFiles.filter { _ == queueName }
+        timedFiles.map { case (filename, timestamp) => filename }
       }
     }
   }
 
   def journalsForQueue(path: File, queueName: String): List[String] = {
-    val rv = orderedFilesForQueue(path, queueName)
-    if (rv.size == 0) List(queueName) else rv
+    archivedFilesForQueue(path, queueName) ++ List(queueName)
   }
 
   def journalsBefore(path: File, queueName: String, filename: String): Seq[String] = {

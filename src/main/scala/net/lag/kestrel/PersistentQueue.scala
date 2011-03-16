@@ -80,6 +80,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   def length: Long = synchronized { queueLength }
   def bytes: Long = synchronized { queueSize }
   def journalSize: Long = synchronized { journal.size }
+  def journalTotalSize: Long = journal.archivedSize + journalSize
   def currentAge: Duration = synchronized { if (queueSize == 0) 0.milliseconds else _currentAge }
   def waiterCount: Long = synchronized { waiters.size }
   def isClosed: Boolean = synchronized { closed || paused }
@@ -129,7 +130,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
 
   gauge("items", length)
   gauge("bytes", bytes)
-  gauge("journal_size", journal.totalSize)
+  gauge("journal_size", journalTotalSize)
   gauge("mem_items", memoryLength)
   gauge("mem_bytes", memoryBytes)
   gauge("age_msec", currentAge.inMilliseconds)
@@ -145,25 +146,17 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     }
   }
 
-  final def rollJournal() {
-    if (config.keepJournal) {
+  // you are holding the lock, and config.keepJournal is true.
+  private def checkRotateJournal() {
+    if ((journal.size >= config.maxJournalSize.inBytes && queueLength == 0) ||
+        (journal.size > config.maxJournalSize.inBytes * config.maxJournalOverflow &&
+         queueSize < config.maxJournalSize.inBytes)) {
+      // rewrite
       log.info("Rolling journal file for '%s' (qsize=%d)", name, queueSize)
-      synchronized {
-        if (config.multifileJournal) {
-          journal.rotate()
-        } else {
-          journal.roll(xidCounter, openTransactionIds map { openTransactions(_) }, queue)
-        }
-      }
-    }
-  }
-
-  final def checkRotateJournal() {
-    if (config.keepJournal && config.multifileJournal && journal.size > config.maxJournalSize.inBytes) {
-      synchronized {
-        log.info("Rotating journal file for '%s'", name)
-        journal.rotate()
-      }
+      journal.rewrite(xidCounter, openTransactionIds.map { openTransactions(_) }, queue)
+    } else if (journal.size > config.maxMemorySize.inBytes) {
+      log.info("Rotating journal file for '%s'", name)
+      journal.rotate()
     }
   }
 
@@ -183,18 +176,13 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
 
       val now = Time.now
       val item = QItem(now, adjustExpiry(now, expiry), value, 0)
-      if (config.keepJournal && !journal.inReadBehind) {
-        if (journal.size > config.maxJournalSize.inBytes * config.maxJournalOverflow &&
-            queueSize < config.maxJournalSize.inBytes) {
-          // force re-creation of the journal.
-          rollJournal()
-        }
-        if (queueSize >= config.maxMemorySize.inBytes) {
+      if (config.keepJournal) {
+        checkRotateJournal()
+        if (!journal.inReadBehind && (queueSize >= config.maxMemorySize.inBytes)) {
           log.info("Dropping to read-behind for queue '%s' (%s)", name, queueSize.bytes.toHuman)
-          journal.startReadBehind
+          journal.startReadBehind()
         }
       }
-      checkRotateJournal()
       _add(item)
       if (config.keepJournal) {
         journal.add(item)
@@ -237,10 +225,6 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
         val item = _remove(transaction)
         if (config.keepJournal) {
           if (transaction) journal.removeTentative() else journal.remove()
-
-          if ((queueLength == 0) && (journal.size >= config.maxJournalSize.inBytes)) {
-            rollJournal()
-          }
           checkRotateJournal()
         }
         item
@@ -325,7 +309,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
 
   def setup(): Unit = synchronized {
     queueSize = 0
-    replayJournal
+    replayJournal()
   }
 
   def destroyJournal(): Unit = synchronized {
@@ -365,7 +349,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
         // when processing the journal, this has to happen after:
         if (!journal.inReadBehind && queueSize >= config.maxMemorySize.inBytes) {
           log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
-          journal.startReadBehind
+          journal.startReadBehind()
         }
       case JournalItem.Remove => _remove(false)
       case JournalItem.RemoveTentative => _remove(true)

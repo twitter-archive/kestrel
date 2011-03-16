@@ -93,9 +93,6 @@ extends NettyHandler[MemcacheRequest](channelGroup, queueCollection, maxOpenTran
       case "flush_all_expired" =>
         val flushed = queues.flushAllExpired()
         channel.write(new MemcacheResponse(flushed.toString))
-      case "roll" =>
-        rollJournal(request.line(1))
-        channel.write(new MemcacheResponse("END"))
       case "version" =>
         version()
       case "quit" =>

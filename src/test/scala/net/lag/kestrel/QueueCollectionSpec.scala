@@ -84,18 +84,6 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
       }
     }
 
-    "force-roll a journal" in {
-      withTempFolder {
-        qc = new QueueCollection(folderName, timer, config, Nil)
-        qc.add("test", "one".getBytes)
-        qc.add("test", "two".getBytes)
-        qc.receive("test")
-        qc.queue("test").get.journalSize mustEqual 49
-        qc.rollJournal("test")
-        qc.queue("test").get.journalSize mustEqual 29
-      }
-    }
-
     "queue hit/miss tracking" in {
       withTempFolder {
         Stats.clearAll()

@@ -196,11 +196,6 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
     queues.flush(key)
   }
 
-  protected def rollJournal(key: String) {
-    log.debug("roll -> q=%s", key)
-    queues.rollJournal(key)
-  }
-
   protected def delete(key: String) = {
     log.debug("delete -> q=%s", key)
     queues.delete(key)

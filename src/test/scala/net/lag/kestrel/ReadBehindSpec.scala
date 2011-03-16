@@ -210,7 +210,8 @@ class ReadBehindSpec extends Specification with TempFolder with TestLogging with
           put(q, 128, i)
           q.inReadBehind mustBe true
         }
-        for (i <- 10 until 40) {
+        // leave one item behind so the journal isn't rewritten:
+        for (i <- 10 until 39) {
           q.remove() must beSomeQItem(128, i)
         }
         q.inReadBehind mustBe false
@@ -219,7 +220,7 @@ class ReadBehindSpec extends Specification with TempFolder with TestLogging with
         val q2 = new PersistentQueue("things", folderName, config, timer)
         q2.setup
         q2.inReadBehind mustBe false
-        q2.length mustEqual 0
+        q2.length mustEqual 1
         q2.close()
       }
     }
