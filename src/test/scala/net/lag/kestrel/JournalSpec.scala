@@ -134,5 +134,23 @@ class JournalSpec extends Specification with TempFolder with TestLogging {
         Journal.journalsForQueue(new File(folderName), "test").size must eventually(be_==(2))
       }
     }
+
+    "report file sizes correctly" in {
+      withTempFolder {
+        val journal = new Journal(folderName, "test", null, Duration.MaxValue)
+        journal.open()
+        journal.add(QItem(Time.now, None, "".getBytes, 0))
+        journal.size mustEqual 21
+        journal.archivedSize mustEqual 0
+
+        journal.rotate()
+        journal.size mustEqual 0
+        journal.archivedSize mustEqual 21
+
+        journal.add(QItem(Time.now, None, "".getBytes, 0))
+        journal.size mustEqual 21
+        journal.archivedSize mustEqual 21
+      }
+    }
   }
 }

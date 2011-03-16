@@ -105,6 +105,24 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
     }
   }
 
+  def rotate() {
+    writer.close()
+    var rotatedFile = queueName + "." + Time.now.inMilliseconds
+    while (new File(queuePath, rotatedFile).exists) {
+      Thread.sleep(1)
+      rotatedFile = queueName + "." + Time.now.inMilliseconds
+    }
+    new File(queuePath, queueName).renameTo(new File(queuePath, rotatedFile))
+    size = 0
+    cleanup()
+    open
+
+    if (readerFilename == Some(queueName)) {
+      readerFilename = Some(rotatedFile)
+    }
+    requestPack()
+  }
+
   def rewrite(xid: Int, openItems: Seq[QItem], queue: Iterable[QItem]) {
     writer.close()
     val now = Time.now.inMilliseconds
@@ -412,23 +430,6 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
     val future = writer.write(byteBuffer)
     if (allowSync) future()
     byteBuffer.limit
-  }
-
-  def rotate() {
-    writer.close
-    var rotatedFile = queueName + "." + Time.now.inMilliseconds
-    while (new File(queuePath, rotatedFile).exists) {
-      Thread.sleep(1)
-      rotatedFile = queueName + "." + Time.now.inMilliseconds
-    }
-    new File(queuePath, queueName).renameTo(new File(queuePath, rotatedFile))
-    size = 0
-    open
-
-    if (readerFilename == Some(queueName)) {
-      readerFilename = Some(rotatedFile)
-    }
-    requestPack()
   }
 
   val outstandingPackRequests = new AtomicInteger(0)
