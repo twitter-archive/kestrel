@@ -88,6 +88,7 @@ class JournalPacker(filenames: Seq[String], newFilename: String) {
           adderStack prepend openTransactions.remove(xid).get
         case JournalItem.ConfirmRemove(xid) =>
           openTransactions -= xid
+        case JournalItem.StateDump(xid, count) =>
       }
       offset += itemsize
       if (offset - lastUpdate > 1024 * 1024) {

@@ -1,7 +1,7 @@
 import sbt._
 import com.twitter.sbt._
 
-class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info)
+class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) with NoisyDependencies
   with SubversionPublisher
   with DefaultRepos
   with gh.Issues

@@ -105,7 +105,9 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
     }
   }
 
-  def rotate() {
+  def rotate(xid: Int, openItems: Seq[QItem]) {
+    writeState(xid, openItems)
+
     writer.close()
     var rotatedFile = queueName + "." + Time.now.inMilliseconds
     while (new File(queuePath, rotatedFile).exists) {
@@ -549,8 +551,13 @@ object Journal {
   val packer = BackgroundProcess.spawnDaemon("journal-packer") {
     while (true) {
       val j = packerQueue.take()
-      j.pack()
-      j.outstandingPackRequests.decrementAndGet()
+      try {
+        j.pack()
+        j.outstandingPackRequests.decrementAndGet()
+      } catch {
+        case e: Throwable =>
+          Logger.get(getClass).error(e, "Uncaught exception in packer: %s", e)
+      }
     }
   }
 }

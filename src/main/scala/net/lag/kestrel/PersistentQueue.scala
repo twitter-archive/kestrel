@@ -156,7 +156,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       journal.rewrite(xidCounter, openTransactionIds.map { openTransactions(_) }, queue)
     } else if (journal.size > config.maxMemorySize.inBytes) {
       log.info("Rotating journal file for '%s'", name)
-      journal.rotate()
+      journal.rotate(xidCounter, openTransactionIds.map { openTransactions(_) })
     }
   }
 

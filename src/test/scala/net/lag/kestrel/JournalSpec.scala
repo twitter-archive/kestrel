@@ -127,9 +127,9 @@ class JournalSpec extends Specification with TempFolder with TestLogging {
         val journal = new Journal(folderName, "test", null, Duration.MaxValue)
         journal.open()
         journal.add(QItem(Time.now, None, "".getBytes, 0))
-        journal.rotate()
+        journal.rotate(0, Nil)
         journal.add(QItem(Time.now, None, "".getBytes, 0))
-        journal.rotate()
+        journal.rotate(0, Nil)
         // now wait for the packer to combine the 2 files.
         Journal.journalsForQueue(new File(folderName), "test").size must eventually(be_==(2))
       }
@@ -143,13 +143,13 @@ class JournalSpec extends Specification with TempFolder with TestLogging {
         journal.size mustEqual 21
         journal.archivedSize mustEqual 0
 
-        journal.rotate()
+        journal.rotate(0, Nil)
         journal.size mustEqual 0
-        journal.archivedSize mustEqual 21
+        journal.archivedSize mustEqual 21 + 9
 
         journal.add(QItem(Time.now, None, "".getBytes, 0))
         journal.size mustEqual 21
-        journal.archivedSize mustEqual 21
+        journal.archivedSize mustEqual 21 + 9
 
         journal.rewrite(0, Nil, Nil)
         journal.size mustEqual 5
