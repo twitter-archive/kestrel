@@ -213,13 +213,6 @@ class QueueCollection(queueFolder: String, timer: Timer,
         fanout_queues.get(key).map { qset => ("children", qset.mkString(",")) }.toList
   }
 
-  def dumpConfig(key: String): Array[String] = {
-    queue(key) match {
-      case None => Array()
-      case Some(q) => q.dumpConfig()
-    }
-  }
-
   /**
    * Shutdown this queue collection. Any future queue requests will fail.
    */

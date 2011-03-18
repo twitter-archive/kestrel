@@ -94,22 +94,6 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
 
   @volatile var expireQueue: Option[PersistentQueue] = config.expireToQueue.flatMap { name => queueLookup.flatMap(_(name)) }
 
-  // FIXME
-  def dumpConfig(): Array[String] = synchronized {
-    Array(
-      "max_items=" + config.maxItems,
-      "max_size=" + config.maxSize,
-      "max_age=" + config.maxAge,
-      "max_journal_size=" + config.maxJournalSize.inBytes,
-      "max_memory_size=" + config.maxMemorySize.inBytes,
-      "max_journal_overflow=" + config.maxJournalOverflow,
-      "discard_old_when_full=" + config.discardOldWhenFull,
-      "journal=" + config.keepJournal,
-      "sync_journal=" + config.syncJournal,
-      "move_expired_to=" + config.expireToQueue.getOrElse("(none)")
-    )
-  }
-
   def dumpStats(): Array[(String, String)] = synchronized {
     Array(
       ("items", length.toString),
@@ -148,11 +132,16 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
 
   // you are holding the lock, and config.keepJournal is true.
   private def checkRotateJournal() {
-    if ((journal.size >= config.maxJournalSize.inBytes && queueLength == 0) ||
-        (journal.size > config.maxJournalSize.inBytes * config.maxJournalOverflow &&
-         queueSize < config.maxJournalSize.inBytes)) {
-      // rewrite
-      log.info("Rolling journal file for '%s' (qsize=%d)", name, queueSize)
+    /*
+     * if the queue is empty, and the journal is larger than defaultJournalSize, rebuild it.
+     * if the queue is smaller than maxMemorySize, and the combined journals are larger than
+     *   maxJournalSize, rebuild them. (we are not in read-behind.)
+     * if the current journal is larger than maxMemorySize, rotate to a new file.
+     */
+    if ((journal.size >= config.defaultJournalSize.inBytes && queueLength == 0) ||
+        (journal.size + journal.archivedSize > config.maxJournalSize.inBytes &&
+         queueSize < config.maxMemorySize.inBytes)) {
+      log.info("Rewriting journal file for '%s' (qsize=%d)", name, queueSize)
       journal.rewrite(xidCounter, openTransactionIds.map { openTransactions(_) }, queue)
     } else if (journal.size > config.maxMemorySize.inBytes) {
       log.info("Rotating journal file for '%s'", name)

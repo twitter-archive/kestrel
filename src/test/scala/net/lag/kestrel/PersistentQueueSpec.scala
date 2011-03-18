@@ -122,7 +122,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
     "rotate journals" in {
       withTempFolder {
         val config = new QueueBuilder {
-          maxJournalSize = 64.bytes
+          defaultJournalSize = 64.bytes
         }.apply()
         val q = new PersistentQueue("rolling", folderName, config, timer)
         q.setup()
@@ -152,7 +152,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
     "rotate journals with an open transaction" in {
       withTempFolder {
         val config = new QueueBuilder {
-          maxJournalSize = 64.bytes
+          defaultJournalSize = 64.bytes
         }.apply()
         val q = new PersistentQueue("rolling", folderName, config, timer)
         q.setup()
@@ -378,8 +378,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
     "recreate the journal file when it gets too big" in {
       withTempFolder {
         val config = new QueueBuilder {
-          maxJournalSize = 1.kilobyte
-          maxJournalOverflow = 3
+          maxJournalSize = 3.kilobytes
         }.apply()
         val q = new PersistentQueue("things", folderName, config, timer)
         q.setup
@@ -407,8 +406,8 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
     "don't recreate the journal file if the queue itself is still huge" in {
       withTempFolder {
         val config = new QueueBuilder {
-          maxJournalSize = 1.kilobyte
-          maxJournalOverflow = 3
+          maxMemorySize = 1.kilobyte
+          maxJournalSize = 3.kilobytes
         }.apply()
         val q = new PersistentQueue("things", folderName, config, timer)
         q.setup
@@ -417,8 +416,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
         }
         q.length mustEqual 8
         q.bytes mustEqual 4096
-        dumpJournal("things").contains("xid") mustBe false
-        q.journalSize mustEqual (512 + 21) * 8
+        q.journalSize must be_<(q.journalTotalSize)
       }
     }
 

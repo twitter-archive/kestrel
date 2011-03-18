@@ -31,9 +31,9 @@ case class QueueConfig(
   maxSize: StorageUnit,
   maxItemSize: StorageUnit,
   maxAge: Option[Duration],
-  maxJournalSize: StorageUnit,
+  defaultJournalSize: StorageUnit,
   maxMemorySize: StorageUnit,
-  maxJournalOverflow: Int,
+  maxJournalSize: StorageUnit,
   discardOldWhenFull: Boolean,
   keepJournal: Boolean,
   syncJournal: Duration,
@@ -42,10 +42,10 @@ case class QueueConfig(
   fanoutOnly: Boolean
 ) {
   override def toString() = {
-    ("maxItems=%d maxSize=%s maxItemSize=%s maxAge=%s maxJournalSize=%s maxMemorySize=%s " +
-     "maxJournalOverflow=%d discardOldWhenFull=%s keepJournal=%s syncJournal=%s " +
+    ("maxItems=%d maxSize=%s maxItemSize=%s maxAge=%s defaultJournalSize=%s maxMemorySize=%s " +
+     "maxJournalSize=%s discardOldWhenFull=%s keepJournal=%s syncJournal=%s " +
      "expireToQueue=%s maxExpireSweep=%d fanoutOnly=%s").format(maxItems, maxSize,
-     maxItemSize, maxAge, maxJournalSize, maxMemorySize, maxJournalOverflow, discardOldWhenFull,
+     maxItemSize, maxAge, defaultJournalSize, maxMemorySize, maxJournalSize, discardOldWhenFull,
      keepJournal, syncJournal, expireToQueue, maxExpireSweep, fanoutOnly)
   }
 }
@@ -56,9 +56,24 @@ class QueueBuilder extends Config[QueueConfig] {
   var maxSize: StorageUnit = Long.MaxValue.bytes
   var maxItemSize: StorageUnit = Long.MaxValue.bytes
   var maxAge: Option[Duration] = None
-  var maxJournalSize: StorageUnit = 16.megabytes
+
+  /**
+   * If the queue is empty, truncate the journal when it reaches this size.
+   */
+  var defaultJournalSize: StorageUnit = 16.megabytes
+
+  /**
+   * Keep only this much of the queue in memory. The journal will be used to store backlogged
+   * items.
+   */
   var maxMemorySize: StorageUnit = 128.megabytes
-  var maxJournalOverflow: Int = 10
+
+  /**
+   * If the queue fits entirely in memory (see maxMemorySize) and the journal files get larger than
+   * this, rebuild the journal.
+   */
+  var maxJournalSize: StorageUnit = 1.gigabyte
+
   var discardOldWhenFull: Boolean = false
   var keepJournal: Boolean = true
   var syncJournal: Duration = Duration.MaxValue
@@ -67,8 +82,8 @@ class QueueBuilder extends Config[QueueConfig] {
   var fanoutOnly: Boolean = false
 
   def apply() = {
-    QueueConfig(maxItems, maxSize, maxItemSize, maxAge, maxJournalSize, maxMemorySize,
-                maxJournalOverflow, discardOldWhenFull, keepJournal, syncJournal,
+    QueueConfig(maxItems, maxSize, maxItemSize, maxAge, defaultJournalSize, maxMemorySize,
+                maxJournalSize, discardOldWhenFull, keepJournal, syncJournal,
                 expireToQueue, maxExpireSweep, fanoutOnly)
   }
 }

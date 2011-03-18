@@ -378,13 +378,20 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
     }
   }
 
-  def walk(): Iterator[(JournalItem, Int)] = {
+  def walk(wantStateDump: Boolean = true): Iterator[(JournalItem, Int)] = {
     val in = new FileInputStream(new File(queuePath, queueName)).getChannel
     def next(): Stream[(JournalItem, Int)] = {
       readJournalEntry(in) match {
         case (JournalItem.EndOfFile, _) =>
           in.close()
           Stream.Empty
+        case x @ (JournalItem.StateDump(_, _), _) =>
+          if (wantStateDump) {
+            new Stream.Cons(x, next())
+          } else {
+            in.close()
+            Stream.Empty
+          }
         case x =>
           new Stream.Cons(x, next())
       }
@@ -552,7 +559,7 @@ object Journal {
     while (true) {
       val j = packerQueue.take()
       try {
-        j.pack()
+//        j.pack()
         j.outstandingPackRequests.decrementAndGet()
       } catch {
         case e: Throwable =>
