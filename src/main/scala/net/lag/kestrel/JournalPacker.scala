@@ -69,6 +69,7 @@ class JournalPacker(filenames: Seq[String], newFilename: String) {
   }
 
   def apply(statusCallback: (Long, Long) => Unit) = {
+    var skipCount = 0
     this.statusCallback = statusCallback
     for ((item, itemsize) <- remover) {
       item match {
@@ -76,12 +77,16 @@ class JournalPacker(filenames: Seq[String], newFilename: String) {
         case JournalItem.Remove =>
           advanceAdder().get
         case JournalItem.RemoveTentative =>
-          do {
-            currentXid += 1
-          } while (openTransactions contains currentXid)
-          val qitem = advanceAdder().get
-          qitem.xid = currentXid
-          openTransactions(currentXid) = qitem
+          if (skipCount > 0) {
+            skipCount -= 1
+          } else {
+            do {
+              currentXid += 1
+            } while (openTransactions contains currentXid)
+            val qitem = advanceAdder().get
+            qitem.xid = currentXid
+            openTransactions(currentXid) = qitem
+          }
         case JournalItem.SavedXid(xid) =>
           currentXid = xid
         case JournalItem.Unremove(xid) =>
@@ -89,6 +94,7 @@ class JournalPacker(filenames: Seq[String], newFilename: String) {
         case JournalItem.ConfirmRemove(xid) =>
           openTransactions -= xid
         case JournalItem.StateDump(xid, count) =>
+          skipCount = count
       }
       offset += itemsize
       if (offset - lastUpdate > 1024 * 1024) {
