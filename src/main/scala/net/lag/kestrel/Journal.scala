@@ -20,6 +20,7 @@ package net.lag.kestrel
 import java.io._
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.channels.FileChannel
+import scala.collection.Map
 import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
@@ -236,7 +237,7 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
   }
 
   // not tail recursive, but should only recurse once.
-  def fillReadBehind(f: QItem => Unit): Unit = {
+  def fillReadBehind(gotItem: QItem => Unit)(gotStateDump: (Int, FileChannel) => Unit): Unit = {
     val pos = if (replayer.isDefined) replayer.get.position else writer.position
     val filename = if (replayerFilename.isDefined) replayerFilename.get else queueName
 
@@ -249,17 +250,23 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
       } else {
         readJournalEntry(rj) match {
           case (JournalItem.Add(item), _) =>
-            f(item)
+            gotItem(item)
           case (JournalItem.StateDump(xid, count), _) =>
-            // ... FIXME ...
+            // give the caller a chance to launch a journal rewrite.
+            val oldFilename = readerFilename.get
+            val oldReader = reader.get
+            readerFilename = Journal.journalAfter(new File(queuePath), queueName, readerFilename.get)
+            reader = Some(new FileInputStream(new File(queuePath, readerFilename.get)).getChannel)
+            log.debug("Read-behind on '%s' moving from file %s to %s", queueName, oldFilename, readerFilename.get)
+            gotStateDump(xid, oldReader)
+            fillReadBehind(gotItem)(gotStateDump)
           case (JournalItem.EndOfFile, _) =>
             // move to next file and try again.
             val oldFilename = readerFilename.get
             readerFilename = Journal.journalAfter(new File(queuePath), queueName, readerFilename.get)
             reader = Some(new FileInputStream(new File(queuePath, readerFilename.get)).getChannel)
             log.debug("Read-behind on '%s' moving from file %s to %s", queueName, oldFilename, readerFilename.get)
-            fillReadBehind(f)
-            requestPack()
+            fillReadBehind(gotItem)(gotStateDump)
           case (_, _) =>
         }
       }
@@ -397,6 +404,21 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
       }
     }
     next().iterator
+  }
+
+  /*
+journal as:
+
+    * current xid (from state dump)
+    * list of open transactions (from state dump) + reserve
+    * list of open transactions we have NOW that are NOT in the state dump, as item + xid
+    * bogus "neg" items for each remove that happened after the read-behind pointer
+    * list of items currently on the queue
+
+   */
+  def pack(xid: Int, reader: FileChannel, openTransactions: Map[Int, QItem],
+           queueState: Seq[QItem]) {
+    // FIXME
   }
 
   private def readBlock(in: FileChannel): Array[Byte] = {

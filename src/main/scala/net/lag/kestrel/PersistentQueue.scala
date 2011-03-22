@@ -319,6 +319,11 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       journal.fillReadBehind { item =>
         queue += item
         _memoryBytes += item.data.length
+      } { (xid, reader) =>
+        if (journal.size + journal.archivedSize > config.maxJournalSize.inBytes) {
+          log.info("Rewriting journal file from state dump for '%s' (qsize=%d)", name, queueSize)
+          journal.pack(xid, reader, openTransactions.clone(), queue.toList)
+        }
       }
       if (!journal.inReadBehind) {
         log.info("Coming out of read-behind for queue '%s'", name)
