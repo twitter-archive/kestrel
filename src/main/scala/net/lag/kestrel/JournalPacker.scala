@@ -31,7 +31,7 @@ class JournalPacker(filenames: Seq[String], newFilename: String) {
   private val log = Logger.get
 
   val journals = filenames.map { filename => new Journal(filename, Duration.MaxValue) }
-  val remover = journals.map { _.walk(wantStateDump=false) }.iterator.flatten
+  val remover = journals.map { _.walk() }.iterator.flatten
   val adder = journals.map { _.walk() }.iterator.flatten
   val writer = new FileOutputStream(newFilename, false).getChannel
 

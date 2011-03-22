@@ -41,7 +41,6 @@ object JournalItem {
   case class SavedXid(xid: Int) extends JournalItem
   case class Unremove(xid: Int) extends JournalItem
   case class ConfirmRemove(xid: Int) extends JournalItem
-  case class StateDump(xid: Int, count: Int) extends JournalItem
   case object EndOfFile extends JournalItem
 }
 
@@ -69,6 +68,9 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
 
   @volatile var closed: Boolean = false
 
+  case class Checkpoint(filename: String, xid: Int, openItems: Seq[QItem])
+  var checkpoint: Option[Checkpoint] = None
+
   // small temporary buffer for formatting operations into the journal:
   private val buffer = new Array[Byte](16)
   private val byteBuffer = ByteBuffer.wrap(buffer)
@@ -82,7 +84,6 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
   private val CMD_UNREMOVE = 5
   private val CMD_CONFIRM_REMOVE = 6
   private val CMD_ADD_XID = 7
-  private val CMD_STATE_DUMP = 8
 
 
   def this(fullPath: String, syncJournal: Duration) =
@@ -106,9 +107,7 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
     }
   }
 
-  def rotate(xid: Int, openItems: Seq[QItem]) {
-    writeState(xid, openItems)
-
+  def rotate(xid: Int, openItems: Seq[QItem], setCheckpoint: Boolean) {
     writer.close()
     var rotatedFile = queueName + "." + Time.now.inMilliseconds
     while (new File(queuePath, rotatedFile).exists) {
@@ -122,6 +121,10 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
 
     if (readerFilename == Some(queueName)) {
       readerFilename = Some(rotatedFile)
+    }
+
+    if (setCheckpoint && !checkpoint.isDefined) {
+      checkpoint = Some(Checkpoint(rotatedFile, xid, openItems))
     }
     requestPack()
   }
@@ -154,14 +157,6 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
     saveXid(xid)
     for (item <- queue) {
       add(false, item)
-    }
-  }
-
-  def writeState(xid: Int, openItems: Seq[QItem]) {
-    size += write(true, CMD_STATE_DUMP.toByte, xid, openItems.size)
-    for (item <- openItems) {
-      addWithXid(item)
-      removeTentative(false)
     }
   }
 
@@ -237,7 +232,7 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
   }
 
   // not tail recursive, but should only recurse once.
-  def fillReadBehind(gotItem: QItem => Unit)(gotStateDump: (Int, FileChannel) => Unit): Unit = {
+  def fillReadBehind(gotItem: QItem => Unit)(gotCheckpoint: (Int, Seq[QItem]) => Unit): Unit = {
     val pos = if (replayer.isDefined) replayer.get.position else writer.position
     val filename = if (replayerFilename.isDefined) replayerFilename.get else queueName
 
@@ -251,22 +246,16 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
         readJournalEntry(rj) match {
           case (JournalItem.Add(item), _) =>
             gotItem(item)
-          case (JournalItem.StateDump(xid, count), _) =>
-            // give the caller a chance to launch a journal rewrite.
-            val oldFilename = readerFilename.get
-            val oldReader = reader.get
-            readerFilename = Journal.journalAfter(new File(queuePath), queueName, readerFilename.get)
-            reader = Some(new FileInputStream(new File(queuePath, readerFilename.get)).getChannel)
-            log.debug("Read-behind on '%s' moving from file %s to %s", queueName, oldFilename, readerFilename.get)
-            gotStateDump(xid, oldReader)
-            fillReadBehind(gotItem)(gotStateDump)
           case (JournalItem.EndOfFile, _) =>
             // move to next file and try again.
             val oldFilename = readerFilename.get
             readerFilename = Journal.journalAfter(new File(queuePath), queueName, readerFilename.get)
             reader = Some(new FileInputStream(new File(queuePath, readerFilename.get)).getChannel)
             log.debug("Read-behind on '%s' moving from file %s to %s", queueName, oldFilename, readerFilename.get)
-            fillReadBehind(gotItem)(gotStateDump)
+            if (checkpoint.isDefined && checkpoint.get.filename == oldFilename) {
+              gotCheckpoint(checkpoint.get.xid, checkpoint.get.openItems)
+            }
+            fillReadBehind(gotItem)(gotCheckpoint)
           case (_, _) =>
         }
       }
@@ -292,8 +281,6 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
         do {
           readJournalEntry(in) match {
             case (JournalItem.EndOfFile, _) =>
-              done = true
-            case (JournalItem.StateDump(xid, count), _) =>
               done = true
             case (x, itemsize) =>
               size += itemsize
@@ -371,10 +358,6 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
             val item = QItem.unpack(data)
             item.xid = xid
             (JournalItem.Add(item), 9 + data.length)
-          case CMD_STATE_DUMP =>
-            val xid = readInt(in)
-            val count = readInt(in)
-            (JournalItem.StateDump(xid, count), 9)
           case n =>
             throw new BrokenItemException(lastPosition, new IOException("invalid opcode in journal: " + n.toInt + " at position " + (in.position - 1)))
         }
@@ -385,20 +368,13 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
     }
   }
 
-  def walk(wantStateDump: Boolean = true): Iterator[(JournalItem, Int)] = {
+  def walk(): Iterator[(JournalItem, Int)] = {
     val in = new FileInputStream(new File(queuePath, queueName)).getChannel
     def next(): Stream[(JournalItem, Int)] = {
       readJournalEntry(in) match {
         case (JournalItem.EndOfFile, _) =>
           in.close()
           Stream.Empty
-        case x @ (JournalItem.StateDump(_, _), _) =>
-          if (wantStateDump) {
-            new Stream.Cons(x, next())
-          } else {
-            in.close()
-            Stream.Empty
-          }
         case x =>
           new Stream.Cons(x, next())
       }
@@ -416,7 +392,7 @@ journal as:
     * list of items currently on the queue
 
    */
-  def pack(xid: Int, reader: FileChannel, openTransactions: Map[Int, QItem],
+  def pack(xid: Int, openItems: Seq[QItem], openTransactions: Map[Int, QItem],
            queueState: Seq[QItem]) {
     // FIXME
   }

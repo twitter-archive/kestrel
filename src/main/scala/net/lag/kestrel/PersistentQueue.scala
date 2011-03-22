@@ -136,7 +136,9 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
      * if the queue is empty, and the journal is larger than defaultJournalSize, rebuild it.
      * if the queue is smaller than maxMemorySize, and the combined journals are larger than
      *   maxJournalSize, rebuild them. (we are not in read-behind.)
-     * if the current journal is larger than maxMemorySize, rotate to a new file.
+     * if the current journal is larger than maxMemorySize, rotate to a new file. if the combined
+     *   journals are larger than maxJournalSize, checkpoint in preparation for rebuilding the
+     *   older files in the background.
      */
     if ((journal.size >= config.defaultJournalSize.inBytes && queueLength == 0) ||
         (journal.size + journal.archivedSize > config.maxJournalSize.inBytes &&
@@ -145,7 +147,8 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       journal.rewrite(xidCounter, openTransactionIds.map { openTransactions(_) }, queue)
     } else if (journal.size > config.maxMemorySize.inBytes) {
       log.info("Rotating journal file for '%s'", name)
-      journal.rotate(xidCounter, openTransactionIds.map { openTransactions(_) })
+      val setCheckpoint = (journal.size + journal.archivedSize > config.maxJournalSize.inBytes)
+      journal.rotate(xidCounter, openTransactionIds.map { openTransactions(_) }, setCheckpoint)
     }
   }
 
@@ -319,11 +322,9 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       journal.fillReadBehind { item =>
         queue += item
         _memoryBytes += item.data.length
-      } { (xid, reader) =>
-        if (journal.size + journal.archivedSize > config.maxJournalSize.inBytes) {
-          log.info("Rewriting journal file from state dump for '%s' (qsize=%d)", name, queueSize)
-          journal.pack(xid, reader, openTransactions.clone(), queue.toList)
-        }
+      } { (xid, openItems) =>
+        log.info("Rewriting journal file from checkpoint for '%s' (qsize=%d)", name, queueSize)
+        journal.pack(xid, openItems, openTransactions.clone(), queue.toList)
       }
       if (!journal.inReadBehind) {
         log.info("Coming out of read-behind for queue '%s'", name)
