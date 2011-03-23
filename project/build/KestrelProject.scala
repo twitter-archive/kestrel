@@ -6,6 +6,7 @@ class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) wit
   with DefaultRepos
   with gh.Issues
   with IdeaProject
+  with PublishSourcesAndJavadocs
 {
   val util = "com.twitter" % "util" % "1.8.1"
 
