@@ -192,6 +192,33 @@ class PersistentQueueSpec extends Specification
       }
     }
 
+    "recover a journal with a rewritten transaction" in {
+      withTempFolder {
+        val q = new PersistentQueue("rolling", folderName, new QueueBuilder().apply(), timer)
+        q.setup()
+        q.add("zero".getBytes)
+        q.add("first".getBytes)
+        q.add("second".getBytes)
+
+        // force-bump xid
+        val zero = q.remove(true).get
+        new String(zero.data) mustEqual "zero"
+        q.confirmRemove(zero.xid)
+
+        val item = q.remove(true).get
+        new String(item.data) mustEqual "first"
+        q.forceRewrite()
+        q.confirmRemove(item.xid)
+        q.close()
+
+        val q2 = new PersistentQueue("rolling", folderName, new QueueBuilder().apply(), timer)
+        q2.setup()
+        new String(q2.remove().get.data) mustEqual "second"
+        q2.close()
+        dumpJournal("rolling") mustEqual "add(5:2:first), remove-tentative, xid(2), add(6:0:second), confirm-remove(2), remove"
+      }
+    }
+
     "honor max_age" in {
       withTempFolder {
         Time.withCurrentTimeFrozen { time =>

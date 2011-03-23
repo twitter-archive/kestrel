@@ -152,6 +152,16 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     }
   }
 
+  def forceRewrite() {
+    // for tests.
+    synchronized {
+      if (config.keepJournal) {
+        log.info("Rewriting journal file for '%s' (qsize=%d)", name, queueSize)
+        journal.rewrite(xidCounter, openTransactionIds.map { openTransactions(_) }, queue)
+      }
+    }
+  }
+
   /**
    * Add a value to the end of the queue, transactionally.
    */
@@ -394,13 +404,13 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     queueSize -= len
     _memoryBytes -= len
     queueLength -= 1
-    val xid = if (transaction) nextXid else 0
-
     fillReadBehind
     _currentAge = now - item.addTime
     if (transaction) {
-      item.xid = xid
-      openTransactions(xid) = item
+      if (item.xid == 0) {
+        item.xid = nextXid
+      }
+      openTransactions(item.xid) = item
     }
     Some(item)
   }
