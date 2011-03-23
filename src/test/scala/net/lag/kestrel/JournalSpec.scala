@@ -21,7 +21,7 @@ import java.io._
 import org.specs.Specification
 import com.twitter.util.{Duration, TempFolder, Time}
 
-class JournalSpec extends Specification with TempFolder with TestLogging {
+class JournalSpec extends Specification with TempFolder with TestLogging with DumpJournal {
   "Journal" should {
     "walk" in {
       withTempFolder {
@@ -129,9 +129,16 @@ class JournalSpec extends Specification with TempFolder with TestLogging {
         journal.add(QItem(Time.now, None, "".getBytes, 0))
         journal.rotate(0, Nil, false)
         journal.add(QItem(Time.now, None, "".getBytes, 0))
-        journal.rotate(0, Nil, false)
-        // now wait for the packer to combine the 2 files.
-        Journal.journalsForQueue(new File(folderName), "test").size must eventually(be_==(2))
+        val checkpoint = journal.rotate(0, Nil, true)
+        val oldFiles = Journal.journalsForQueue(new File(folderName), "test")
+        oldFiles.map { f => new File(folderName, f).length }.toList mustEqual List(21, 21, 0)
+
+        journal.pack(checkpoint.get, Nil, Nil)
+        val files = Journal.journalsForQueue(new File(folderName), "test")
+        files.size mustEqual 2
+        files mustEqual oldFiles.slice(1, 3)
+        dumpJournal("test") mustEqual "xid(0)"
+        files.map { f => new File(folderName, f).length }.toList mustEqual List(5, 0)
       }
     }
 
@@ -145,11 +152,11 @@ class JournalSpec extends Specification with TempFolder with TestLogging {
 
         journal.rotate(0, Nil, false)
         journal.size mustEqual 0
-        journal.archivedSize mustEqual 21 + 9
+        journal.archivedSize mustEqual 21
 
         journal.add(QItem(Time.now, None, "".getBytes, 0))
         journal.size mustEqual 21
-        journal.archivedSize mustEqual 21 + 9
+        journal.archivedSize mustEqual 21
 
         journal.rewrite(0, Nil, Nil)
         journal.size mustEqual 5

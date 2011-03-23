@@ -32,6 +32,8 @@ import annotation.tailrec
 
 case class BrokenItemException(lastValidPosition: Long, cause: Throwable) extends IOException(cause)
 
+case class Checkpoint(filename: String, xid: Int, reservedItems: Seq[QItem])
+
 // returned from journal replay
 abstract class JournalItem()
 object JournalItem {
@@ -68,7 +70,6 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
 
   @volatile var closed: Boolean = false
 
-  case class Checkpoint(filename: String, xid: Int, openItems: Seq[QItem])
   var checkpoint: Option[Checkpoint] = None
 
   // small temporary buffer for formatting operations into the journal:
@@ -107,7 +108,7 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
     }
   }
 
-  def rotate(xid: Int, openItems: Seq[QItem], setCheckpoint: Boolean) {
+  def rotate(xid: Int, reservedItems: Seq[QItem], setCheckpoint: Boolean): Option[Checkpoint] = {
     writer.close()
     var rotatedFile = queueName + "." + Time.now.inMilliseconds
     while (new File(queuePath, rotatedFile).exists) {
@@ -124,17 +125,17 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
     }
 
     if (setCheckpoint && !checkpoint.isDefined) {
-      checkpoint = Some(Checkpoint(rotatedFile, xid, openItems))
+      checkpoint = Some(Checkpoint(rotatedFile, xid, reservedItems))
     }
-    requestPack()
+    checkpoint
   }
 
-  def rewrite(xid: Int, openItems: Seq[QItem], queue: Iterable[QItem]) {
+  def rewrite(xid: Int, reservedItems: Seq[QItem], queue: Iterable[QItem]) {
     writer.close()
     val now = Time.now.inMilliseconds
     val tmpFile = new File(queuePath, queueName + "~~" + now)
     open(tmpFile)
-    dump(xid, openItems, queue)
+    dump(xid, reservedItems, queue)
     writer.close()
 
     val packFile = new File(queuePath, queueName + "." + now + ".pack")
@@ -148,16 +149,48 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
     open
   }
 
-  def dump(xid: Int, openItems: Seq[QItem], queue: Iterable[QItem]) {
+  def dump(xid: Int, reservedItems: Iterable[QItem], openItems: Iterable[QItem], negs: Int, queue: Iterable[QItem]) {
     size = 0
-    for (item <- openItems) {
+    for (item <- reservedItems) {
       addWithXid(item)
       removeTentative(false)
     }
+    val knownXids = reservedItems.map { _.xid }.toSet
+    for (item <- openItems if !(knownXids contains item.xid)) {
+      addWithXid(item)
+    }
     saveXid(xid)
+    val empty = Array[Byte]()
+    for (i <- 0 until negs) {
+      add(false, QItem(Time.now, None, empty, 0))
+    }
     for (item <- queue) {
       add(false, item)
     }
+  }
+
+  def dump(xid: Int, reservedItems: Iterable[QItem], queue: Iterable[QItem]): Unit =
+    dump(xid, reservedItems, Nil, 0, queue)
+
+  def pack(checkpoint: Checkpoint, openItems: Iterable[QItem], queueState: Seq[QItem]) {
+    // FIXME
+    val negs = 0
+
+    val oldFilenames = Journal.journalsBefore(new File(queuePath), queueName, checkpoint.filename) ++
+      List(checkpoint.filename)
+    log.info("Packing journals for '%s': %s", queueName, oldFilenames.mkString(", "))
+
+    val tmpFile = new File(queuePath, queueName + "~~" + Time.now.inMilliseconds)
+    val newJournal = new Journal(tmpFile.getAbsolutePath)
+    newJournal.open()
+    newJournal.dump(checkpoint.xid, checkpoint.reservedItems, openItems, negs, queueState)
+    newJournal.close()
+
+    log.info("Packing '%s' -- erasing old files.", queueName)
+    val packFile = new File(queuePath, checkpoint.filename + ".pack")
+    tmpFile.renameTo(packFile)
+    cleanup()
+    log.info("Packing '%s' done: %s", queueName, Journal.journalsForQueue(new File(queuePath), queueName).mkString(", "))
   }
 
   def close(): Unit = {
@@ -232,7 +265,7 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
   }
 
   // not tail recursive, but should only recurse once.
-  def fillReadBehind(gotItem: QItem => Unit)(gotCheckpoint: (Int, Seq[QItem]) => Unit): Unit = {
+  def fillReadBehind(gotItem: QItem => Unit)(gotCheckpoint: Checkpoint => Unit): Unit = {
     val pos = if (replayer.isDefined) replayer.get.position else writer.position
     val filename = if (replayerFilename.isDefined) replayerFilename.get else queueName
 
@@ -253,7 +286,7 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
             reader = Some(new FileInputStream(new File(queuePath, readerFilename.get)).getChannel)
             log.debug("Read-behind on '%s' moving from file %s to %s", queueName, oldFilename, readerFilename.get)
             if (checkpoint.isDefined && checkpoint.get.filename == oldFilename) {
-              gotCheckpoint(checkpoint.get.xid, checkpoint.get.openItems)
+              gotCheckpoint(checkpoint.get)
             }
             fillReadBehind(gotItem)(gotCheckpoint)
           case (_, _) =>
@@ -380,21 +413,6 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
       }
     }
     next().iterator
-  }
-
-  /*
-journal as:
-
-    * current xid (from state dump)
-    * list of open transactions (from state dump) + reserve
-    * list of open transactions we have NOW that are NOT in the state dump, as item + xid
-    * bogus "neg" items for each remove that happened after the read-behind pointer
-    * list of items currently on the queue
-
-   */
-  def pack(xid: Int, openItems: Seq[QItem], openTransactions: Map[Int, QItem],
-           queueState: Seq[QItem]) {
-    // FIXME
   }
 
   private def readBlock(in: FileChannel): Array[Byte] = {

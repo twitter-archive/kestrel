@@ -322,9 +322,9 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       journal.fillReadBehind { item =>
         queue += item
         _memoryBytes += item.data.length
-      } { (xid, openItems) =>
+      } { checkpoint =>
         log.info("Rewriting journal file from checkpoint for '%s' (qsize=%d)", name, queueSize)
-        journal.pack(xid, openItems, openTransactions.clone(), queue.toList)
+        journal.pack(checkpoint, openTransactions.values, queue.toList)
       }
       if (!journal.inReadBehind) {
         log.info("Coming out of read-behind for queue '%s'", name)
