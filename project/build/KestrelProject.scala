@@ -8,7 +8,7 @@ class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) wit
   with IdeaProject
   with PublishSourcesAndJavadocs
 {
-  val util = "com.twitter" % "util" % "1.8.1"
+  val util = "com.twitter" % "util-core" % "1.8.1"
 
   val ostrich = "com.twitter" % "ostrich" % "4.0.0"
   val naggati = "com.twitter" % "naggati" % "2.1.1"

@@ -43,6 +43,7 @@ object JournalItem {
   case class SavedXid(xid: Int) extends JournalItem
   case class Unremove(xid: Int) extends JournalItem
   case class ConfirmRemove(xid: Int) extends JournalItem
+  case class Continue(item: QItem, xid: Int) extends JournalItem
   case object EndOfFile extends JournalItem
 }
 
@@ -86,7 +87,8 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
   private val CMD_UNREMOVE = 5
   private val CMD_CONFIRM_REMOVE = 6
   private val CMD_ADD_XID = 7
-  private val CMD_REMOVE_TENTATIVE_XID = 8
+  private val CMD_CONTINUE = 8
+  private val CMD_REMOVE_TENTATIVE_XID = 9
 
   def this(fullPath: String, syncJournal: Duration) =
     this(new File(fullPath).getParent(), new File(fullPath).getName(), null, syncJournal)
@@ -225,6 +227,20 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
 
   def add(item: QItem): Future[Unit] = add(true, item)
 
+  def continue(xid: Int, item: QItem): Unit = {
+    item.xid = xid
+    addWithXidAndCommand(CMD_CONTINUE, item)
+  }
+
+  private def addWithXidAndCommand(command: Int, item: QItem) = {
+    val blob = item.pack(command.toByte, true)
+    do {
+      writer.write(blob)
+    } while (blob.position < blob.limit)
+    // only called from roll(), so the journal does not need to be synced after a write.
+    size += blob.limit
+  }
+
   def remove() = {
     size += write(true, CMD_REMOVE.toByte)
     if (inReadBehind) removesSinceReadBehind += 1
@@ -275,6 +291,8 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
             removesSinceReadBehind -= 1
           case (JournalItem.ConfirmRemove(_), _) =>
             removesSinceReadBehind -= 1
+          case (JournalItem.Continue(item, xid), _) =>
+            f(item)
           case (JournalItem.EndOfFile, _) =>
             // move to next file and try again.
             val oldFilename = readerFilename.get
@@ -387,6 +405,11 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
             val item = QItem.unpack(data)
             item.xid = xid
             (JournalItem.Add(item), 9 + data.length)
+          case CMD_CONTINUE =>
+            val xid = readInt(in)
+            val data = readBlock(in)
+            val item = QItem.unpack(data)
+            (JournalItem.Continue(item, xid), 9 + data.length)
           case CMD_REMOVE_TENTATIVE_XID =>
             val xid = readInt(in)
             (JournalItem.RemoveTentative(xid), 5)
