@@ -215,7 +215,7 @@ class PersistentQueueSpec extends Specification
         q2.setup()
         new String(q2.remove().get.data) mustEqual "second"
         q2.close()
-        dumpJournal("rolling") mustEqual "add(5:2:first), remove-tentative, xid(2), add(6:0:second), confirm-remove(2), remove"
+        dumpJournal("rolling") mustEqual "add(5:0:first), remove-tentative(2), add(6:0:second), confirm-remove(2), remove"
       }
     }
 
@@ -318,23 +318,26 @@ class PersistentQueueSpec extends Specification
         q.setup
         q.add("house".getBytes)
         q.add("cat".getBytes)
-        q.journalSize mustEqual 2 * 21 + 8
+        dumpJournal("things") mustEqual "add(5:0:house), add(3:0:cat)"
 
         val house = q.remove(true).get
         new String(house.data) mustEqual "house"
         house.xid mustEqual 1
-        q.journalSize mustEqual 2 * 21 + 8 + 1
+        dumpJournal("things") mustEqual "add(5:0:house), add(3:0:cat), remove-tentative(1)"
 
         val cat = q.remove(true).get
         new String(cat.data) mustEqual "cat"
         cat.xid mustEqual 2
-        q.journalSize mustEqual 2 * 21 + 8 + 1 + 1
+        dumpJournal("things") mustEqual
+          "add(5:0:house), add(3:0:cat), remove-tentative(1), remove-tentative(2)"
 
         q.unremove(house.xid)
-        q.journalSize mustEqual 2 * 21 + 8 + 1 + 1 + 5
+        dumpJournal("things") mustEqual
+          "add(5:0:house), add(3:0:cat), remove-tentative(1), remove-tentative(2), unremove(1)"
 
         q.confirmRemove(cat.xid)
-        q.journalSize mustEqual 2 * 21 + 8 + 1 + 1 + 5 + 5
+        dumpJournal("things") mustEqual
+          "add(5:0:house), add(3:0:cat), remove-tentative(1), remove-tentative(2), unremove(1), confirm-remove(2)"
         q.length mustEqual 1
         q.bytes mustEqual 5
 
@@ -344,7 +347,7 @@ class PersistentQueueSpec extends Specification
 
         q.close
         dumpJournal("things") mustEqual
-          "add(5:0:house), add(3:0:cat), remove-tentative, remove-tentative, unremove(1), confirm-remove(2), remove"
+          "add(5:0:house), add(3:0:cat), remove-tentative(1), remove-tentative(2), unremove(1), confirm-remove(2), remove"
 
         // and journal is replayed correctly.
         val q2 = new PersistentQueue("things", folderName, config, timer)
@@ -409,11 +412,11 @@ class PersistentQueueSpec extends Specification
         // next remove should force a recreate, because the queue size will be 512.
         q.remove(false) must beSomeQItem(512)
         q.length mustEqual 1
-        q.journalSize mustEqual (512 + 21) + 5
+        q.journalSize mustEqual (512 + 21)
 
         // journal should contain exactly 1 item.
         q.close
-        dumpJournal("things") mustEqual "xid(0), add(512:0)"
+        dumpJournal("things") mustEqual "add(512:0)"
       }
     }
 

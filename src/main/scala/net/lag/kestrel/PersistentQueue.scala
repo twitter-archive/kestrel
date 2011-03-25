@@ -144,11 +144,11 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
         (journal.size + journal.archivedSize > config.maxJournalSize.inBytes &&
          queueSize < config.maxMemorySize.inBytes)) {
       log.info("Rewriting journal file for '%s' (qsize=%d)", name, queueSize)
-      journal.rewrite(xidCounter, openTransactionIds.map { openTransactions(_) }, queue)
+      journal.rewrite(openTransactionIds.map { openTransactions(_) }, queue)
     } else if (journal.size > config.maxMemorySize.inBytes) {
       log.info("Rotating journal file for '%s'", name)
       val setCheckpoint = (journal.size + journal.archivedSize > config.maxJournalSize.inBytes)
-      journal.rotate(xidCounter, openTransactionIds.map { openTransactions(_) }, setCheckpoint)
+      journal.rotate(openTransactionIds.map { openTransactions(_) }, setCheckpoint)
     }
   }
 
@@ -157,7 +157,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     synchronized {
       if (config.keepJournal) {
         log.info("Rewriting journal file for '%s' (qsize=%d)", name, queueSize)
-        journal.rewrite(xidCounter, openTransactionIds.map { openTransactions(_) }, queue)
+        journal.rewrite(openTransactionIds.map { openTransactions(_) }, queue)
       }
     }
   }
@@ -171,7 +171,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       if (config.fanoutOnly && !isFanout) return true
       while (queueLength >= config.maxItems || queueSize >= config.maxSize.inBytes) {
         if (!config.discardOldWhenFull) return false
-        _remove(false)
+        _remove(false, None)
         totalDiscarded.incr()
         if (config.keepJournal) journal.remove()
       }
@@ -224,9 +224,9 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       if (closed || paused || queueLength == 0) {
         None
       } else {
-        val item = _remove(transaction)
-        if (config.keepJournal) {
-          if (transaction) journal.removeTentative() else journal.remove()
+        val item = _remove(transaction, None)
+        if (config.keepJournal && item.isDefined) {
+          if (transaction) journal.removeTentative(item.get.xid) else journal.remove()
           checkRotateJournal()
         }
         item
@@ -321,7 +321,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   private final def nextXid(): Int = {
     do {
       xidCounter += 1
-    } while (openTransactions contains xidCounter)
+    } while ((openTransactions contains xidCounter) || (xidCounter == 0))
     xidCounter
   }
 
@@ -356,16 +356,18 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
           log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
           journal.startReadBehind()
         }
-      case JournalItem.Remove => _remove(false)
-      case JournalItem.RemoveTentative => _remove(true)
+      case JournalItem.Remove => _remove(false, None)
+      case JournalItem.RemoveTentative(xid) =>
+        _remove(true, Some(xid))
+        xidCounter = xid
       case JournalItem.SavedXid(xid) => xidCounter = xid
       case JournalItem.Unremove(xid) => _unremove(xid)
       case JournalItem.ConfirmRemove(xid) => openTransactions.remove(xid)
       case x => log.error("Unexpected item in journal: %s", x)
     }
 
-    log.info("Finished transaction journal for '%s' (%d items, %d bytes)", name, queueLength,
-             journal.size)
+    log.info("Finished transaction journal for '%s' (%d items, %d bytes) xid=%d", name, queueLength,
+             journal.size, xidCounter)
     journal.open
 
     // now, any unfinished transactions must be backed out.
@@ -394,7 +396,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     if (queue.isEmpty) None else Some(queue.front)
   }
 
-  private def _remove(transaction: Boolean): Option[QItem] = {
+  private def _remove(transaction: Boolean, xid: Option[Int]): Option[QItem] = {
     discardExpired(config.maxExpireSweep)
     if (queue.isEmpty) return None
 
@@ -407,9 +409,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     fillReadBehind
     _currentAge = now - item.addTime
     if (transaction) {
-      if (item.xid == 0) {
-        item.xid = nextXid
-      }
+      item.xid = xid.getOrElse { nextXid }
       openTransactions(item.xid) = item
     }
     Some(item)

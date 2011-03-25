@@ -32,14 +32,14 @@ import annotation.tailrec
 
 case class BrokenItemException(lastValidPosition: Long, cause: Throwable) extends IOException(cause)
 
-case class Checkpoint(filename: String, xid: Int, reservedItems: Seq[QItem])
+case class Checkpoint(filename: String, reservedItems: Seq[QItem])
 
 // returned from journal replay
 abstract class JournalItem()
 object JournalItem {
   case class Add(item: QItem) extends JournalItem
   case object Remove extends JournalItem
-  case object RemoveTentative extends JournalItem
+  case class RemoveTentative(xid: Int) extends JournalItem
   case class SavedXid(xid: Int) extends JournalItem
   case class Unremove(xid: Int) extends JournalItem
   case class ConfirmRemove(xid: Int) extends JournalItem
@@ -71,6 +71,7 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
   @volatile var closed: Boolean = false
 
   var checkpoint: Option[Checkpoint] = None
+  var removesSinceReadBehind = 0
 
   // small temporary buffer for formatting operations into the journal:
   private val buffer = new Array[Byte](16)
@@ -85,7 +86,7 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
   private val CMD_UNREMOVE = 5
   private val CMD_CONFIRM_REMOVE = 6
   private val CMD_ADD_XID = 7
-
+  private val CMD_REMOVE_TENTATIVE_XID = 8
 
   def this(fullPath: String, syncJournal: Duration) =
     this(new File(fullPath).getParent(), new File(fullPath).getName(), null, syncJournal)
@@ -108,7 +109,7 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
     }
   }
 
-  def rotate(xid: Int, reservedItems: Seq[QItem], setCheckpoint: Boolean): Option[Checkpoint] = {
+  def rotate(reservedItems: Seq[QItem], setCheckpoint: Boolean): Option[Checkpoint] = {
     writer.close()
     var rotatedFile = queueName + "." + Time.now.inMilliseconds
     while (new File(queuePath, rotatedFile).exists) {
@@ -118,24 +119,24 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
     new File(queuePath, queueName).renameTo(new File(queuePath, rotatedFile))
     size = 0
     cleanup()
-    open
+    open()
 
     if (readerFilename == Some(queueName)) {
       readerFilename = Some(rotatedFile)
     }
 
     if (setCheckpoint && !checkpoint.isDefined) {
-      checkpoint = Some(Checkpoint(rotatedFile, xid, reservedItems))
+      checkpoint = Some(Checkpoint(rotatedFile, reservedItems))
     }
     checkpoint
   }
 
-  def rewrite(xid: Int, reservedItems: Seq[QItem], queue: Iterable[QItem]) {
+  def rewrite(reservedItems: Seq[QItem], queue: Iterable[QItem]) {
     writer.close()
     val now = Time.now.inMilliseconds
     val tmpFile = new File(queuePath, queueName + "~~" + now)
     open(tmpFile)
-    dump(xid, reservedItems, queue)
+    dump(reservedItems, queue)
     writer.close()
 
     val packFile = new File(queuePath, queueName + "." + now + ".pack")
@@ -149,19 +150,17 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
     open
   }
 
-  def dump(xid: Int, reservedItems: Iterable[QItem], openItems: Iterable[QItem], negs: Int, queue: Iterable[QItem]) {
+  def dump(reservedItems: Iterable[QItem], openItems: Iterable[QItem], pentUpDeletes: Int, queue: Iterable[QItem]) {
     size = 0
     for (item <- reservedItems) {
-      addWithXid(item)
-      removeTentative(false)
+      add(item)
+      removeTentative(item.xid, false)
     }
-    val knownXids = reservedItems.map { _.xid }.toSet
-    for (item <- openItems if !(knownXids contains item.xid)) {
-      addWithXid(item)
+    for (item <- openItems) {
+      add(item)
     }
-    saveXid(xid)
     val empty = Array[Byte]()
-    for (i <- 0 until negs) {
+    for (i <- 0 until pentUpDeletes) {
       add(false, QItem(Time.now, None, empty, 0))
     }
     for (item <- queue) {
@@ -169,12 +168,15 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
     }
   }
 
-  def dump(xid: Int, reservedItems: Iterable[QItem], queue: Iterable[QItem]): Unit =
-    dump(xid, reservedItems, Nil, 0, queue)
+  def dump(reservedItems: Iterable[QItem], queue: Iterable[QItem]): Unit =
+    dump(reservedItems, Nil, 0, queue)
 
   def pack(checkpoint: Checkpoint, openItems: Iterable[QItem], queueState: Seq[QItem]) {
-    // FIXME
-    val negs = 0
+    val knownXids = checkpoint.reservedItems.map { _.xid }.toSet
+    val currentXids = openItems.map { _.xid }.toSet
+    val newlyOpenItems = openItems.filter { x => !(knownXids contains x.xid) }
+    val newlyClosedItems = checkpoint.reservedItems.filter { x => !(currentXids contains x.xid) }
+    val negs = removesSinceReadBehind - newlyClosedItems.size // newly closed are already accounted for.
 
     val oldFilenames = Journal.journalsBefore(new File(queuePath), queueName, checkpoint.filename) ++
       List(checkpoint.filename)
@@ -183,7 +185,7 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
     val tmpFile = new File(queuePath, queueName + "~~" + Time.now.inMilliseconds)
     val newJournal = new Journal(tmpFile.getAbsolutePath)
     newJournal.open()
-    newJournal.dump(checkpoint.xid, checkpoint.reservedItems, openItems, negs, queueState)
+    newJournal.dump(checkpoint.reservedItems, newlyOpenItems, negs, queueState)
     newJournal.close()
 
     log.info("Packing '%s' -- erasing old files.", queueName)
@@ -223,28 +225,16 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
 
   def add(item: QItem): Future[Unit] = add(true, item)
 
-  // used only to list pending transactions when recreating the journal.
-  private def addWithXid(item: QItem) = {
-    val blob = item.pack(CMD_ADD_XID.toByte, true)
-    writer.write(blob)
-    // only called from roll(), so the journal does not need to be synced after a write.
-    size += blob.limit
-  }
-
   def remove() = {
     size += write(true, CMD_REMOVE.toByte)
+    if (inReadBehind) removesSinceReadBehind += 1
   }
 
-  private def removeTentative(allowSync: Boolean): Unit = {
-    size += write(allowSync, CMD_REMOVE_TENTATIVE.toByte)
+  private def removeTentative(xid: Int ,allowSync: Boolean): Unit = {
+    size += write(allowSync, CMD_REMOVE_TENTATIVE_XID.toByte, xid)
   }
 
-  def removeTentative(): Unit = removeTentative(true)
-
-  private def saveXid(xid: Int) = {
-    // only called from roll(), so the journal does not need to be synced after a write.
-    size += write(false, CMD_SAVE_XID.toByte, xid)
-  }
+  def removeTentative(xid: Int): Unit = removeTentative(xid, true)
 
   def unremove(xid: Int) = {
     size += write(true, CMD_UNREMOVE.toByte, xid)
@@ -252,6 +242,7 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
 
   def confirmRemove(xid: Int) = {
     size += write(true, CMD_CONFIRM_REMOVE.toByte, xid)
+    if (inReadBehind) removesSinceReadBehind += 1
   }
 
   def startReadBehind(): Unit = {
@@ -261,6 +252,7 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
     rj.position(pos)
     reader = Some(rj)
     readerFilename = Some(filename)
+    removesSinceReadBehind = 0
     log.debug("Read-behind on '%s' starting at file %s", queueName, readerFilename.get)
   }
 
@@ -279,6 +271,10 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
         readJournalEntry(rj) match {
           case (JournalItem.Add(item), _) =>
             gotItem(item)
+          case (JournalItem.Remove, _) =>
+            removesSinceReadBehind -= 1
+          case (JournalItem.ConfirmRemove(_), _) =>
+            removesSinceReadBehind -= 1
           case (JournalItem.EndOfFile, _) =>
             // move to next file and try again.
             val oldFilename = readerFilename.get
@@ -375,7 +371,7 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
             val data = readBlock(in)
             (JournalItem.Add(QItem.unpack(data)), 5 + data.length)
           case CMD_REMOVE_TENTATIVE =>
-            (JournalItem.RemoveTentative, 1)
+            (JournalItem.RemoveTentative(0), 1)
           case CMD_SAVE_XID =>
             val xid = readInt(in)
             (JournalItem.SavedXid(xid), 5)
@@ -391,6 +387,9 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
             val item = QItem.unpack(data)
             item.xid = xid
             (JournalItem.Add(item), 9 + data.length)
+          case CMD_REMOVE_TENTATIVE_XID =>
+            val xid = readInt(in)
+            (JournalItem.RemoveTentative(xid), 5)
           case n =>
             throw new BrokenItemException(lastPosition, new IOException("invalid opcode in journal: " + n.toInt + " at position " + (in.position - 1)))
         }

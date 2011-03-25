@@ -16,7 +16,7 @@ trait DumpJournal { self: TempFolder =>
           "add(%d:%d)".format(item.data.size, item.xid)
         }
       case JournalItem.Remove => "remove"
-      case JournalItem.RemoveTentative => "remove-tentative"
+      case JournalItem.RemoveTentative(xid) => "remove-tentative(%d)".format(xid)
       case JournalItem.SavedXid(xid) => "xid(%d)".format(xid)
       case JournalItem.Unremove(xid) => "unremove(%d)".format(xid)
       case JournalItem.ConfirmRemove(xid) => "confirm-remove(%d)".format(xid)

@@ -90,12 +90,17 @@ class QueueDumper(filename: String) {
       case JournalItem.Remove =>
         if (!QDumper.quiet) println("REM")
         queue.dequeue
-      case JournalItem.RemoveTentative =>
-        do {
-          currentXid += 1
-        } while (openTransactions contains currentXid)
-        openTransactions(currentXid) = queue.dequeue
-        if (!QDumper.quiet) println("RSV %d".format(currentXid))
+      case JournalItem.RemoveTentative(xid) =>
+        val xxid = if (xid == 0) {
+          do {
+            currentXid += 1
+          } while ((openTransactions contains currentXid) || (currentXid == 0))
+          currentXid
+        } else {
+          xid
+        }
+        openTransactions(xxid) = queue.dequeue
+        if (!QDumper.quiet) println("RSV %d".format(xxid))
       case JournalItem.SavedXid(xid) =>
         if (!QDumper.quiet) println("XID %d".format(xid))
         currentXid = xid

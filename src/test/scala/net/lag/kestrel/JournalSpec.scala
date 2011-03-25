@@ -127,9 +127,9 @@ class JournalSpec extends Specification with TempFolder with TestLogging with Du
         val journal = new Journal(folderName, "test", null, Duration.MaxValue)
         journal.open()
         journal.add(QItem(Time.now, None, "".getBytes, 0))
-        journal.rotate(0, Nil, false)
+        journal.rotate(Nil, false)
         journal.add(QItem(Time.now, None, "".getBytes, 0))
-        val checkpoint = journal.rotate(0, Nil, true)
+        val checkpoint = journal.rotate(Nil, true)
         val oldFiles = Journal.journalsForQueue(new File(folderName), "test")
         oldFiles.map { f => new File(folderName, f).length }.toList mustEqual List(21, 21, 0)
 
@@ -137,8 +137,8 @@ class JournalSpec extends Specification with TempFolder with TestLogging with Du
         val files = Journal.journalsForQueue(new File(folderName), "test")
         files.size mustEqual 2
         files mustEqual oldFiles.slice(1, 3)
-        dumpJournal("test") mustEqual "xid(0)"
-        files.map { f => new File(folderName, f).length }.toList mustEqual List(5, 0)
+        dumpJournal("test") mustEqual ""
+        files.map { f => new File(folderName, f).length }.toList mustEqual List(0, 0)
       }
     }
 
@@ -150,7 +150,7 @@ class JournalSpec extends Specification with TempFolder with TestLogging with Du
         journal.size mustEqual 21
         journal.archivedSize mustEqual 0
 
-        journal.rotate(0, Nil, false)
+        journal.rotate(Nil, false)
         journal.size mustEqual 0
         journal.archivedSize mustEqual 21
 
@@ -158,9 +158,47 @@ class JournalSpec extends Specification with TempFolder with TestLogging with Du
         journal.size mustEqual 21
         journal.archivedSize mustEqual 21
 
-        journal.rewrite(0, Nil, Nil)
-        journal.size mustEqual 5
+        journal.rewrite(Nil, Nil)
+        journal.size mustEqual 0
         journal.archivedSize mustEqual 0
+      }
+    }
+
+    "rebuild from a checkpoint correctly" in {
+      withTempFolder {
+        val journal = new Journal(folderName, "test", null, Duration.MaxValue)
+        journal.open()
+
+        val initialOpenItems = List(
+          QItem(Time.now, None, "A".getBytes, 6),
+          QItem(Time.now, None, "B".getBytes, 7),
+          QItem(Time.now, None, "C".getBytes, 8)
+        )
+        val queue1 = List(
+          QItem(Time.now, None, "D".getBytes, 0),
+          QItem(Time.now, None, "E".getBytes, 0),
+          QItem(Time.now, None, "F".getBytes, 0)
+        )
+        journal.rewrite(initialOpenItems, queue1)
+        dumpJournal("test") mustEqual
+          "add(1:0:A), remove-tentative(6), add(1:0:B), remove-tentative(7), add(1:0:C), remove-tentative(8), " +
+          "add(1:0:D), add(1:0:E), add(1:0:F)"
+
+        val checkpoint = journal.rotate(initialOpenItems, true)
+        journal.remove() // there goes D
+        journal.removeTentative(9) // E
+        journal.confirmRemove(6) // A
+        journal.add(QItem(Time.now, None, "G".getBytes, 0))
+
+        val newOpenItems = initialOpenItems.drop(1) ++ List(QItem(Time.now, None, "E".getBytes, 9)) // B, C, E
+        val queue2 = List(QItem(Time.now, None, "F".getBytes, 0))
+        journal.pack(checkpoint.get, newOpenItems, queue2)
+        println(dumpJournal("test"))
+
+        dumpJournal("test") mustEqual
+          "add(1:0:A), remove-tentative(6), add(1:0:B), remove-tentative(7), add(1:0:C), remove-tentative(8), " +
+          "add(1:0:E), add(1:0:F), " +
+          "remove, remove-tentative(9), confirm-remove(6), add(1:0:G)"
       }
     }
   }
