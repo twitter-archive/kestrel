@@ -21,14 +21,13 @@ import java.nio.{ByteBuffer, ByteOrder}
 import com.twitter.util.Time
 
 case class QItem(addTime: Time, expiry: Option[Time], data: Array[Byte], var xid: Int) {
-  def pack(opcode: Byte, withXid: Boolean): ByteBuffer = {
-    val headerSize = if (withXid) 9 else 5
-    val buffer = ByteBuffer.allocate(data.length + 16 + headerSize)
+  final def pack(opcode: Byte): ByteBuffer = pack(opcode, 0)
+
+  final def pack(opcode: Byte, xid: Int): ByteBuffer = {
+    val buffer = ByteBuffer.allocate(data.length + 21 + (if (xid == 0) 0 else 4))
     buffer.order(ByteOrder.LITTLE_ENDIAN)
     buffer.put(opcode)
-    if (withXid) {
-      buffer.putInt(xid)
-    }
+    if (xid != 0) buffer.putInt(xid)
     buffer.putInt(data.length + 16)
     buffer.putLong(addTime.inMilliseconds)
     if (expiry.isDefined) {

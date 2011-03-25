@@ -220,25 +220,18 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
   def isReplaying(): Boolean = replayer.isDefined
 
   private def add(allowSync: Boolean, item: QItem): Future[Unit] = {
-    val blob = item.pack(CMD_ADDX.toByte, false)
+    val blob = item.pack(CMD_ADDX.toByte)
     size += blob.limit
     writer.write(blob)
   }
 
   def add(item: QItem): Future[Unit] = add(true, item)
 
-  def continue(xid: Int, item: QItem): Unit = {
-    item.xid = xid
-    addWithXidAndCommand(CMD_CONTINUE, item)
-  }
-
-  private def addWithXidAndCommand(command: Int, item: QItem) = {
-    val blob = item.pack(command.toByte, true)
-    do {
-      writer.write(blob)
-    } while (blob.position < blob.limit)
-    // only called from roll(), so the journal does not need to be synced after a write.
+  def continue(xid: Int, item: QItem) = {
+    removesSinceReadBehind += 1
+    val blob = item.pack(CMD_CONTINUE.toByte, xid)
     size += blob.limit
+    writer.write(blob)
   }
 
   def remove() = {
@@ -292,7 +285,8 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
           case (JournalItem.ConfirmRemove(_), _) =>
             removesSinceReadBehind -= 1
           case (JournalItem.Continue(item, xid), _) =>
-            f(item)
+            removesSinceReadBehind -= 1
+            gotItem(item)
           case (JournalItem.EndOfFile, _) =>
             // move to next file and try again.
             val oldFilename = readerFilename.get

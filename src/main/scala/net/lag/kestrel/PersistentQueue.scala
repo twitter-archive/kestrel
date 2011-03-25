@@ -185,7 +185,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
           journal.startReadBehind()
         }
       }
-      if (xid != None) openTransactions.removeKey(xid.get)
+      if (xid != None) openTransactions.remove(xid.get)
       _add(item)
       if (config.keepJournal) {
         xid match {
