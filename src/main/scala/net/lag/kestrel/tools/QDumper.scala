@@ -94,8 +94,8 @@ class QueueDumper(filename: String) {
         do {
           currentXid += 1
         } while (openTransactions contains currentXid)
-        openTransactions(currentXid) = queue.dequeue
         if (!QDumper.quiet) println("RSV %d".format(currentXid))
+        openTransactions(currentXid) = queue.dequeue
       case JournalItem.SavedXid(xid) =>
         if (!QDumper.quiet) println("XID %d".format(xid))
         currentXid = xid
@@ -105,6 +105,26 @@ class QueueDumper(filename: String) {
       case JournalItem.ConfirmRemove(xid) =>
         if (!QDumper.quiet) println("ACK %d".format(xid))
         openTransactions.remove(xid)
+      case JournalItem.Continue(qitem, xid) =>
+        if (!QDumper.quiet) {
+          print("CON %-6d".format(qitem.data.size))
+          if (qitem.xid > 0) {
+            print(" xid=%d".format(qitem.xid))
+          }
+          if (qitem.expiry.isDefined) {
+            if (qitem.expiry.get - now < 0.milliseconds) {
+              print(" expired")
+            } else {
+              print(" exp=%s".format(qitem.expiry.get - now))
+            }
+          }
+          println()
+        }
+        if (QDumper.dump) {
+          println("    " + new String(qitem.data, "ISO-8859-1"))
+        }
+        openTransactions.remove(xid)
+        queue += qitem.data.size
       case x =>
         if (!QDumper.quiet) println(x)
     }

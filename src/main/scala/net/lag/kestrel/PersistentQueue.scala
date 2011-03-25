@@ -170,7 +170,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   /**
    * Add a value to the end of the queue, transactionally.
    */
-  def add(value: Array[Byte], expiry: Option[Time]): Boolean = {
+  def add(value: Array[Byte], expiry: Option[Time], xid: Option[Int]): Boolean = {
     synchronized {
       if (closed || value.size > config.maxItemSize.inBytes) return false
       if (config.fanoutOnly && !isFanout) return true
@@ -195,14 +195,24 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
         }
       }
       checkRotateJournal()
+      if (xid != None) openTransactions.removeKey(xid.get)
       _add(item)
-      if (config.keepJournal) journal.add(item)
+      if (config.keepJournal) {
+        xid match {
+          case None => journal.add(item)
+          case _    => journal.continue(xid.get, item)
+        }
+      }
     }
     waiters.trigger()
     true
   }
 
-  def add(value: Array[Byte]): Boolean = add(value, None)
+  def add(value: Array[Byte]): Boolean = add(value, None, None)
+  def add(value: Array[Byte], expiry: Option[Time]): Boolean = add(value, expiry, None)
+
+  def continue(xid: Int, value: Array[Byte]): Boolean = add(value, None, Some(xid))
+  def continue(xid: Int, value: Array[Byte], expiry: Option[Time]): Boolean = add(value, expiry, Some(xid))
 
   /**
    * Peek at the head item in the queue, if there is one.
@@ -367,6 +377,9 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       case JournalItem.SavedXid(xid) => xidCounter = xid
       case JournalItem.Unremove(xid) => _unremove(xid)
       case JournalItem.ConfirmRemove(xid) => openTransactions.remove(xid)
+      case JournalItem.Continue(item, xid) =>
+        openTransactions.remove(xid)
+        _add(item)
       case x => log.error("Unexpected item in journal: %s", x)
     }
 
