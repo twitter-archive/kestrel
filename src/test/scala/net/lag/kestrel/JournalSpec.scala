@@ -193,7 +193,6 @@ class JournalSpec extends Specification with TempFolder with TestLogging with Du
         val newOpenItems = initialOpenItems.drop(1) ++ List(QItem(Time.now, None, "E".getBytes, 9)) // B, C, E
         val queue2 = List(QItem(Time.now, None, "F".getBytes, 0))
         journal.pack(checkpoint.get, newOpenItems, queue2)
-        println(dumpJournal("test"))
 
         dumpJournal("test") mustEqual
           "add(1:0:A), remove-tentative(6), add(1:0:B), remove-tentative(7), add(1:0:C), remove-tentative(8), " +
