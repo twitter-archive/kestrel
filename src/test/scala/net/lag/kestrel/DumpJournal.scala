@@ -7,7 +7,7 @@ import com.twitter.util.TempFolder
 trait DumpJournal { self: TempFolder =>
   def dumpJournal(qname: String): String = {
     var rv = new mutable.ListBuffer[JournalItem]
-    new Journal(new File(folderName, qname).getCanonicalPath).replay(qname) { item => rv += item }
+    new Journal(new File(folderName, qname).getCanonicalPath).replay { item => rv += item }
     rv map {
       case JournalItem.Add(item) =>
         if (item.data.size > 0 && item.data(0) > 0) {

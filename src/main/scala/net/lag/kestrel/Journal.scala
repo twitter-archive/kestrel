@@ -33,6 +33,8 @@ import annotation.tailrec
 case class BrokenItemException(lastValidPosition: Long, cause: Throwable) extends IOException(cause)
 
 case class Checkpoint(filename: String, reservedItems: Seq[QItem])
+case class PackRequest(journal: Journal, checkpoint: Checkpoint, openItems: Iterable[QItem],
+                       pentUpDeletes: Int, queueState: Iterable[QItem])
 
 // returned from journal replay
 abstract class JournalItem()
@@ -103,52 +105,53 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
     open(queueFile)
   }
 
-  def cleanup() {
-    // has the side effect of cleaning up old files.
+  def calculateArchiveSize() {
     val files = Journal.archivedFilesForQueue(new File(queuePath), queueName)
     archivedSize = files.foldLeft(0L) { (sum, filename) =>
       sum + new File(queuePath, filename).length()
     }
   }
 
+  private def uniqueFile(infix: String, suffix: String = ""): File = {
+    var file = new File(queuePath, queueName + infix + Time.now.inMilliseconds + suffix)
+    while (!file.createNewFile()) {
+      Thread.sleep(1)
+      file = new File(queuePath, queueName + infix + Time.now.inMilliseconds + suffix)
+    }
+    file
+  }
+
   def rotate(reservedItems: Seq[QItem], setCheckpoint: Boolean): Option[Checkpoint] = {
     writer.close()
-    var rotatedFile = queueName + "." + Time.now.inMilliseconds
-    while (new File(queuePath, rotatedFile).exists) {
-      Thread.sleep(1)
-      rotatedFile = queueName + "." + Time.now.inMilliseconds
-    }
-    new File(queuePath, queueName).renameTo(new File(queuePath, rotatedFile))
+    val rotatedFile = uniqueFile(".")
+    new File(queuePath, queueName).renameTo(rotatedFile)
     size = 0
-    cleanup()
+    calculateArchiveSize()
     open()
 
     if (readerFilename == Some(queueName)) {
-      readerFilename = Some(rotatedFile)
+      readerFilename = Some(rotatedFile.getName)
     }
 
     if (setCheckpoint && !checkpoint.isDefined) {
-      checkpoint = Some(Checkpoint(rotatedFile, reservedItems))
+      checkpoint = Some(Checkpoint(rotatedFile.getName, reservedItems))
     }
     checkpoint
   }
 
   def rewrite(reservedItems: Seq[QItem], queue: Iterable[QItem]) {
     writer.close()
-    val now = Time.now.inMilliseconds
-    val tmpFile = new File(queuePath, queueName + "~~" + now)
-    open(tmpFile)
+    val tempFile = uniqueFile("~~")
+    open(tempFile)
     dump(reservedItems, queue)
     writer.close()
 
-    val packFile = new File(queuePath, queueName + "." + now + ".pack")
-    tmpFile.renameTo(packFile)
-    cleanup()
-
-    val postPackFile = new File(queuePath, queueName + "." + now)
-    postPackFile.renameTo(queueFile)
-    cleanup()
-
+    val packFile = uniqueFile(".", ".pack")
+    tempFile.renameTo(packFile)
+    // cleanup the .pack file:
+    val files = Journal.archivedFilesForQueue(new File(queuePath), queueName)
+    new File(queuePath, files(0)).renameTo(queueFile)
+    calculateArchiveSize()
     open
   }
 
@@ -173,28 +176,15 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
   def dump(reservedItems: Iterable[QItem], queue: Iterable[QItem]): Unit =
     dump(reservedItems, Nil, 0, queue)
 
-  def pack(checkpoint: Checkpoint, openItems: Iterable[QItem], queueState: Seq[QItem]) {
+  def startPack(checkpoint: Checkpoint, openItems: Iterable[QItem], queueState: Seq[QItem]) {
     val knownXids = checkpoint.reservedItems.map { _.xid }.toSet
     val currentXids = openItems.map { _.xid }.toSet
     val newlyOpenItems = openItems.filter { x => !(knownXids contains x.xid) }
     val newlyClosedItems = checkpoint.reservedItems.filter { x => !(currentXids contains x.xid) }
     val negs = removesSinceReadBehind - newlyClosedItems.size // newly closed are already accounted for.
 
-    val oldFilenames = Journal.journalsBefore(new File(queuePath), queueName, checkpoint.filename) ++
-      List(checkpoint.filename)
-    log.info("Packing journals for '%s': %s", queueName, oldFilenames.mkString(", "))
-
-    val tmpFile = new File(queuePath, queueName + "~~" + Time.now.inMilliseconds)
-    val newJournal = new Journal(tmpFile.getAbsolutePath)
-    newJournal.open()
-    newJournal.dump(checkpoint.reservedItems, newlyOpenItems, negs, queueState)
-    newJournal.close()
-
-    log.info("Packing '%s' -- erasing old files.", queueName)
-    val packFile = new File(queuePath, checkpoint.filename + ".pack")
-    tmpFile.renameTo(packFile)
-    cleanup()
-    log.info("Packing '%s' done: %s", queueName, Journal.journalsForQueue(new File(queuePath), queueName).mkString(", "))
+    outstandingPackRequests.incrementAndGet()
+    packerQueue.add(PackRequest(this, checkpoint, newlyOpenItems, negs, queueState))
   }
 
   def close(): Unit = {
@@ -209,6 +199,7 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
   def erase(): Unit = {
     try {
       close()
+      // FIXME: erase all files
       queueFile.delete()
     } catch {
       case _ =>
@@ -303,9 +294,15 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
     }
   }
 
-  def replay(name: String)(f: JournalItem => Unit): Unit = {
+  def replay(f: JournalItem => Unit): Unit = {
+    // first, erase any lingering temp files.
+    new File(queuePath).list().filter {
+      _.startsWith(queueName + "~~")
+    }.foreach { filename =>
+      new File(queuePath, filename).delete()
+    }
     Journal.journalsForQueue(new File(queuePath), queueName).foreach { filename =>
-      replayFile(name, filename)(f)
+      replayFile(queueName, filename)(f)
     }
   }
 
@@ -474,40 +471,30 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
   }
 
   val outstandingPackRequests = new AtomicInteger(0)
-  private def requestPack() {
-    outstandingPackRequests.incrementAndGet()
-    packerQueue.add(this)
-  }
 
-  private def waitForPacksToFinish() {
+  def waitForPacksToFinish() {
     while (outstandingPackRequests.get() > 0) {
       Thread.sleep(10)
     }
   }
 
-  private def pack() {
-    val filenames = Journal.journalsBefore(new File(queuePath), queueName, readerFilename.getOrElse(queueName))
-    if (filenames.size > 1) {
-      log.info("Packing journals for '%s': %s", queueName, filenames.mkString(", "))
-      val tmpFile = new File(queuePath, queueName + "~~" + Time.now.inMilliseconds)
-      val packer = new JournalPacker(filenames.map { new File(queuePath, _).getAbsolutePath },
-                                     tmpFile.getAbsolutePath)
+  private def pack(state: PackRequest) {
+    val oldFilenames =
+      Journal.journalsBefore(new File(queuePath), queueName, state.checkpoint.filename) ++
+      List(state.checkpoint.filename)
+    log.info("Packing journals for '%s': %s", queueName, oldFilenames.mkString(", "))
 
-      val journal = packer { (bytes1, bytes2) =>
-        if (bytes1 == 0 && bytes2 == 0) {
-          log.info("Packing '%s' into new journal.", queueName)
-        } else {
-          log.info("Packing '%s': %s so far (%s trailing)", queueName, bytes1.bytes.toHuman, bytes2.bytes.toHuman)
-        }
-      }
+    val tempFile = uniqueFile("~~")
+    val newJournal = new Journal(tempFile.getAbsolutePath)
+    newJournal.open()
+    newJournal.dump(state.checkpoint.reservedItems, state.openItems, state.pentUpDeletes, state.queueState)
+    newJournal.close()
 
-      log.info("Packing '%s' -- erasing old files.", queueName)
-      val finalTimestamp = filenames.last.split('.')(1).toLong
-      val packFile = new File(queuePath, queueName + "." + finalTimestamp + ".pack")
-      tmpFile.renameTo(packFile)
-      journal.cleanup()
-      log.info("Packing '%s' done: %s", queueName, Journal.journalsForQueue(new File(queuePath), queueName).mkString(", "))
-    }
+    log.info("Packing '%s' -- erasing old files.", queueName)
+    val packFile = new File(queuePath, state.checkpoint.filename + ".pack")
+    tempFile.renameTo(packFile)
+    calculateArchiveSize()
+    log.info("Packing '%s' done: %s", queueName, Journal.journalsForQueue(new File(queuePath), queueName).mkString(", "))
   }
 }
 
@@ -520,6 +507,11 @@ object Journal {
     }
   }
 
+  /**
+   * A .pack file is atomically moved into place only after it contains a summary of the contents
+   * of every journal file with a lesser-or-equal timestamp. If we find such a file, it's safe and
+   * race-free to erase the older files and move the .pack file into place.
+   */
   private def cleanUpPackedFiles(path: File, files: List[(String, Long)]): Boolean = {
     val packFile = files.find { case (filename, timestamp) =>
       filename endsWith ".pack"
@@ -551,12 +543,6 @@ object Journal {
       // directory is gone.
       Nil
     } else {
-      totalFiles.filter {
-        _.startsWith(queueName + "~~")
-      }.foreach { filename =>
-        new File(path, filename).delete()
-      }
-
       val timedFiles = totalFiles.filter {
         _.startsWith(queueName + ".")
       }.map { filename =>
@@ -586,13 +572,13 @@ object Journal {
     journalsForQueue(path, queueName).dropWhile { _ != filename }.drop(1).headOption
   }
 
-  val packerQueue = new LinkedBlockingQueue[Journal]()
+  val packerQueue = new LinkedBlockingQueue[PackRequest]()
   val packer = BackgroundProcess.spawnDaemon("journal-packer") {
     while (true) {
-      val j = packerQueue.take()
+      val request = packerQueue.take()
       try {
-//        j.pack()
-        j.outstandingPackRequests.decrementAndGet()
+        request.journal.pack(request)
+        request.journal.outstandingPackRequests.decrementAndGet()
       } catch {
         case e: Throwable =>
           Logger.get(getClass).error(e, "Uncaught exception in packer: %s", e)

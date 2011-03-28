@@ -342,7 +342,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
         _memoryBytes += item.data.length
       } { checkpoint =>
         log.info("Rewriting journal file from checkpoint for '%s' (qsize=%d)", name, queueSize)
-        journal.pack(checkpoint, openTransactions.values, queue.toList)
+        journal.startPack(checkpoint, openTransactions.values, queue.toList)
       }
       if (!journal.inReadBehind) {
         log.info("Coming out of read-behind for queue '%s'", name)
@@ -356,7 +356,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     log.info("Replaying transaction journal for '%s'", name)
     xidCounter = 0
 
-    journal.replay(name) {
+    journal.replay {
       case JournalItem.Add(item) =>
         _add(item)
         // when processing the journal, this has to happen after:

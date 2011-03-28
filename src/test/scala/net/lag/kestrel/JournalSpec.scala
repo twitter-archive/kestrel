@@ -133,7 +133,9 @@ class JournalSpec extends Specification with TempFolder with TestLogging with Du
         val oldFiles = Journal.journalsForQueue(new File(folderName), "test")
         oldFiles.map { f => new File(folderName, f).length }.toList mustEqual List(21, 21, 0)
 
-        journal.pack(checkpoint.get, Nil, Nil)
+        journal.startPack(checkpoint.get, Nil, Nil)
+        journal.waitForPacksToFinish()
+
         val files = Journal.journalsForQueue(new File(folderName), "test")
         files.size mustEqual 2
         files mustEqual oldFiles.slice(1, 3)
@@ -192,7 +194,8 @@ class JournalSpec extends Specification with TempFolder with TestLogging with Du
 
         val newOpenItems = initialOpenItems.drop(1) ++ List(QItem(Time.now, None, "E".getBytes, 9)) // B, C, E
         val queue2 = List(QItem(Time.now, None, "F".getBytes, 0))
-        journal.pack(checkpoint.get, newOpenItems, queue2)
+        journal.startPack(checkpoint.get, newOpenItems, queue2)
+        journal.waitForPacksToFinish()
 
         dumpJournal("test") mustEqual
           "add(1:0:A), remove-tentative(6), add(1:0:B), remove-tentative(7), add(1:0:C), remove-tentative(8), " +
