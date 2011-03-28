@@ -199,7 +199,9 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
   def erase(): Unit = {
     try {
       close()
-      // FIXME: erase all files
+      Journal.archivedFilesForQueue(new File(queuePath), queueName).foreach { filename =>
+        new File(queuePath, filename).delete()
+      }
       queueFile.delete()
     } catch {
       case _ =>
