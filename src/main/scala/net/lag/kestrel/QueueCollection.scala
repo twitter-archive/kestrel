@@ -128,7 +128,7 @@ class QueueCollection(queueFolder: String, timer: Timer,
    * Retrieve an item from a queue and pass it to a continuation. If no item is available within
    * the requested time, or the server is shutting down, None is passed.
    */
-  def remove(key: String, deadline: Option[Time], transaction: Boolean, peek: Boolean): Future[Option[QItem]] = {
+  def remove(key: String, deadline: Option[Time] = None, transaction: Boolean = false, peek: Boolean = false): Future[Option[QItem]] = {
     queue(key) match {
       case None =>
         Future.value(None)
@@ -148,23 +148,6 @@ class QueueCollection(queueFolder: String, timer: Timer,
           item
         }
     }
-  }
-
-  // for testing.
-  // FIXME
-  def receive(key: String): Option[Array[Byte]] = {
-    var rv: Option[Array[Byte]] = None
-    val latch = new CountDownLatch(1)
-    remove(key, None, false, false).onSuccess {
-      case None =>
-        rv = None
-        latch.countDown
-      case Some(v) =>
-        rv = Some(v.data)
-        latch.countDown
-    }
-    latch.await
-    rv
   }
 
   def unremove(key: String, xid: Int) {
