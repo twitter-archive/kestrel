@@ -124,7 +124,7 @@ class JournalSpec extends Specification with TempFolder with TestLogging with Du
 
     "pack old files" in {
       withTempFolder {
-        val journal = new Journal(folderName, "test", null, Duration.MaxValue)
+        val journal = new Journal(new File(folderName), "test", null, Duration.MaxValue)
         journal.open()
         journal.add(QItem(Time.now, None, "".getBytes, 0))
         journal.rotate(Nil, false)
@@ -146,7 +146,7 @@ class JournalSpec extends Specification with TempFolder with TestLogging with Du
 
     "report file sizes correctly" in {
       withTempFolder {
-        val journal = new Journal(folderName, "test", null, Duration.MaxValue)
+        val journal = new Journal(new File(folderName), "test", null, Duration.MaxValue)
         journal.open()
         journal.add(QItem(Time.now, None, "".getBytes, 0))
         journal.size mustEqual 21
@@ -168,7 +168,7 @@ class JournalSpec extends Specification with TempFolder with TestLogging with Du
 
     "rebuild from a checkpoint correctly" in {
       withTempFolder {
-        val journal = new Journal(folderName, "test", null, Duration.MaxValue)
+        val journal = new Journal(new File(folderName), "test", null, Duration.MaxValue)
         journal.open()
 
         val initialOpenItems = List(

@@ -52,7 +52,7 @@ object JournalItem {
 /**
  * Codes for working with the journal file for a PersistentQueue.
  */
-class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: Duration) {
+class Journal(queuePath: File, queueName: String, timer: Timer, syncJournal: Duration) {
   import Journal._
 
   private val log = Logger.get(getClass)
@@ -93,7 +93,7 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
   private val CMD_REMOVE_TENTATIVE_XID = 9
 
   def this(fullPath: String, syncJournal: Duration) =
-    this(new File(fullPath).getParent(), new File(fullPath).getName(), null, syncJournal)
+    this(new File(fullPath).getParentFile(), new File(fullPath).getName(), null, syncJournal)
 
   def this(fullPath: String) = this(fullPath, Duration.MaxValue)
 
@@ -106,7 +106,7 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
   }
 
   def calculateArchiveSize() {
-    val files = Journal.archivedFilesForQueue(new File(queuePath), queueName)
+    val files = Journal.archivedFilesForQueue(queuePath, queueName)
     archivedSize = files.foldLeft(0L) { (sum, filename) =>
       sum + new File(queuePath, filename).length()
     }
@@ -149,7 +149,7 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
     val packFile = uniqueFile(".", ".pack")
     tempFile.renameTo(packFile)
     // cleanup the .pack file:
-    val files = Journal.archivedFilesForQueue(new File(queuePath), queueName)
+    val files = Journal.archivedFilesForQueue(queuePath, queueName)
     new File(queuePath, files(0)).renameTo(queueFile)
     calculateArchiveSize()
     open
@@ -199,7 +199,7 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
   def erase(): Unit = {
     try {
       close()
-      Journal.archivedFilesForQueue(new File(queuePath), queueName).foreach { filename =>
+      Journal.archivedFilesForQueue(queuePath, queueName).foreach { filename =>
         new File(queuePath, filename).delete()
       }
       queueFile.delete()
@@ -283,7 +283,7 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
           case (JournalItem.EndOfFile, _) =>
             // move to next file and try again.
             val oldFilename = readerFilename.get
-            readerFilename = Journal.journalAfter(new File(queuePath), queueName, readerFilename.get)
+            readerFilename = Journal.journalAfter(queuePath, queueName, readerFilename.get)
             reader = Some(new FileInputStream(new File(queuePath, readerFilename.get)).getChannel)
             log.debug("Read-behind on '%s' moving from file %s to %s", queueName, oldFilename, readerFilename.get)
             if (checkpoint.isDefined && checkpoint.get.filename == oldFilename) {
@@ -298,12 +298,12 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
 
   def replay(f: JournalItem => Unit): Unit = {
     // first, erase any lingering temp files.
-    new File(queuePath).list().filter {
+    queuePath.list().filter {
       _.startsWith(queueName + "~~")
     }.foreach { filename =>
       new File(queuePath, filename).delete()
     }
-    Journal.journalsForQueue(new File(queuePath), queueName).foreach { filename =>
+    Journal.journalsForQueue(queuePath, queueName).foreach { filename =>
       replayFile(queueName, filename)(f)
     }
   }
@@ -482,7 +482,7 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
 
   private def pack(state: PackRequest) {
     val oldFilenames =
-      Journal.journalsBefore(new File(queuePath), queueName, state.checkpoint.filename) ++
+      Journal.journalsBefore(queuePath, queueName, state.checkpoint.filename) ++
       List(state.checkpoint.filename)
     log.info("Packing journals for '%s': %s", queueName, oldFilenames.mkString(", "))
 
@@ -496,7 +496,7 @@ class Journal(queuePath: String, queueName: String, timer: Timer, syncJournal: D
     val packFile = new File(queuePath, state.checkpoint.filename + ".pack")
     tempFile.renameTo(packFile)
     calculateArchiveSize()
-    log.info("Packing '%s' done: %s", queueName, Journal.journalsForQueue(new File(queuePath), queueName).mkString(", "))
+    log.info("Packing '%s' done: %s", queueName, Journal.journalsForQueue(queuePath, queueName).mkString(", "))
   }
 }
 
