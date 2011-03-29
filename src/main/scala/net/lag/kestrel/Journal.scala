@@ -73,7 +73,7 @@ class Journal(queuePath: File, queueName: String, timer: Timer, syncJournal: Dur
 
   @volatile var closed: Boolean = false
 
-  var checkpoint: Option[Checkpoint] = None
+  @volatile var checkpoint: Option[Checkpoint] = None
   var removesSinceReadBehind = 0
 
   // small temporary buffer for formatting operations into the journal:
@@ -285,7 +285,7 @@ class Journal(queuePath: File, queueName: String, timer: Timer, syncJournal: Dur
             val oldFilename = readerFilename.get
             readerFilename = Journal.journalAfter(queuePath, queueName, readerFilename.get)
             reader = Some(new FileInputStream(new File(queuePath, readerFilename.get)).getChannel)
-            log.debug("Read-behind on '%s' moving from file %s to %s", queueName, oldFilename, readerFilename.get)
+            log.info("Read-behind on '%s' moving from file %s to %s", queueName, oldFilename, readerFilename.get)
             if (checkpoint.isDefined && checkpoint.get.filename == oldFilename) {
               gotCheckpoint(checkpoint.get)
             }
@@ -497,6 +497,8 @@ class Journal(queuePath: File, queueName: String, timer: Timer, syncJournal: Dur
     tempFile.renameTo(packFile)
     calculateArchiveSize()
     log.info("Packing '%s' done: %s", queueName, Journal.journalsForQueue(queuePath, queueName).mkString(", "))
+
+    checkpoint = None
   }
 }
 
