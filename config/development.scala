@@ -18,9 +18,9 @@ new KestrelConfig {
   maxOpenTransactions = 100
 
   // default queue settings:
-  default.maxJournalSize = 16.megabytes
+  default.defaultJournalSize = 16.megabytes
   default.maxMemorySize = 128.megabytes
-  default.maxJournalOverflow = 10
+  default.maxJournalSize = 1.gigabyte
 
   admin.httpPort = 2223
 
@@ -48,13 +48,11 @@ new KestrelConfig {
     maxAge = 30.seconds
   } :: new QueueBuilder {
     name = "jobs_ready"
-    syncJournal = true
+    syncJournal = 0.seconds
   } :: new QueueBuilder {
     name = "spam"
-    multifileJournal = true
   } :: new QueueBuilder {
     name = "spam0"
-    multifileJournal = true
   } :: new QueueBuilder {
     name = "hello"
     fanoutOnly = true
