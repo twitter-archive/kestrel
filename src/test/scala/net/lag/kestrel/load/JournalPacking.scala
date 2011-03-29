@@ -20,12 +20,13 @@ package net.lag.kestrel.load
 import java.net._
 import java.nio._
 import java.nio.channels._
+import scala.annotation.tailrec
 import scala.collection.mutable
 import com.twitter.conversions.string._
 
 /**
- * Spam a kestrel server with 1M copies of a pop song lyric, to see how
- * quickly it can absorb them.
+ * Seed a kestrel server with a backlog of items, then do cycles of put/get bursts to stress the
+ * background journal packer.
  */
 object JournalPacking extends LoadTesting {
   private val DATA = "x" * 1024
@@ -135,6 +136,7 @@ object JournalPacking extends LoadTesting {
     Console.println("        do read/writes CYCLES times (default: %d)".format(cycles))
   }
 
+  @tailrec
   def parseArgs(args: List[String]): Unit = args match {
     case Nil =>
     case "--help" :: xs =>
@@ -149,6 +151,9 @@ object JournalPacking extends LoadTesting {
     case "-t" :: x :: xs =>
       pause = x.toInt
       parseArgs(xs)
+    case "-c" :: x :: xs =>
+      cycles = x.toInt
+      parseArgs(xs)
     case _ =>
       usage()
       System.exit(1)
@@ -160,6 +165,7 @@ object JournalPacking extends LoadTesting {
     println("packing: " + totalItems + " items of " + kilobytes + "kB with " + pause + " second pauses")
     cycle(false, true)
     for (i <- 0 until cycles) {
+      println("cycle: " + (i + 1))
       cycle(true, true)
       Thread.sleep(pause * 1000)
     }
