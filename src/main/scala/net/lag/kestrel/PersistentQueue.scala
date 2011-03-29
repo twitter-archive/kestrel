@@ -152,8 +152,8 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     }
   }
 
+  // for tests.
   def forceRewrite() {
-    // for tests.
     synchronized {
       if (config.keepJournal) {
         log.info("Rewriting journal file for '%s' (qsize=%d)", name, queueSize)
