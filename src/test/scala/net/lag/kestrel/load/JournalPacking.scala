@@ -48,7 +48,7 @@ object JournalPacking extends LoadTesting {
   }
 
   def get(socket: SocketChannel, queueName: String, n: Int, data: String, counter: Long): Int = {
-    val req = ByteBuffer.wrap(("get " + queueName + "\r\n").getBytes)
+    val req = ByteBuffer.wrap(("get " + queueName + (if (useTransactions) "/t=1000/close/open" else "") + "\r\n").getBytes)
     val expectEnd = ByteBuffer.wrap("END\r\n".getBytes)
 
     var count = 0
@@ -65,6 +65,9 @@ object JournalPacking extends LoadTesting {
       } else {
         count += 1
       }
+    }
+    if (useTransactions) {
+      send(socket, ByteBuffer.wrap(("get " + queueName + "/close\r\n").getBytes))
     }
     misses
   }
@@ -106,8 +109,8 @@ object JournalPacking extends LoadTesting {
       writeCounter += totalItems
     }
     if (doReads) {
-      val duration = System.currentTimeMillis - startTime
       consumerThread.join()
+      val duration = System.currentTimeMillis - startTime
       readCounter += totalItems
       println("Read %d items in %d msec. Consumer spun %d times in misses.".format(totalItems, duration, misses))
     }
@@ -119,6 +122,7 @@ object JournalPacking extends LoadTesting {
   var cycles = 100
   var readCounter: Long = 0
   var writeCounter: Long = 0
+  var useTransactions: Boolean = false
 
   def usage() {
     Console.println("usage: packing [options]")
@@ -134,6 +138,8 @@ object JournalPacking extends LoadTesting {
     Console.println("        pause SECONDS between cycles (default: %d)".format(pause))
     Console.println("    -c CYCLES")
     Console.println("        do read/writes CYCLES times (default: %d)".format(cycles))
+    Console.println("    -x")
+    Console.println("        use transactions when fetching")
   }
 
   @tailrec
@@ -153,6 +159,9 @@ object JournalPacking extends LoadTesting {
       parseArgs(xs)
     case "-c" :: x :: xs =>
       cycles = x.toInt
+      parseArgs(xs)
+    case "-x" :: xs =>
+      useTransactions = true
       parseArgs(xs)
     case _ =>
       usage()
