@@ -311,7 +311,7 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
         client.set("test_log_rotation", v) mustEqual "STORED"
         new File(folderName + "/test_log_rotation").length mustEqual 2 * (8192 + 16 + 5) + 1
         (client.get("test_log_rotation") == v) must beTrue
-        new File(folderName + "/test_log_rotation").length mustEqual 5
+        new File(folderName + "/test_log_rotation").length mustEqual 0
         new File(folderName).listFiles.length mustEqual 1
       }
     }

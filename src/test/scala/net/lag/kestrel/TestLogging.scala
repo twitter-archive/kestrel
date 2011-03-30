@@ -21,9 +21,11 @@ import org.specs.Specification
 import com.twitter.logging.{Level, Logger}
 
 trait TestLogging { self: Specification =>
+  val logLevel = Logger.levelNames(Option[String](System.getenv("log")).getOrElse("FATAL").toUpperCase)
+
   new SpecContext {
     beforeSpec {
-      Logger.get("").setLevel(Logger.FATAL)
+      Logger.get("").setLevel(logLevel)
     }
   }
 }

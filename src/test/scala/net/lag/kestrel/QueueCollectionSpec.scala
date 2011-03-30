@@ -25,7 +25,7 @@ import com.twitter.ostrich.stats.Stats
 import org.specs.Specification
 import config._
 
-class QueueCollectionSpec extends Specification with TempFolder with TestLogging {
+class QueueCollectionSpec extends Specification with TempFolder with TestLogging with QueueMatchers {
   private var qc: QueueCollection = null
 
   val config = new QueueBuilder().apply()
@@ -53,10 +53,10 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
         qc.currentItems mustEqual 2
         Stats.getCounter("total_items")() mustEqual 2
 
-        new String(qc.receive("work1").get) mustEqual "stuff"
-        qc.receive("work1") mustEqual None
-        new String(qc.receive("work2").get) mustEqual "other stuff"
-        qc.receive("work2") mustEqual None
+        qc.remove("work1")() must beSomeQItem("stuff")
+        qc.remove("work1")() mustEqual None
+        qc.remove("work2")() must beSomeQItem("other stuff")
+        qc.remove("work2")() mustEqual None
 
         qc.currentBytes mustEqual 0
         qc.currentItems mustEqual 0
@@ -77,22 +77,10 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
 
         qc = new QueueCollection(folderName, timer, config, Nil)
         qc.queueNames mustEqual Nil
-        new String(qc.receive("ducklings").get) mustEqual "huey"
+        qc.remove("ducklings")() must beSomeQItem("huey")
         // now the queue should be suddenly instantiated:
         qc.currentBytes mustEqual 10
         qc.currentItems mustEqual 2
-      }
-    }
-
-    "force-roll a journal" in {
-      withTempFolder {
-        qc = new QueueCollection(folderName, timer, config, Nil)
-        qc.add("test", "one".getBytes)
-        qc.add("test", "two".getBytes)
-        qc.receive("test")
-        qc.queue("test").get.journalSize mustEqual 49
-        qc.rollJournal("test")
-        qc.queue("test").get.journalSize mustEqual 29
       }
     }
 
@@ -105,20 +93,20 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
         Stats.getCounter("get_hits")() mustEqual 0
         Stats.getCounter("get_misses")() mustEqual 0
 
-        new String(qc.receive("ducklings").get) mustEqual "ugly1"
+        qc.remove("ducklings")() must beSomeQItem("ugly1")
         Stats.getCounter("get_hits")() mustEqual 1
         Stats.getCounter("get_misses")() mustEqual 0
-        qc.receive("zombie") mustEqual None
+        qc.remove("zombie")() mustEqual None
         Stats.getCounter("get_hits")() mustEqual 1
         Stats.getCounter("get_misses")() mustEqual 1
 
-        new String(qc.receive("ducklings").get) mustEqual "ugly2"
+        qc.remove("ducklings")() must beSomeQItem("ugly2")
         Stats.getCounter("get_hits")() mustEqual 2
         Stats.getCounter("get_misses")() mustEqual 1
-        qc.receive("ducklings") mustEqual None
+        qc.remove("ducklings")() mustEqual None
         Stats.getCounter("get_hits")() mustEqual 2
         Stats.getCounter("get_misses")() mustEqual 2
-        qc.receive("ducklings") mustEqual None
+        qc.remove("ducklings")() mustEqual None
         Stats.getCounter("get_hits")() mustEqual 2
         Stats.getCounter("get_misses")() mustEqual 3
       }
@@ -164,12 +152,12 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
         withTempFolder {
           qc = new QueueCollection(folderName, timer, config, Nil)
           qc.add("jobs", "job1".getBytes)
-          qc.receive("jobs+client1") mustEqual None
+          qc.remove("jobs+client1")() mustEqual None
           qc.add("jobs", "job2".getBytes)
 
-          new String(qc.receive("jobs+client1").get) mustEqual "job2"
-          new String(qc.receive("jobs").get) mustEqual "job1"
-          new String(qc.receive("jobs").get) mustEqual "job2"
+          qc.remove("jobs+client1")() must beSomeQItem("job2")
+          qc.remove("jobs")() must beSomeQItem("job1")
+          qc.remove("jobs")() must beSomeQItem("job2")
         }
       }
 
@@ -180,12 +168,12 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
           qc = new QueueCollection(folderName, timer, config, Nil)
           qc.loadQueues()
           qc.add("jobs", "job1".getBytes)
-          new String(qc.receive("jobs+client1").get) mustEqual "job1"
+          qc.remove("jobs+client1")() must beSomeQItem("job1")
           qc.add("jobs", "job2".getBytes)
 
-          new String(qc.receive("jobs+client1").get) mustEqual "job2"
-          new String(qc.receive("jobs").get) mustEqual "job1"
-          new String(qc.receive("jobs").get) mustEqual "job2"
+          qc.remove("jobs+client1")() must beSomeQItem("job2")
+          qc.remove("jobs")() must beSomeQItem("job1")
+          qc.remove("jobs")() must beSomeQItem("job2")
         }
       }
 
@@ -200,11 +188,11 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
           qc.delete("jobs+client1")
 
           new File(folderName).list().toList.sorted mustEqual List("jobs")
-          new String(qc.receive("jobs").get) mustEqual "job1"
+          qc.remove("jobs")() must beSomeQItem("job1")
 
           qc.add("jobs", "job2".getBytes)
           new File(folderName).list().toList.sorted mustEqual List("jobs")
-          new String(qc.receive("jobs").get) mustEqual "job2"
+          qc.remove("jobs")() must beSomeQItem("job2")
         }
       }
 
@@ -218,8 +206,8 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
           qc = new QueueCollection(folderName, timer, config, List(jobConfig))
           qc.loadQueues()
           qc.add("jobs", "job1".getBytes)
-          qc.receive("jobs") mustEqual None
-          new String(qc.receive("jobs+client1").get) mustEqual "job1"
+          qc.remove("jobs")() mustEqual None
+          qc.remove("jobs+client1")() must beSomeQItem("job1")
         }
       }
     }
@@ -233,10 +221,10 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
 
           qc.add("expired", "hello".getBytes, Some(5.seconds.fromNow))
           time.advance(4.seconds)
-          new String(qc.receive("expired").get) mustEqual "hello"
+          qc.remove("expired")() must beSomeQItem("hello")
           qc.add("expired", "hello".getBytes, Some(5.seconds.fromNow))
           time.advance(6.seconds)
-          qc.receive("expired") mustEqual None
+          qc.remove("expired")() mustEqual None
         }
       }
     }
@@ -259,10 +247,10 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
           time.advance(2.seconds)
           qc.queue("jobs").get.length mustEqual 1
           qc.queue("expired").get.length mustEqual 0
-          qc.receive("jobs") mustEqual None
+          qc.remove("jobs")() mustEqual None
           qc.queue("jobs").get.length mustEqual 0
           qc.queue("expired").get.length mustEqual 1
-          new String(qc.receive("expired").get) mustEqual "hello"
+          qc.remove("expired")() must beSomeQItem("hello")
         }
       }
     }

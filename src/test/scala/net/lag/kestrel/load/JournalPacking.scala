@@ -20,12 +20,13 @@ package net.lag.kestrel.load
 import java.net._
 import java.nio._
 import java.nio.channels._
+import scala.annotation.tailrec
 import scala.collection.mutable
 import com.twitter.conversions.string._
 
 /**
- * Spam a kestrel server with 1M copies of a pop song lyric, to see how
- * quickly it can absorb them.
+ * Seed a kestrel server with a backlog of items, then do cycles of put/get bursts to stress the
+ * background journal packer.
  */
 object JournalPacking extends LoadTesting {
   private val DATA = "x" * 1024
@@ -47,7 +48,7 @@ object JournalPacking extends LoadTesting {
   }
 
   def get(socket: SocketChannel, queueName: String, n: Int, data: String, counter: Long): Int = {
-    val req = ByteBuffer.wrap(("get " + queueName + "\r\n").getBytes)
+    val req = ByteBuffer.wrap(("get " + queueName + (if (useTransactions) "/t=1000/close/open" else "") + "\r\n").getBytes)
     val expectEnd = ByteBuffer.wrap("END\r\n".getBytes)
 
     var count = 0
@@ -64,6 +65,9 @@ object JournalPacking extends LoadTesting {
       } else {
         count += 1
       }
+    }
+    if (useTransactions) {
+      send(socket, ByteBuffer.wrap(("get " + queueName + "/close\r\n").getBytes))
     }
     misses
   }
@@ -105,8 +109,8 @@ object JournalPacking extends LoadTesting {
       writeCounter += totalItems
     }
     if (doReads) {
-      val duration = System.currentTimeMillis - startTime
       consumerThread.join()
+      val duration = System.currentTimeMillis - startTime
       readCounter += totalItems
       println("Read %d items in %d msec. Consumer spun %d times in misses.".format(totalItems, duration, misses))
     }
@@ -118,6 +122,7 @@ object JournalPacking extends LoadTesting {
   var cycles = 100
   var readCounter: Long = 0
   var writeCounter: Long = 0
+  var useTransactions: Boolean = false
 
   def usage() {
     Console.println("usage: packing [options]")
@@ -133,8 +138,11 @@ object JournalPacking extends LoadTesting {
     Console.println("        pause SECONDS between cycles (default: %d)".format(pause))
     Console.println("    -c CYCLES")
     Console.println("        do read/writes CYCLES times (default: %d)".format(cycles))
+    Console.println("    -x")
+    Console.println("        use transactions when fetching")
   }
 
+  @tailrec
   def parseArgs(args: List[String]): Unit = args match {
     case Nil =>
     case "--help" :: xs =>
@@ -149,6 +157,12 @@ object JournalPacking extends LoadTesting {
     case "-t" :: x :: xs =>
       pause = x.toInt
       parseArgs(xs)
+    case "-c" :: x :: xs =>
+      cycles = x.toInt
+      parseArgs(xs)
+    case "-x" :: xs =>
+      useTransactions = true
+      parseArgs(xs)
     case _ =>
       usage()
       System.exit(1)
@@ -160,6 +174,7 @@ object JournalPacking extends LoadTesting {
     println("packing: " + totalItems + " items of " + kilobytes + "kB with " + pause + " second pauses")
     cycle(false, true)
     for (i <- 0 until cycles) {
+      println("cycle: " + (i + 1))
       cycle(true, true)
       Thread.sleep(pause * 1000)
     }

@@ -21,6 +21,7 @@ import java.io.FileOutputStream
 import scala.annotation.tailrec
 import scala.collection.mutable
 import com.twitter.logging.Logger
+import com.twitter.util.Duration
 
 /**
  * Pack one or more journal files into a single new file that only consists of the queue's current
@@ -29,7 +30,7 @@ import com.twitter.logging.Logger
 class JournalPacker(filenames: Seq[String], newFilename: String) {
   private val log = Logger.get
 
-  val journals = filenames.map { filename => new Journal(filename, false) }
+  val journals = filenames.map { filename => new Journal(filename, Duration.MaxValue) }
   val remover = journals.map { _.walk() }.iterator.flatten
   val adder = journals.map { _.walk() }.iterator.flatten
   val writer = new FileOutputStream(newFilename, false).getChannel
@@ -74,13 +75,18 @@ class JournalPacker(filenames: Seq[String], newFilename: String) {
         case JournalItem.Add(qitem) =>
         case JournalItem.Remove =>
           advanceAdder().get
-        case JournalItem.RemoveTentative =>
-          do {
-            currentXid += 1
-          } while (openTransactions contains currentXid)
+        case JournalItem.RemoveTentative(xid) =>
+          val xxid = if (xid == 0) {
+            do {
+              currentXid += 1
+            } while ((openTransactions contains currentXid) || (currentXid == 0))
+            currentXid
+          } else {
+            xid
+          }
           val qitem = advanceAdder().get
-          qitem.xid = currentXid
-          openTransactions(currentXid) = qitem
+          qitem.xid = xxid
+          openTransactions(xxid) = qitem
         case JournalItem.SavedXid(xid) =>
           currentXid = xid
         case JournalItem.Unremove(xid) =>
@@ -105,9 +111,9 @@ class JournalPacker(filenames: Seq[String], newFilename: String) {
     }
     val remaining = next()
 
-    val out = new Journal(newFilename, false)
+    val out = new Journal(newFilename, Duration.MaxValue)
     out.open()
-    out.dump(currentXid, openTransactions.values.toList, remaining)
+    out.dump(openTransactions.values.toList, remaining)
     out.close()
     out
   }

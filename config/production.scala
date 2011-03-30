@@ -18,9 +18,9 @@ new KestrelConfig {
   maxOpenTransactions = 100
 
   // default queue settings:
-  default.maxJournalSize = 16.megabytes
+  default.defaultJournalSize = 16.megabytes
   default.maxMemorySize = 128.megabytes
-  default.maxJournalOverflow = 10
+  default.maxJournalSize = 1.gigabyte
 
   admin.httpPort = 2223
 
