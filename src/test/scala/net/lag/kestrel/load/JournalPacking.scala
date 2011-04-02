@@ -82,7 +82,6 @@ object JournalPacking extends LoadTesting {
       producerThread = new Thread {
         override def run() = {
           val socket = SocketChannel.open(new InetSocketAddress("localhost", 22133))
-          val qName = "spam"
           put(socket, qName, totalItems, data, writeCounter)
         }
       }
@@ -96,7 +95,6 @@ object JournalPacking extends LoadTesting {
       consumerThread = new Thread {
         override def run() = {
           val socket = SocketChannel.open(new InetSocketAddress("localhost", 22133))
-          val qName = "spam"
           misses = get(socket, qName, totalItems, data, readCounter)
         }
       }
@@ -116,6 +114,7 @@ object JournalPacking extends LoadTesting {
     }
   }
 
+  var qName = "spam"
   var totalItems = 25000
   var kilobytes = 1
   var pause = 1
@@ -130,6 +129,8 @@ object JournalPacking extends LoadTesting {
     Console.println("    with pauses")
     Console.println()
     Console.println("options:")
+    Console.println("    -q NAME")
+    Console.println("        use named queue (default: %s)".format(qName))
     Console.println("    -n ITEMS")
     Console.println("        put ITEMS items into the queue (default: %d)".format(totalItems))
     Console.println("    -k KILOBYTES")
@@ -148,6 +149,9 @@ object JournalPacking extends LoadTesting {
     case "--help" :: xs =>
       usage()
       System.exit(0)
+    case "-q" :: x :: xs =>
+      qName = x
+      parseArgs(xs)
     case "-n" :: x :: xs =>
       totalItems = x.toInt
       parseArgs(xs)
