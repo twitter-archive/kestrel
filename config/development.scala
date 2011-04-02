@@ -56,6 +56,12 @@ new KestrelConfig {
   } :: new QueueBuilder {
     name = "hello"
     fanoutOnly = true
+  } :: new QueueBuilder {
+    name = "small"
+    maxSize = 128.megabytes
+    maxMemorySize = 16.megabytes
+    maxJournalSize = 128.megabytes
+    discardOldWhenFull = true
   }
 
   loggers = new LoggerConfig {
