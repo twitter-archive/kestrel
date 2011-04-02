@@ -146,7 +146,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       log.info("Rewriting journal file for '%s' (qsize=%d)", name, queueSize)
       journal.rewrite(openTransactionIds.map { openTransactions(_) }, queue)
     } else if (journal.size > config.maxMemorySize.inBytes) {
-      log.info("Rotating journal file for '%s'", name)
+      log.info("Rotating journal file for '%s' (qsize=%d)", name, queueSize)
       val setCheckpoint = (journal.size + journal.archivedSize > config.maxJournalSize.inBytes)
       journal.rotate(openTransactionIds.map { openTransactions(_) }, setCheckpoint)
     }

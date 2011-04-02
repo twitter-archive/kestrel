@@ -52,8 +52,20 @@ case class QueueConfig(
 
 class QueueBuilder extends Config[QueueConfig] {
   var name: String = null
+
+  /**
+   * Set a hard limit on the number of items this queue can hold. When the queue is full,
+   * `discardOldWhenFull` dictates the behavior when a client attempts to add another item.
+   */
   var maxItems: Int = Int.MaxValue
+
+  /**
+   * Set a hard limit on the number of bytes (of data in queued items) this queue can hold.
+   * When the queue is full, discardOldWhenFull dictates the behavior when a client attempts
+   * to add another item.
+   */
   var maxSize: StorageUnit = Long.MaxValue.bytes
+
   var maxItemSize: StorageUnit = Long.MaxValue.bytes
   var maxAge: Option[Duration] = None
 
@@ -74,7 +86,14 @@ class QueueBuilder extends Config[QueueConfig] {
    */
   var maxJournalSize: StorageUnit = 1.gigabyte
 
+  /**
+   * If this is false, when a queue is full, clients attempting to add another item will get an
+   * error. No new items will be accepted. If this is true, old items will be discarded to make
+   * room for the new one. This settting has no effect unless at least one of `maxItems` or
+   * `maxSize` is set.
+   */
   var discardOldWhenFull: Boolean = false
+
   var keepJournal: Boolean = true
   var syncJournal: Duration = Duration.MaxValue
   var expireToQueue: Option[String] = None
