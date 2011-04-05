@@ -7,6 +7,7 @@ class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) wit
   with gh.Issues
   with IdeaProject
   with PublishSourcesAndJavadocs
+  with PublishSite
 {
   val util = "com.twitter" % "util-core" % "1.8.1"
 
@@ -44,7 +45,7 @@ class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) wit
   def ghRepository = ("robey", "kestrel")
 
   // 100 times: 10,000 items of 1024 bytes each.
-  override def fork = forkRun
+//  override def fork = forkRun(List("-Xmx1024m", "-verbosegc", "-XX:+PrintGCDetails"))
   lazy val putMany = runTask(Some("net.lag.kestrel.load.PutMany"), testClasspath, "100", "10000", "1024").dependsOn(testCompile) describedAs "Run a load test."
   lazy val manyClients = runTask(Some("net.lag.kestrel.load.ManyClients"), testClasspath).dependsOn(testCompile)
 
