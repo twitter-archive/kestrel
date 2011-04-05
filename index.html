@@ -1,82 +1,204 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
-	"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 
-<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<html>
 <head>
-	<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
-
-	<title>robey/kestrel @ GitHub</title>
-	
-	<style type="text/css">
-		body {
-  		margin-top: 1.0em;
-  		background-color: #c0a9a6;
-		  font-family: "Helvetica,Arial,FreeSans"; 
-  		color: #000000;
-    }
-    #container {
-      margin: 0 auto;
-      width: 700px;
-    }
-		h1 { font-size: 3.8em; color: #3f5659; margin-bottom: 3px; }
-		h1 .small { font-size: 0.4em; }
-		h1 a { text-decoration: none }
-		h2 { font-size: 1.5em; color: #3f5659; }
-    h3 { text-align: center; color: #3f5659; }
-    a { color: #3f5659; }
-    .description { font-size: 1.2em; margin-bottom: 30px; margin-top: 30px; font-style: italic;}
-    .download { float: right; }
-		pre { background: #000; color: #fff; padding: 15px;}
-    hr { border: 0; width: 80%; border-bottom: 1px solid #aaa}
-    .footer { text-align:center; padding-top:30px; font-style: italic; }
-	</style>
-	
+<title>kestrel</title>
 </head>
-
 <body>
-  <a href="http://github.com/robey/kestrel"><img style="position: absolute; top: 0; right: 0; border: 0;" src="http://s3.amazonaws.com/github/ribbons/forkme_right_darkblue_121621.png" alt="Fork me on GitHub" /></a>
-  
-  <div id="container">
+<h1>README</h1>
+<h1>Kestrel</h1>
 
-    <div class="download">
-      <a href="http://github.com/robey/kestrel/zipball/master">
-        <img border="0" width="90" src="http://github.com/images/modules/download/zip.png"></a>
-      <a href="http://github.com/robey/kestrel/tarball/master">
-        <img border="0" width="90" src="http://github.com/images/modules/download/tar.png"></a>
-    </div>
-      
-    <h1><a href="http://github.com/robey/kestrel">kestrel</a> 
-      <span class="small">by <a href="http://github.com/robey">robey</a></span></h1>
+<p>Kestrel is based on Blaine Cook's "starling" simple, distributed message
+queue, with added features and bulletproofing, as well as the scalability
+offered by actors and the JVM.</p>
 
-    <div class="description">
-      tiny queue system, in scala
-    </div>
+<p>Each server handles a set of reliable, ordered message queues. When you put a
+cluster of these servers together, <em>with no cross communication</em>, and pick a
+server at random whenever you do a <code>set</code> or <code>get</code>, you end up with a reliable,
+<em>loosely ordered</em> message queue.</p>
 
-    <h2>License</h2>
-<p>Apache 2</p>
-<h2>Authors</h2>
-<p>Blair Zajac (blair@orcaware.com)<br/>Frederic Jean (frederic.jean@sun.com)<br/>Robey Pointer (robey@twitter.com)<br/>Steve Jenson (stevej@twitter.com)<br/><br/>      </p>
-<h2>Contact</h2>
-<p>Robey Pointer (robey@twitter.com)<br/>      </p>
+<p>In many situations, loose ordering is sufficient. Dropping the requirement on
+cross communication makes it horizontally scale to infinity and beyond: no
+multicast, no clustering, no "elections", no coordination at all. No talking!
+Shhh!</p>
+
+<p>For more information about what it is and how to use it, check out
+the included <a href="docs/guide.md">guide</a>.</p>
+
+<p>Kestrel has a mailing list here: <a href="&#109;&#97;&#105;&#108;to&#58;&#107;&#x65;&#115;&#x74;&#114;&#101;&#x6c;-&#x74;&#x61;&#x6c;&#x6b;@&#103;&#x6f;&#x6f;&#103;&#x6c;&#101;&#x67;&#x72;&#x6f;&#x75;&#x70;&#x73;&#46;&#x63;&#x6f;m">&#107;&#x65;&#115;&#x74;&#114;e&#x6c;&#x2d;ta&#x6c;&#107;&#x40;&#103;&#x6f;&#111;&#x67;&#108;&#101;&#103;r&#x6f;u&#x70;&#115;&#x2e;&#x63;&#111;&#x6d;</a>
+http://groups.google.com/group/kestrel-talk</p>
+
+<h2>Features</h2>
+
+<p>Kestrel is:</p>
+
+<ul>
+<li><p>fast</p>
+
+<p>It runs on the JVM so it can take advantage of the hard work people have
+put into java performance.</p></li>
+<li><p>small</p>
+
+<p>Currently about 2K lines of scala (including comments), because it relies
+on Apache Mina (a rough equivalent of Danger's ziggurat or Ruby's
+EventMachine) and actors -- and frankly because Scala is extremely
+expressive.</p></li>
+<li><p>durable</p>
+
+<p>Queues are stored in memory for speed, but logged into a journal on disk
+so that servers can be shutdown or moved without losing any data.</p></li>
+<li><p>reliable</p>
+
+<p>A client can ask to "tentatively" fetch an item from a queue, and if that
+client disconnects from kestrel before confirming ownership of the item,
+the item is handed to another client. In this way, crashing clients don't
+cause lost messages.</p></li>
+</ul>
+
+<h2>Anti-Features</h2>
+
+<p>Kestrel is not:</p>
+
+<ul>
+<li><p>strongly ordered</p>
+
+<p>While each queue is strongly ordered on each machine, a cluster will
+appear "loosely ordered" because clients pick a machine at random for
+each operation. The end result should be "mostly fair".</p></li>
+<li><p>transactional</p>
+
+<p>This is not a database. Item ownership is transferred with acknowledgement,
+but kestrel does not support grouping multiple operations into an atomic
+unit.</p></li>
+</ul>
+
+<h2>Building it</h2>
+
+<p>Kestrel requires java 6 and sbt 0.7.4. On OS X 10.5, you may have to hard-code
+an annoying <code>JAVA_HOME</code> to use java 6:</p>
+
+<pre><code>$ export JAVA_HOME=/System/Library/Frameworks/JavaVM.framework/Versions/1.6/Home
+</code></pre>
+
+<p>Building from source is easy:</p>
+
+<pre><code>$ sbt clean update package-dist
+</code></pre>
+
+<p>Scala libraries and dependencies will be downloaded from maven repositories
+the first time you do a build. The finished distribution will be in <code>dist</code>.</p>
+
+<h2>Running it</h2>
+
+<p>You can run kestrel by hand via:</p>
+
+<pre><code>$ java -jar ./dist/kestrel-VERSION/kestrel-VERSION.jar
+</code></pre>
+
+<p>To run in development mode (using <code>development.conf</code> instead of
+<code>production.conf</code>), add a <code>stage</code> variable:</p>
+
+<pre><code>$ java -Dstage=development -jar ./dist/kestrel-VERSION/kestrel-VERSION.jar
+</code></pre>
+
+<p>When running it as a server, a startup script is provided in
+<code>dist/kestrel-VERSION/scripts/kestrel.sh</code>. The script assumes you have
+<code>daemon</code>, a standard daemonizer for Linux, but also available
+<a href="http://libslack.org/daemon/">here</a> for all common unix platforms.</p>
+
+<p>The created archive <code>kestrel-VERSION.tar.bz2</code> can be expanded into a place
+like <code>/usr/local</code> (or wherever you like) and executed within its own folder as
+a self-contained package. All dependent jars are included, and the startup
+script loads things from relative paths.</p>
+
+<p>The default configuration puts logfiles into <code>/var/log/kestrel/</code> and queue
+journal files into <code>/var/spool/kestrel/</code>.</p>
+
+<p>The startup script logs extensive GC information to a file named <code>stdout</code> in
+the log folder. If kestrel has problems starting up (before it can initialize
+logging), it will usually appear in <code>error</code> in the same folder.</p>
+
+<h2>Configuration</h2>
+
+<p>((------FIXME------))</p>
+
+<p>Queue configuration is described in detail in <code>docs/guide.md</code> (an operational
+guide). There are a few global config options that should be self-explanatory:</p>
+
+<ul>
+<li><p><code>host</code></p>
+
+<p>Host to accept connections on.</p></li>
+<li><p><code>port</code></p>
+
+<p>Port to listen on. 22133 is the standard.</p></li>
+<li><p><code>timeout</code></p>
+
+<p>Seconds after which an idle client is disconnected, or 0 to have no idle
+timeout.</p></li>
+<li><p><code>queue_path</code></p>
+
+<p>The folder to store queue journal files in. Each queue (and each client of
+a fanout queue) gets its own file here.</p></li>
+<li><p><code>log</code></p>
+
+<p>Logfile configuration, as described in configgy.</p></li>
+<li><p><code>expiration_timer_frequency_seconds</code></p>
+
+<p>Frequency (in seconds) that a timer thread should scan active queues for
+expired items. By default, this is off (0) and no automatic expiration
+scanning happens; instead, items expire when a client does a <code>SET</code> or <code>GET</code>
+on a queue. When this is set, a background thread will periodically flush
+expired items from the head of every queue.</p></li>
+</ul>
+
+<h2>Performance</h2>
+
+<p>((------FIXME------))</p>
+
+<p>All of the below timings are on my 2GHz 2006-model macbook pro.</p>
+
+<p>Since starling uses eventmachine in a single-thread single-process form, it
+has similar results for all access types (and will never use more than one
+core).</p>
+
+<pre><code>=========  =================  ==========
+# Clients  Pushes per client  Total time
+=========  =================  ==========
+        1             10,000        3.8s
+       10              1,000        2.9s
+      100                100        3.1s
+=========  =================  ==========
+</code></pre>
+
+<p>Kestrel uses N+1 I/O processor threads (where N = the number of available CPU
+cores), and a pool of worker threads for handling actor events. Therefore it
+handles more poorly for small numbers of heavy-use clients, and better for
+large numbers of clients.</p>
+
+<pre><code>=========  =================  ==========
+# Clients  Pushes per client  Total time
+=========  =================  ==========
+        1             10,000        3.8s
+       10              1,000        2.4s
+      100                100        1.6s
+=========  =================  ==========
+</code></pre>
+
+<p>A single-threaded set of 5 million puts gives a fair idea of throughput
+distribution, this time on a 2.5GHz 2008-model macbook pro:</p>
+
+<pre><code>$ ant -f tests.xml put-many-1 -Ditems=5000000
+[java] Finished in 1137250 msec (227.5 usec/put throughput).
+[java] Transactions: min=106.00; max=108581.00 91335.00 60721.00; median=153.00; average=201.14 usec
+[java] Transactions distribution: 5.00%=129.00 10.00%=134.00 25.00%=140.00 50.00%=153.00 75.00%=177.00 90.00%=251.00 95.00%=345.00 99.00%=586.00 99.90%=5541.00 99.99%=26910.00
+</code></pre>
+
+<p>This works out to about 3.23MB/sec (over loopback) and about 4400 puts/sec.</p>
+
+<p>Robey Pointer &lt;<a href="&#109;&#x61;&#105;&#108;&#116;&#x6f;&#58;&#114;&#x6f;&#98;&#101;&#x79;&#x70;&#x6f;&#x69;&#110;&#x74;&#x65;&#x72;&#64;&#x67;&#109;&#97;&#105;&#108;&#46;&#99;&#111;&#109;">&#x72;&#x6f;&#98;&#x65;&#x79;&#112;o&#105;n&#x74;&#101;&#114;&#64;&#103;&#109;&#x61;&#x69;&#x6c;&#46;c&#x6f;&#x6d;</a>></p>
 
 
-    <h2>Download</h2>
-    <p>
-      You can download this project in either
-      <a href="http://github.com/robey/kestrel/zipball/master">zip</a> or
-      <a href="http://github.com/robey/kestrel/tarball/master">tar</a> formats.
-    </p>
-    <p>You can also clone the project with <a href="http://git-scm.com">Git</a>
-      by running:
-      <pre>$ git clone git://github.com/robey/kestrel</pre>
-    </p>
-      
-    <div class="footer">
-      get the source code on GitHub : <a href="http://github.com/robey/kestrel">robey/kestrel</a>
-    </div>
-    
-  </div>
-
-  
+<h1>DOC</h1>
+<a href="doc/main/api/index.html">ScalaDoc</a>
 </body>
 </html>
