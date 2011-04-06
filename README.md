@@ -32,7 +32,7 @@ Kestrel is:
 
   It runs on the JVM so it can take advantage of the hard work people have
   put into java performance.
-  
+
 - small
 
   Currently about 2K lines of scala (including comments), because it relies
@@ -67,16 +67,15 @@ Kestrel is not:
 - transactional
 
   This is not a database. Item ownership is transferred with acknowledgement,
-  but kestrel does not support multiple outstanding operations, and treats
-  each enqueued item as an atomic unit.
+  but kestrel does not support grouping multiple operations into an atomic
+  unit.
 
 
 Building it
 -----------
 
-Kestrel requires java 6 (for JMX support) and ant 1.7. If you see an error
-about missing JMX classes, it usually means you're building with java 5. On a
-mac, you may have to hard-code an annoying `JAVA_HOME` to use java 6:
+Kestrel requires java 6 and sbt 0.7.4. On OS X 10.5, you may have to hard-code
+an annoying `JAVA_HOME` to use java 6:
 
     $ export JAVA_HOME=/System/Library/Frameworks/JavaVM.framework/Versions/1.6/Home
 
@@ -122,41 +121,14 @@ Configuration
 -------------
 
 Queue configuration is described in detail in `docs/guide.md` (an operational
-guide). There are a few global config options that should be self-explanatory:
-
-- `host`
-
-  Host to accept connections on.
-
-- `port`
-
-  Port to listen on. 22133 is the standard.
-
-- `timeout`
-
-  Seconds after which an idle client is disconnected, or 0 to have no idle
-  timeout.
-
-- `queue_path`
-
-  The folder to store queue journal files in. Each queue (and each client of
-  a fanout queue) gets its own file here.
-
-- `log`
-
-  Logfile configuration, as described in configgy.
-
-- `expiration_timer_frequency_seconds`
-
-  Frequency (in seconds) that a timer thread should scan active queues for
-  expired items. By default, this is off (0) and no automatic expiration
-  scanning happens; instead, items expire when a client does a `SET` or `GET`
-  on a queue. When this is set, a background thread will periodically flush
-  expired items from the head of every queue.
+guide). Scala docs for the config variables are here:
+http://robey.github.com/kestrel/doc/main/api/net/lag/kestrel/config/KestrelConfig.html
 
 
 Performance
 -----------
+
+((------FIXME------))
 
 All of the below timings are on my 2GHz 2006-model macbook pro.
 

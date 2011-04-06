@@ -51,6 +51,9 @@ case class QueueConfig(
 }
 
 class QueueBuilder extends Config[QueueConfig] {
+  /**
+   * Name of the queue being configured.
+   */
   var name: String = null
 
   /**
@@ -66,7 +69,18 @@ class QueueBuilder extends Config[QueueConfig] {
    */
   var maxSize: StorageUnit = Long.MaxValue.bytes
 
+  /**
+   * Set a hard limit on the number of bytes a single queued item can contain.
+   * An add request for an item larger than this will be rejected.
+   */
   var maxItemSize: StorageUnit = Long.MaxValue.bytes
+
+  /**
+   * Expiration time for items on this queue. Any item that has been sitting on the queue longer
+   * than this duration will be discarded. Clients may also attach an expiration time when adding
+   * items to a queue, but if the expiration time is longer than `maxAge`, `max_Age` will be
+   * used instead.
+   */
   var maxAge: Option[Duration] = None
 
   /**
@@ -76,7 +90,8 @@ class QueueBuilder extends Config[QueueConfig] {
 
   /**
    * Keep only this much of the queue in memory. The journal will be used to store backlogged
-   * items.
+   * items, and they'll be read back into memory as the queue is drained. This setting is a release
+   * valve to keep a backed-up queue from consuming all memory.
    */
   var maxMemorySize: StorageUnit = 128.megabytes
 
@@ -94,10 +109,35 @@ class QueueBuilder extends Config[QueueConfig] {
    */
   var discardOldWhenFull: Boolean = false
 
+  /**
+   * If false, don't keep a journal file for this queue. When kestrel exits, any remaining contents
+   * in the queue will be lost.
+   */
   var keepJournal: Boolean = true
+
+  /**
+   * How often to sync the journal file. To sync after every write, set this to `0.milliseconds`.
+   * To never sync, set it to `Duration.MaxValue`. Syncing the journal will reduce the maximum
+   * throughput of the server in exchange for a lower chance of losing data.
+   */
   var syncJournal: Duration = Duration.MaxValue
+
+  /**
+   * Name of a queue to add expired items to. If set, expired items are added to the requested
+   * queue as if by a `SET` command. This can be used to implement special processing for expired
+   * items, or to implement a simple "delayed processing" queue.
+   */
   var expireToQueue: Option[String] = None
+
+  /**
+   * Maximum number of expired items to move into the `expireToQueue` at once.
+   */
   var maxExpireSweep: Int = Int.MaxValue
+
+  /**
+   * If true, don't actually store any items in this queue. Only deliver them to fanout client
+   * queues.
+   */
   var fanoutOnly: Boolean = false
 
   def apply() = {
@@ -113,7 +153,7 @@ object Protocol {
   case object Binary extends Protocol
 }
 
-trait KestrelConfig extends Config[RuntimeEnvironment => Kestrel] {
+trait KestrelConfig extends ServerConfig[Kestrel] {
   /**
    * Settings for a queue that isn't explicitly listed in `queues`.
    */
@@ -124,10 +164,13 @@ trait KestrelConfig extends Config[RuntimeEnvironment => Kestrel] {
    */
   var queues: List[QueueBuilder] = Nil
 
+  /**
+   * Address to listen for client connections. By default, accept from any interface.
+   */
   var listenAddress: String = "0.0.0.0"
 
   /**
-   * Port for accepting memcache protocol connections.
+   * Port for accepting memcache protocol connections. 22133 is the standard port.
    */
   var memcacheListenPort: Option[Int] = Some(22133)
 
@@ -137,7 +180,7 @@ trait KestrelConfig extends Config[RuntimeEnvironment => Kestrel] {
   var textListenPort: Option[Int] = Some(2222)
 
   /**
-   * Where queue journals should be stored.
+   * Where queue journals should be stored. Each queue will have its own files in this folder.
    */
   var queuePath: String = "/tmp"
 
@@ -164,17 +207,7 @@ trait KestrelConfig extends Config[RuntimeEnvironment => Kestrel] {
    */
   var maxOpenTransactions: Int = 1
 
-  /**
-   * Admin service configuration (optional).
-   */
-  val admin = new AdminServiceConfig()
-
-  /**
-   * Logging config (optional).
-   */
-  var loggers: List[LoggerConfig] = Nil
-
-  def apply() = { (runtime: RuntimeEnvironment) =>
+  def apply(runtime: RuntimeEnvironment) = {
     Logger.configure(loggers)
     admin()(runtime)
     val kestrel = new Kestrel(default(), queues, listenAddress, memcacheListenPort, textListenPort,

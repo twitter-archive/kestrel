@@ -6,6 +6,10 @@ import com.twitter.conversions.time._
 import com.twitter.util._
 import java.io.{IOException, FileOutputStream, File}
 
+/**
+ * Open a file for writing, and fsync it on a schedule. The period may be 0 to force an fsync
+ * after every write, or `Duration.MaxValue` to never fsync.
+ */
 class PeriodicSyncFile(file: File, timer: Timer, period: Duration) {
   val writer = new FileOutputStream(file, true).getChannel
   val promises = new ConcurrentLinkedQueue[Promise[Unit]]()
