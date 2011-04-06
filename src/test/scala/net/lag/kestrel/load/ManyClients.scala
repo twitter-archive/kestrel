@@ -29,9 +29,6 @@ import com.twitter.conversions.string._
  * some typical production environments.
  */
 object ManyClients {
-  private val SLEEP = System.getProperty("sleep", "100").toInt
-  private val COUNT = System.getProperty("count", "100").toInt
-
   private val LYRIC =
 "crossed off, but never forgotten\n" +
 "misplaced, but never losing hold\n" +
@@ -62,7 +59,7 @@ object ManyClients {
   private val got = new AtomicInteger(0)
 
 
-  def put(socket: SocketChannel, queueName: String, n: Int) = {
+  def put(sleep: Int, socket: SocketChannel, queueName: String, n: Int) = {
     val spam = ByteBuffer.wrap(("set " + queueName + " 0 0 " + LYRIC.length + "\r\n" + LYRIC + "\r\n").getBytes)
     val buffer = ByteBuffer.allocate(8)
     for (i <- 0 until n) {
@@ -79,18 +76,18 @@ object ManyClients {
         // the "!" is important.
         throw new Exception("Unexpected response at " + i + "!")
       }
-      if (SLEEP > 0) Thread.sleep(SLEEP)
+      if (sleep > 0) Thread.sleep(sleep)
     }
   }
 
-  def getStuff(socket: SocketChannel, queueName: String) = {
+  def getStuff(count: Int, socket: SocketChannel, queueName: String) = {
     val req = ByteBuffer.wrap(("get " + queueName + "/t=1000\r\n").getBytes)
     val expectEnd = ByteBuffer.wrap("END\r\n".getBytes)
     val expectLyric = ByteBuffer.wrap(("VALUE " + queueName + " 0 " + LYRIC.length + "\r\n" + LYRIC + "\r\nEND\r\n").getBytes)
     val buffer = ByteBuffer.allocate(expectLyric.capacity)
     expectLyric.rewind
 
-    while (got.get < COUNT) {
+    while (got.get < count) {
       req.rewind
       while (req.position < req.limit) {
         socket.write(req)
@@ -122,15 +119,45 @@ object ManyClients {
     }
   }
 
-  def main(args: Array[String]) = {
-    if (args.length > 0) {
-      Console.println("usage: many-clients")
-      Console.println("    spin up N clients and have them do timeout reads on a queue while a")
-      Console.println("    single producer trickles out.")
-      System.exit(1)
-    }
+  var sleep = 100
+  var count = 100
+  var clientCount = 100
 
-    val clientCount = System.getProperty("clients", "100").toInt
+  def usage() {
+    Console.println("usage: many-clients [options]")
+    Console.println("    spin up N clients and have them do timeout reads on a queue while a")
+    Console.println("    single producer trickles out.")
+    Console.println()
+    Console.println("options:")
+    Console.println("    -s MILLESCONDS")
+    Console.println("        sleep MILLISECONDS between puts (default: %d)".format(sleep))
+    Console.println("    -n ITEMS")
+    Console.println("        put ITEMS total items into the queue (default: %d)".format(count))
+    Console.println("    -c CLIENTS")
+    Console.println("        use CLIENTS consumers (default: %d)".format(clientCount))
+  }
+
+  def parseArgs(args: List[String]): Unit = args match {
+    case Nil =>
+    case "--help" :: xs =>
+      usage()
+      System.exit(0)
+    case "-s" :: x :: xs =>
+      sleep = x.toInt
+      parseArgs(xs)
+    case "-n" :: x :: xs =>
+      count = x.toInt
+      parseArgs(xs)
+    case "-c" :: x :: xs =>
+      clientCount = x.toInt
+      parseArgs(xs)
+    case _ =>
+      usage()
+      System.exit(1)
+  }
+
+  def main(args: Array[String]) = {
+    parseArgs(args.toList)
 
     var threadList: List[Thread] = Nil
     val startTime = System.currentTimeMillis
@@ -139,7 +166,7 @@ object ManyClients {
       val t = new Thread {
         override def run = {
           val socket = SocketChannel.open(new InetSocketAddress("localhost", 22133))
-          getStuff(socket, "spam")
+          getStuff(count, socket, "spam")
         }
       }
       threadList = t :: threadList
@@ -148,7 +175,7 @@ object ManyClients {
     val t = new Thread {
       override def run = {
         val socket = SocketChannel.open(new InetSocketAddress("localhost", 22133))
-        put(socket, "spam", COUNT)
+        put(sleep, socket, "spam", count)
       }
     }
     threadList = t :: threadList

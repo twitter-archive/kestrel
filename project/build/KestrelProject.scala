@@ -49,15 +49,17 @@ class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) wit
 
   lazy val putMany = task { args =>
     runTask(Some("net.lag.kestrel.load.PutMany"), testClasspath, args).dependsOn(testCompile)
-  } describedAs "Run a load test."
+  } describedAs "Run a load test on PUT."
 
-  lazy val manyClients = runTask(Some("net.lag.kestrel.load.ManyClients"), testClasspath).dependsOn(testCompile)
+  lazy val manyClients = task { args =>
+    runTask(Some("net.lag.kestrel.load.ManyClients"), testClasspath, args).dependsOn(testCompile)
+  } describedAs "Run a load test on many slow clients."
 
   lazy val flood = task { args =>
     runTask(Some("net.lag.kestrel.load.Flood"), testClasspath, args).dependsOn(testCompile)
-  }
+  } describedAs "Run a load test on a flood of PUT/GET."
 
   lazy val packing = task { args =>
     runTask(Some("net.lag.kestrel.load.JournalPacking"), testClasspath, args).dependsOn(testCompile)
-  }
+  } describedAs "Run a load test on journal packing."
 }

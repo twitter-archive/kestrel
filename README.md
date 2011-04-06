@@ -164,6 +164,36 @@ A sample run on a 2010 MacBook Pro:
       99.00%=59133.00 99.90%=208001.00 99.99%=505030.00
     [info] == put-many ==
 
+## Many-clients
+
+This test has one producer that trickles out one item at a time, and a pile of
+consumers fighting for each item. It usually takes exactly as long as the
+number of items times the delay, but is useful as a validation test to make
+sure kestrel works as advertised without blowing up.
+
+    $ sbt "many-clients --help"
+    usage: many-clients [options]
+        spin up N clients and have them do timeout reads on a queue while a
+        single producer trickles out.
+
+    options:
+        -s MILLESCONDS
+            sleep MILLISECONDS between puts (default: 100)
+        -n ITEMS
+            put ITEMS total items into the queue (default: 100)
+        -c CLIENTS
+            use CLIENTS consumers (default: 100)
+
+A sample run on a 2010 MacBook Pro:
+
+    [info] == many-clients ==
+    [info] Running net.lag.kestrel.load.ManyClients
+    Finished in 11104 msec.
+    [info] == many-clients ==
+
+
+
+
 
 ((------FIXME------))
 
