@@ -22,6 +22,8 @@ the included [guide](docs/guide.md).
 Kestrel has a mailing list here: <kestrel-talk@googlegroups.com>
 http://groups.google.com/group/kestrel-talk
 
+Author's address: Robey Pointer <<robeypointer@gmail.com>>
+
 
 Features
 --------
@@ -191,48 +193,148 @@ A sample run on a 2010 MacBook Pro:
     Finished in 11104 msec.
     [info] == many-clients ==
 
+## Flood
 
+This test starts up one producer and one consumer, and just floods items
+through kestrel as fast as it can.
 
+    $ sbt "flood --help"
+    usage: flood [options]
+        spin up a producer and consumer and flood N items through kestrel
 
+    options:
+        -n ITEMS
+            put ITEMS items into the queue (default: 10000)
+        -k KILOBYTES
+            put KILOBYTES per queue item (default: 1)
 
-((------FIXME------))
+A sample run on a 2010 MacBook Pro:
 
-All of the below timings are on my 2GHz 2006-model macbook pro.
+    [info] == flood ==
+    [info] Running net.lag.kestrel.load.Flood -n 100000
+    flood: 100000 items of 1kB
+    Finished in 16834 msec (168.3 usec/put throughput).
+    Consumer spun 1 times in misses.
 
-Since starling uses eventmachine in a single-thread single-process form, it
-has similar results for all access types (and will never use more than one
-core).
+## Packing
 
-    =========  =================  ==========
-    # Clients  Pushes per client  Total time
-    =========  =================  ==========
-            1             10,000        3.8s
-           10              1,000        2.9s
-          100                100        3.1s
-    =========  =================  ==========
+This test starts up one producer and one consumer, seeds the queue with a
+bunch of items to cause it to fall behind, then does cycles of flooding items
+through the queue, separated by pauses. It's meant to test kestrel's behavior
+with a queue that's fallen behind and *stays* behind indefinitely, to make
+sure the journal files are packed periodically without affecting performance
+too badly.
 
-Kestrel uses N+1 I/O processor threads (where N = the number of available CPU
-cores), and a pool of worker threads for handling actor events. Therefore it
-handles more poorly for small numbers of heavy-use clients, and better for
-large numbers of clients.
+    $ sbt "packing --help"
+    usage: packing [options]
+        spin up a producer and consumer, write N items, then do read/write cycles
+        with pauses
 
-    =========  =================  ==========
-    # Clients  Pushes per client  Total time
-    =========  =================  ==========
-            1             10,000        3.8s
-           10              1,000        2.4s
-          100                100        1.6s
-    =========  =================  ==========
+    options:
+        -q NAME
+            use named queue (default: spam)
+        -n ITEMS
+            put ITEMS items into the queue (default: 25000)
+        -k KILOBYTES
+            put KILOBYTES per queue item (default: 1)
+        -t SECONDS
+            pause SECONDS between cycles (default: 1)
+        -c CYCLES
+            do read/writes CYCLES times (default: 100)
+        -x
+            use transactions when fetching
 
-A single-threaded set of 5 million puts gives a fair idea of throughput
-distribution, this time on a 2.5GHz 2008-model macbook pro:
+A sample run on a 2010 MacBook Pro:
 
-    $ ant -f tests.xml put-many-1 -Ditems=5000000
-    [java] Finished in 1137250 msec (227.5 usec/put throughput).
-    [java] Transactions: min=106.00; max=108581.00 91335.00 60721.00; median=153.00; average=201.14 usec
-    [java] Transactions distribution: 5.00%=129.00 10.00%=134.00 25.00%=140.00 50.00%=153.00 75.00%=177.00 90.00%=251.00 95.00%=345.00 99.00%=586.00 99.90%=5541.00 99.99%=26910.00
+    [info] == packing ==
+    [info] Running net.lag.kestrel.load.JournalPacking -c 10 -q small
+    packing: 25000 items of 1kB with 1 second pauses
+    Wrote 25000 items starting at 0.
+    cycle: 1
+    Wrote 25000 items starting at 25000.
+    Read 25000 items in 5402 msec. Consumer spun 0 times in misses.
+    cycle: 2
+    Wrote 25000 items starting at 50000.
+    Read 25000 items in 5395 msec. Consumer spun 0 times in misses.
+    cycle: 3
+    Wrote 25000 items starting at 75000.
+    Read 25000 items in 4584 msec. Consumer spun 0 times in misses.
+    cycle: 4
+    Wrote 25000 items starting at 100000.
+    Read 25000 items in 4455 msec. Consumer spun 0 times in misses.
+    cycle: 5
+    Wrote 25000 items starting at 125000.
+    Read 25000 items in 4742 msec. Consumer spun 0 times in misses.
+    cycle: 6
+    Wrote 25000 items starting at 150000.
+    Read 25000 items in 4468 msec. Consumer spun 0 times in misses.
+    cycle: 7
+    Wrote 25000 items starting at 175000.
+    Read 25000 items in 5127 msec. Consumer spun 0 times in misses.
+    cycle: 8
+    Wrote 25000 items starting at 200000.
+    Read 25000 items in 4357 msec. Consumer spun 0 times in misses.
+    cycle: 9
+    Wrote 25000 items starting at 225000.
+    Read 25000 items in 4500 msec. Consumer spun 0 times in misses.
+    cycle: 10
+    Wrote 25000 items starting at 250000.
+    Read 25000 items in 4558 msec. Consumer spun 0 times in misses.
+    Read 25000 items in 3141 msec. Consumer spun 0 times in misses.
+    [info] == packing ==
 
-This works out to about 3.23MB/sec (over loopback) and about 4400 puts/sec.
+You can see the journals being packed in the kestrel log:
 
+    INF [20110405-20:36:57.420] kestrel: Setting up queue small: maxItems=2147483647 maxSize=134217728.bytes maxItemSize=922
+    3372036854775807.bytes maxAge=None defaultJournalSize=16777216.bytes maxMemorySize=16777216.bytes maxJournalSize=1342177
+    28.bytes discardOldWhenFull=true keepJournal=true syncJournal=never expireToQueue=None maxExpireSweep=2147483647 fanoutO
+    nly=false
+    INF [20110405-20:36:57.421] kestrel: Replaying transaction journal for 'small'
+    INF [20110405-20:36:57.422] kestrel: No transaction journal for 'small'; starting with empty queue.
+    INF [20110405-20:36:57.422] kestrel: Finished transaction journal for 'small' (0 items, 0 bytes) xid=0
+    INF [20110405-20:36:59.779] kestrel: Rotating journal file for 'small' (qsize=16440320)
+    INF [20110405-20:36:59.852] kestrel: Dropping to read-behind for queue 'small' (16.0 MiB)
+    INF [20110405-20:37:02.032] kestrel: Rotating journal file for 'small' (qsize=29139968)
+    INF [20110405-20:37:04.583] kestrel: Rotating journal file for 'small' (qsize=35066880)
+    INF [20110405-20:37:05.005] kestrel: Read-behind on 'small' moving from file small.1302061022051 to small.1302061024673
+    INF [20110405-20:37:08.547] kestrel: Read-behind on 'small' moving from file small.1302061024673 to small
+    INF [20110405-20:37:09.553] kestrel: Rotating journal file for 'small' (qsize=27975680)
+    INF [20110405-20:37:12.412] kestrel: Read-behind on 'small' moving from file small.1302061029571 to small
+    INF [20110405-20:37:14.511] kestrel: Rotating journal file for 'small' (qsize=26700800)
+    INF [20110405-20:37:16.384] kestrel: Read-behind on 'small' moving from file small.1302061034588 to small
+    INF [20110405-20:37:17.122] kestrel: Rotating journal file for 'small' (qsize=29371392)
+    INF [20110405-20:37:20.164] kestrel: Read-behind on 'small' moving from file small.1302061037149 to small
+    INF [20110405-20:37:21.410] kestrel: Rotating journal file for 'small' (qsize=26664960)
+    INF [20110405-20:37:23.113] kestrel: Read-behind on 'small' moving from file small.1302061041427 to small
+    INF [20110405-20:37:25.302] kestrel: Rotating journal file for 'small' (qsize=26168320)
+    INF [20110405-20:37:27.118] kestrel: Read-behind on 'small' moving from file small.1302061045321 to small
+    INF [20110405-20:37:27.119] kestrel: Rewriting journal file from checkpoint for 'small' (qsize=27889664)
+    INF [20110405-20:37:27.129] kestrel: Packing journals for 'small': small.1302061019805, small.1302061022051, small.13020
+    61024673, small.1302061029571, small.1302061034588, small.1302061037149, small.1302061041427, small.1302061045321
+    INF [20110405-20:37:27.635] kestrel: Packing 'small' -- erasing old files.
+    INF [20110405-20:37:27.646] kestrel: Packing 'small' done: small.1302061045321, small
+    INF [20110405-20:37:28.115] kestrel: Rotating journal file for 'small' (qsize=28761088)
+    INF [20110405-20:37:31.108] kestrel: Read-behind on 'small' moving from file small.1302061048143 to small
+    INF [20110405-20:37:32.202] kestrel: Rotating journal file for 'small' (qsize=27242496)
+    INF [20110405-20:37:34.048] kestrel: Read-behind on 'small' moving from file small.1302061052221 to small
+    INF [20110405-20:37:36.255] kestrel: Rotating journal file for 'small' (qsize=25759744)
+    INF [20110405-20:37:38.433] kestrel: Read-behind on 'small' moving from file small.1302061056360 to small
+    INF [20110405-20:37:39.550] kestrel: Rotating journal file for 'small' (qsize=27325440)
+    INF [20110405-20:37:42.266] kestrel: Read-behind on 'small' moving from file small.1302061059646 to small
+    INF [20110405-20:37:43.464] kestrel: Rotating journal file for 'small' (qsize=26256384)
+    INF [20110405-20:37:45.110] kestrel: Read-behind on 'small' moving from file small.1302061063469 to small
+    INF [20110405-20:37:46.110] kestrel: Rotating journal file for 'small' (qsize=27487232)
+    INF [20110405-20:37:48.928] kestrel: Read-behind on 'small' moving from file small.1302061066128 to small
+    INF [20110405-20:37:49.875] kestrel: Rotating journal file for 'small' (qsize=28101632)
+    INF [20110405-20:37:51.801] kestrel: Read-behind on 'small' moving from file small.1302061069893 to small
+    INF [20110405-20:37:51.801] kestrel: Rewriting journal file from checkpoint for 'small' (qsize=26379264)
+    INF [20110405-20:37:51.804] kestrel: Packing journals for 'small': small.1302061045321, small.1302061048143, small.13020
+    61052221, small.1302061056360, small.1302061059646, small.1302061063469, small.1302061066128, small.1302061069893
+    INF [20110405-20:37:52.237] kestrel: Packing 'small' -- erasing old files.
+    INF [20110405-20:37:52.246] kestrel: Packing 'small' done: small.1302061069893, small
+    INF [20110405-20:37:54.012] kestrel: Rotating journal file for 'small' (qsize=26510336)
+    INF [20110405-20:37:55.808] kestrel: Read-behind on 'small' moving from file small.1302061074039 to small
+    INF [20110405-20:37:56.594] kestrel: Rotating journal file for 'small' (qsize=29006848)
+    INF [20110405-20:37:59.363] kestrel: Read-behind on 'small' moving from file small.1302061076614 to small
+    INF [20110405-20:37:59.731] kestrel: Coming out of read-behind for queue 'small'
 
-Robey Pointer <<robeypointer@gmail.com>>
