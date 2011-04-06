@@ -128,6 +128,43 @@ http://robey.github.com/kestrel/doc/main/api/net/lag/kestrel/config/KestrelConfi
 Performance
 -----------
 
+Several performance tests are included. To run them, first start up a kestrel instance
+locally.
+
+    $ sbt clean update package-dist
+    $ VERSION="2.1.0-SNAPSHOT"
+    $ java -server -Xmx1024m -Dstage=development -jar ./dist/kestrel-$VERSION/kestrel-$VERSION.jar
+
+## Put-many
+
+This test just spams a kestrel server with "put" operations, to see how
+quickly it can absorb and journal them.
+
+    $ sbt "put-many --help"
+    usage: put-many [options]
+        spam items into kestrel
+
+    options:
+        -c CLIENTS
+            use CLIENTS concurrent clients (default: 100)
+        -n ITEMS
+            put ITEMS items into the queue (default: 10000)
+        -b BYTES
+            put BYTES per queue item (default: 1024)
+
+A sample run on a 2010 MacBook Pro:
+
+    [info] == put-many ==
+    [info] Running net.lag.kestrel.load.PutMany -n 1000000
+    Finished in 64921 msec (64.9 usec/put throughput).
+    Transactions: min=95.00; max=528107.00 524847.00 521780.00;
+      median=3433.00; average=5551.77 usec
+    Transactions distribution: 5.00%=810.00 10.00%=1526.00 25.00%=2414.00
+      50.00%=3433.00 75.00%=4851.00 90.00%=6933.00 95.00%=9145.00
+      99.00%=59133.00 99.90%=208001.00 99.99%=505030.00
+    [info] == put-many ==
+
+
 ((------FIXME------))
 
 All of the below timings are on my 2GHz 2006-model macbook pro.

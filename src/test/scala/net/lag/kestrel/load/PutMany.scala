@@ -88,16 +88,45 @@ object PutMany {
     }
   }
 
-  def main(args: Array[String]) = {
-    if (args.length < 3) {
-      Console.println("usage: put-many <clients> <count> <bytes>")
-      Console.println("    spin up <clients> and put <count> items of <bytes> size into kestrel")
-      System.exit(1)
-    }
+  var clientCount = 100
+  var totalItems = 10000
+  var bytes = 1024
 
-    val clientCount = args(0).toInt
-    val totalItems = args(1).toInt
-    val bytes = args(2).toInt
+  def usage() {
+    Console.println("usage: put-many [options]")
+    Console.println("    spam items into kestrel")
+    Console.println()
+    Console.println("options:")
+    Console.println("    -c CLIENTS")
+    Console.println("        use CLIENTS concurrent clients (default: %d)".format(clientCount))
+    Console.println("    -n ITEMS")
+    Console.println("        put ITEMS items into the queue (default: %d)".format(totalItems))
+    Console.println("    -b BYTES")
+    Console.println("        put BYTES per queue item (default: %d)".format(bytes))
+  }
+
+  def parseArgs(args: List[String]): Unit = args match {
+    case Nil =>
+    case "--help" :: xs =>
+      usage()
+      System.exit(0)
+    case "-c" :: x :: xs =>
+      clientCount = x.toInt
+      parseArgs(xs)
+    case "-n" :: x :: xs =>
+      totalItems = x.toInt
+      parseArgs(xs)
+    case "-b" :: x :: xs =>
+      bytes = x.toInt
+      parseArgs(xs)
+    case _ =>
+      usage()
+      System.exit(1)
+  }
+
+  def main(args: Array[String]) = {
+    parseArgs(args.toList)
+
     val totalCount = totalItems / clientCount * clientCount
     val totalQueues = System.getProperty("queues", "1").toInt
 

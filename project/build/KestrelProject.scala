@@ -11,7 +11,7 @@ class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) wit
 {
   val util = "com.twitter" % "util-core" % "1.8.1"
 
-  val ostrich = "com.twitter" % "ostrich" % "4.0.0"
+  val ostrich = "com.twitter" % "ostrich" % "4.0.3"
   val naggati = "com.twitter" % "naggati" % "2.1.1"
 
   val specs = "org.scala-tools.testing" % "specs_2.8.1" % "1.6.7" % "test"
@@ -46,7 +46,11 @@ class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) wit
 
   // 100 times: 10,000 items of 1024 bytes each.
 //  override def fork = forkRun(List("-Xmx1024m", "-verbosegc", "-XX:+PrintGCDetails"))
-  lazy val putMany = runTask(Some("net.lag.kestrel.load.PutMany"), testClasspath, "100", "10000", "1024").dependsOn(testCompile) describedAs "Run a load test."
+
+  lazy val putMany = task { args =>
+    runTask(Some("net.lag.kestrel.load.PutMany"), testClasspath, args).dependsOn(testCompile)
+  } describedAs "Run a load test."
+
   lazy val manyClients = runTask(Some("net.lag.kestrel.load.ManyClients"), testClasspath).dependsOn(testCompile)
 
   lazy val flood = task { args =>
