@@ -208,13 +208,9 @@ trait KestrelConfig extends ServerConfig[Kestrel] {
   var maxOpenTransactions: Int = 1
 
   def apply(runtime: RuntimeEnvironment) = {
-    Logger.configure(loggers)
-    admin()(runtime)
-    val kestrel = new Kestrel(default(), queues, listenAddress, memcacheListenPort, textListenPort,
-                              queuePath, protocol, expirationTimerFrequency, clientTimeout,
-                              maxOpenTransactions)
-    ServiceTracker.register(kestrel)
-    kestrel
+    new Kestrel(default(), queues, listenAddress, memcacheListenPort, textListenPort,
+                queuePath, protocol, expirationTimerFrequency, clientTimeout,
+                maxOpenTransactions)
   }
 
   def reload(kestrel: Kestrel) {
