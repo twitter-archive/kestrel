@@ -60,15 +60,7 @@ syntax is described here:
 https://github.com/twitter/util/blob/master/util-logging/README.markdown
 
 Per-queue configuration is documented here:
-
-
-
-
-
-
-
-- `move_expired_to` (none)
-
+http://robey.github.com/kestrel/doc/main/api/net/lag/kestrel/config/QueueBuilder.html
 
 
 The journal file
@@ -81,23 +73,22 @@ up the in-memory queue that it uses for client queries.
 
 The journal file is rotated in one of two conditions:
 
-1. the queue is empty and the journal is larger than `max_journal_size`
+1. the queue is empty and the journal is larger than `defaultJournalSize`
 
-2. the queue is smaller than `max_journal_size` but the journal is larger
-   than `max_journal_overflow` times `max_journal_size`
+2. the journal is larger than `maxJournalSize`
 
-For example, if `max_journal_size` is 16MB (the default), and
-`max_journal_overflow` is 10 (also the default), then if the queue is empty
-and the journal is larger than 16MB, it will be rotated into a new (empty)
-file. If the queue is smaller than 16MB, but the journal is larger than 160MB,
-the journal will be rotated to contain just the live items.
+For example, if `defaultJournalSize` is 16MB (the default), then if the queue
+is empty and the journal is larger than 16MB, it will be truncated into a new
+(empty) file. If the journal is larger than `maxJournalSize` (1GB by default),
+the journal will be rewritten periodically to contain just the live items.
 
-You can turn the journal off for a queue (`journal` = false) and the queue
+You can turn the journal off for a queue (`keepJournal` = false) and the queue
 will exist only in memory. If the server restarts, all enqueued items are
-lost. You can also force a queue's journal to be sync'd to disk after every
-write operation (`sync_journal` = true) at a performance cost.
+lost. You can also force a queue's journal to be sync'd to disk periodically,
+or even after every write operation, at a performance cost, using
+`syncJournal`.
 
-If a queue grows past `max_memory_size` bytes (128MB by default), only the
+If a queue grows past `maxMemorySize` bytes (128MB by default), only the
 first 128MB is kept in memory. The journal is used to track later items, and
 as items are removed, the journal is played forward to keep 128MB in memory.
 This is usually known as "read-behind" mode, but Twitter engineers sometimes
@@ -118,17 +109,17 @@ absolute unix epoch time, in seconds since the beginning of 1 January 1970
 GMT.
 
 Expiration times are immediately translated into an absolute time, in
-*milliseconds*, and if it's further in the future than the queue's `max_age`,
-the `max_age` is used instead. An expiration of 0, which is usually the
+*milliseconds*, and if it's further in the future than the queue's `maxAge`,
+the `max_Age` is used instead. An expiration of 0, which is usually the
 default, means an item never expires.
 
 Expired items are flushed from a queue whenever a new item is added or
 removed. An idle queue won't have any items expired, but you can trigger a
 check by doing a "peek" on it.
 
-The global config option `expiration_timer_frequency_seconds` can be used to
+The global config option `expirationTimerFrequency_seconds` can be used to
 start a background thread that periodically removes expired items from the
-head of each queue. See the `README.md` file for more.
+head of each queue. See `README.md` file for more.
 
 
 Fanout Queues
@@ -258,6 +249,21 @@ Memcache commands
   Display server stats in a more readable style, grouped by queue. They're
   described below.
 
+- `MONITOR <queue-name> <seconds>`
+
+  Monitor a queue for a time, fetching any new items that arrive. Clients
+  are queued in a fair fashion, per-item, so many clients may monitor a
+  queue at once. After the given timeout, a separate `END` response will
+  signal the end of the monitor period. Any fetched items are open
+  transactions (see "Reliable Reads" below), and should be closed with
+  `CONFIRM`.
+
+- `CONFIRM <queue-name> <count>`
+
+  Confirm receipt of `count` items from a queue. Usually this is the response
+  to a `MONITOR` command, to confirm the items that arrived during the monitor
+  period.
+
 
 Reliable reads
 --------------
@@ -352,25 +358,28 @@ You can use kestrel as a library by just sticking the jar on your classpath.
 It's a cheap way to get a durable work queue for inter-process or inter-thread
 communication. Each queue is represented by a `PersistentQueue` object:
 
-    class PersistentQueue(persistencePath: String, val name: String, val config: ConfigMap)
+    class PersistentQueue(val name: String, persistencePath: String,
+                          @volatile var config: QueueConfig, timer: Timer,
+                          queueLookup: Option[(String => Option[PersistentQueue])]) {
 
 and must be initialized before using:
 
     def setup(): Unit
 
 specifying the path for the journal files (if the queue will be journaled),
-the name of the queue, and a configgy `ConfigMap` block with any special
-configuration. (See "Configuration" above.)
+the name of the queue, a `QueueConfig` object (derived from `QueueBuilder`),
+a timer for handling timeout reads, and optionally a way to find other named
+queues (for `expireToQueue` support).
 
 To add an item to a queue:
 
-    def add(value: Array[Byte], expiry: Long): Boolean
+    def add(value: Array[Byte], expiry: Option[Time]): Boolean
 
 It will return `false` if the item was rejected because the queue was full.
 
 Queue items are represented by a case class:
 
-    case class QItem(addTime: Long, expiry: Long, data: Array[Byte], var xid: Int)
+    case class QItem(addTime: Time, expiry: Option[Time], data: Array[Byte], var xid: Int)
 
 and several operations exist to remove or peek at the head item:
 
@@ -384,13 +393,10 @@ the item by its `xid`:
     def unremove(xid: Int)
     def confirmRemove(xid: Int)
 
-You can also asynchronously remove or peek at items using actors, as either
-a `receive` or `react` callback:
+You can also asynchronously remove or peek at items using futures.
 
-    def removeReact(timeoutAbsolute: Long, transaction: Boolean)(f: Option[QItem] => Unit): Unit
-    def removeReceive(timeoutAbsolute: Long, transaction: Boolean): Option[QItem]
-    def peekReact(timeoutAbsolute: Long)(f: Option[QItem] => Unit): Unit
-    def peekReceive(timeoutAbsolute: Long): Option[QItem]
+    def waitRemove(deadline: Option[Time], transaction: Boolean): Future[Option[QItem]]
+    def waitPeek(deadline: Option[Time]): Future[Option[QItem]]
 
 When done, you should close the queue:
 
@@ -399,7 +405,7 @@ When done, you should close the queue:
 
 Here's a short example:
 
-    var queue = new PersistentQueue("/var/spool/kestrel", "work", config)
+    var queue = new PersistentQueue("work", "/var/spool/kestrel", config, timer, None)
     queue.setup()
 
     // add an item with no expiration:
@@ -410,14 +416,12 @@ Here's a short example:
     queue.unremove(item.xid)
 
     // remove an item with a 500msec timeout, and confirm it:
-    queue.removeReact(System.currentTimeMillis + 500, true) { x =>
-      x match {
-        case None =>
-          println("nothing. :(")
-        case Some(item) =>
-          println("got: " + new String(item.data))
-          queue.confirmRemove(item.xid)
-      }
+    queue.waitRemove(500.milliseconds.fromNow, true)() match {
+      case None =>
+        println("nothing. :(")
+      case Some(item) =>
+        println("got: " + new String(item.data))
+        queue.confirmRemove(item.xid)
     }
 
     queue.close()
