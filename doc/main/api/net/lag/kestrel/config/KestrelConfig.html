@@ -27,11 +27,11 @@
         <span class="name">KestrelConfig</span>
         
         
-        <span class="result"> extends <span class="extype" name="com.twitter.util.Config">Config</span>[(<span class="extype" name="com.twitter.ostrich.admin.RuntimeEnvironment">RuntimeEnvironment</span>) ⇒ <a href="../Kestrel.html" class="extype" name="net.lag.kestrel.Kestrel">Kestrel</a>]</span>
+        <span class="result"> extends <span class="extype" name="com.twitter.ostrich.admin.config.ServerConfig">ServerConfig</span>[<a href="../Kestrel.html" class="extype" name="net.lag.kestrel.Kestrel">Kestrel</a>]</span>
       </span>
       </h4>
       <div class="fullcomment" id="comment"><div class="block">
-            linear super types: <span class="extype" name="com.twitter.util.Config">Config</span>[(<span class="extype" name="com.twitter.ostrich.admin.RuntimeEnvironment">RuntimeEnvironment</span>) ⇒ <a href="../Kestrel.html" class="extype" name="net.lag.kestrel.Kestrel">Kestrel</a>], () ⇒ (<span class="extype" name="com.twitter.ostrich.admin.RuntimeEnvironment">RuntimeEnvironment</span>) ⇒ <a href="../Kestrel.html" class="extype" name="net.lag.kestrel.Kestrel">Kestrel</a>, AnyRef, <span class="extype" name="scala.Any">Any</span>
+            linear super types: <span class="extype" name="com.twitter.ostrich.admin.config.ServerConfig">ServerConfig</span>[<a href="../Kestrel.html" class="extype" name="net.lag.kestrel.Kestrel">Kestrel</a>], <span class="extype" name="com.twitter.util.Config">Config</span>[(<span class="extype" name="com.twitter.ostrich.admin.RuntimeEnvironment">RuntimeEnvironment</span>) ⇒ <a href="../Kestrel.html" class="extype" name="net.lag.kestrel.Kestrel">Kestrel</a>], () ⇒ (<span class="extype" name="com.twitter.ostrich.admin.RuntimeEnvironment">RuntimeEnvironment</span>) ⇒ <a href="../Kestrel.html" class="extype" name="net.lag.kestrel.Kestrel">Kestrel</a>, AnyRef, <span class="extype" name="scala.Any">Any</span>
           </div></div>
 
       <div id="template">
@@ -45,7 +45,7 @@
           <div id="ancestors">
                 <span class="filtertype">Inherited</span>
                 <ol><li class="hideall">Hide All</li><li class="showall">Show all</li></ol>
-                <ol id="linearization"><li class="in" name="net.lag.kestrel.config.KestrelConfig">KestrelConfig</li><li class="in" name="com.twitter.util.Config">Config</li><li class="in" name="scala.Function0">Function0</li><li class="in" name="scala.AnyRef">AnyRef</li><li class="in" name="scala.Any">Any</li></ol>
+                <ol id="linearization"><li class="in" name="net.lag.kestrel.config.KestrelConfig">KestrelConfig</li><li class="in" name="com.twitter.ostrich.admin.config.ServerConfig">ServerConfig</li><li class="in" name="com.twitter.util.Config">Config</li><li class="in" name="scala.Function0">Function0</li><li class="in" name="scala.AnyRef">AnyRef</li><li class="in" name="scala.Any">Any</li></ol>
               </div>
           <div id="visbl">
               <span class="filtertype">Visibility</span>
@@ -211,10 +211,10 @@
             
           </div>
           
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.config.KestrelConfig#admin">
+    </li><li visbl="pub" data-isabs="false" name="com.twitter.ostrich.admin.config.ServerConfig#admin">
       <a id="admin:AdminServiceConfig"></a>
       <h4 class="signature">
-      <span class="kind">val</span>
+      <span class="kind">var</span>
       <span class="symbol">
         <span class="name">admin</span>
         
@@ -223,15 +223,29 @@
       </span>
       </h4>
       
-            <p class="shortcomment cmt">Admin service configuration (optional).</p>
-            <div class="fullcomment"><div class="comment cmt"><p>Admin service configuration (optional).
-</p></div>
             
-            
-            
-          </div>
+            <div class="fullcomment"><div class="block">
+          definition classes: ServerConfig
+        </div></div>
           
     </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.config.KestrelConfig#apply">
+      <a id="apply(RuntimeEnvironment):Kestrel"></a>
+      <h4 class="signature">
+      <span class="kind">def</span>
+      <span class="symbol">
+        <span class="name">apply</span>
+        
+        <span class="params">(<span name="runtime">runtime: <span class="extype" name="com.twitter.ostrich.admin.RuntimeEnvironment">RuntimeEnvironment</span></span>)</span>
+        <span class="result">: <a href="../Kestrel.html" class="extype" name="net.lag.kestrel.Kestrel">Kestrel</a></span>
+      </span>
+      </h4>
+      
+            
+            <div class="fullcomment"><div class="block">
+          definition classes: <a href="" class="extype" name="net.lag.kestrel.config.KestrelConfig">KestrelConfig</a> → ServerConfig
+        </div></div>
+          
+    </li><li visbl="pub" data-isabs="false" name="com.twitter.ostrich.admin.config.ServerConfig#apply">
       <a id="apply():(RuntimeEnvironment) ⇒ Kestrel"></a>
       <h4 class="signature">
       <span class="kind">def</span>
@@ -245,7 +259,7 @@
       
             
             <div class="fullcomment"><div class="block">
-          definition classes: <a href="" class="extype" name="net.lag.kestrel.config.KestrelConfig">KestrelConfig</a> → Function0
+          definition classes: ServerConfig → Function0
         </div></div>
           
     </li><li visbl="pub" data-isabs="false" name="scala.Any#asInstanceOf">
@@ -524,6 +538,25 @@ to verify that the behavior is consistent with the <code>equals</code> method.
             
           </div>
           
+    </li><li visbl="prt" data-isabs="false" name="com.twitter.ostrich.admin.config.ServerConfig#httpServer">
+      <a id="httpServer:Option[AdminHttpService]"></a>
+      <h4 class="signature">
+      <span class="kind">var</span>
+      <span class="symbol">
+        <span class="name">httpServer</span>
+        
+        
+        <span class="result">: <span class="extype" name="scala.Option">Option</span>[<span class="extype" name="com.twitter.ostrich.admin.AdminHttpService">AdminHttpService</span>]</span>
+      </span>
+      </h4>
+      
+            
+            <div class="fullcomment"><div class="block">
+          attributes: protected 
+        </div><div class="block">
+          definition classes: ServerConfig
+        </div></div>
+          
     </li><li visbl="pub" data-isabs="false" name="com.twitter.util.Config#intoList">
       <a id="intoList[A](A):List[A]"></a>
       <h4 class="signature">
@@ -608,7 +641,7 @@ possible to check whether the contents of the list are of the requested typed.
             
           </div>
           
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.config.KestrelConfig#loggers">
+    </li><li visbl="pub" data-isabs="false" name="com.twitter.ostrich.admin.config.ServerConfig#loggers">
       <a id="loggers:List[LoggerConfig]"></a>
       <h4 class="signature">
       <span class="kind">var</span>
@@ -620,13 +653,10 @@ possible to check whether the contents of the list are of the requested typed.
       </span>
       </h4>
       
-            <p class="shortcomment cmt">Logging config (optional).</p>
-            <div class="fullcomment"><div class="comment cmt"><p>Logging config (optional).
-</p></div>
             
-            
-            
-          </div>
+            <div class="fullcomment"><div class="block">
+          definition classes: ServerConfig
+        </div></div>
           
     </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.config.KestrelConfig#maxOpenTransactions">
       <a id="maxOpenTransactions:Int"></a>
@@ -661,7 +691,7 @@ possible to check whether the contents of the list are of the requested typed.
       </h4>
       
             <p class="shortcomment cmt">Port for accepting memcache protocol connections.</p>
-            <div class="fullcomment"><div class="comment cmt"><p>Port for accepting memcache protocol connections.
+            <div class="fullcomment"><div class="comment cmt"><p>Port for accepting memcache protocol connections. 22133 is the standard port.
 </p></div>
             
             
@@ -771,7 +801,7 @@ possible to check whether the contents of the list are of the requested typed.
       </h4>
       
             <p class="shortcomment cmt">Where queue journals should be stored.</p>
-            <div class="fullcomment"><div class="comment cmt"><p>Where queue journals should be stored.
+            <div class="fullcomment"><div class="comment cmt"><p>Where queue journals should be stored. Each queue will have its own files in this folder.
 </p></div>
             
             
@@ -931,7 +961,9 @@ possible to check whether the contents of the list are of the requested typed.
     </li></ol>
             </div>
 
-        <div class="parent" name="com.twitter.util.Config">
+        <div class="parent" name="com.twitter.ostrich.admin.config.ServerConfig">
+              <h3>Inherited from <span class="extype" name="com.twitter.ostrich.admin.config.ServerConfig">ServerConfig</span>[<a href="../Kestrel.html" class="extype" name="net.lag.kestrel.Kestrel">Kestrel</a>]</h3>
+            </div><div class="parent" name="com.twitter.util.Config">
               <h3>Inherited from <span class="extype" name="com.twitter.util.Config">Config</span>[(<span class="extype" name="com.twitter.ostrich.admin.RuntimeEnvironment">RuntimeEnvironment</span>) ⇒ <a href="../Kestrel.html" class="extype" name="net.lag.kestrel.Kestrel">Kestrel</a>]</h3>
             </div><div class="parent" name="scala.Function0">
               <h3>Inherited from () ⇒ (<span class="extype" name="com.twitter.ostrich.admin.RuntimeEnvironment">RuntimeEnvironment</span>) ⇒ <a href="../Kestrel.html" class="extype" name="net.lag.kestrel.Kestrel">Kestrel</a></h3>

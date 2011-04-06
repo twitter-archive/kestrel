@@ -416,6 +416,16 @@ scala.Int
       </span>
       </h4>
       
+            <p class="shortcomment cmt">Name of a queue to add expired items to.</p>
+            <div class="fullcomment"><div class="comment cmt"><p>Name of a queue to add expired items to. If set, expired items are added to the requested
+queue as if by a <code>SET</code> command. This can be used to implement special processing for expired
+items, or to implement a simple &quot;delayed processing&quot; queue.
+</p></div>
+            
+            
+            
+          </div>
+          
     </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.config.QueueBuilder#fanoutOnly">
       <a id="fanoutOnly:Boolean"></a>
       <h4 class="signature">
@@ -428,6 +438,15 @@ scala.Int
       </span>
       </h4>
       
+            <p class="shortcomment cmt">If true, don't actually store any items in this queue.</p>
+            <div class="fullcomment"><div class="comment cmt"><p>If true, don't actually store any items in this queue. Only deliver them to fanout client
+queues.
+</p></div>
+            
+            
+            
+          </div>
+          
     </li><li visbl="prt" data-isabs="false" name="scala.AnyRef#finalize">
       <a id="finalize():Unit"></a>
       <h4 class="signature">
@@ -598,6 +617,15 @@ possible to check whether the contents of the list are of the requested typed.
       </span>
       </h4>
       
+            <p class="shortcomment cmt">If false, don't keep a journal file for this queue.</p>
+            <div class="fullcomment"><div class="comment cmt"><p>If false, don't keep a journal file for this queue. When kestrel exits, any remaining contents
+in the queue will be lost.
+</p></div>
+            
+            
+            
+          </div>
+          
     </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.config.QueueBuilder#maxAge">
       <a id="maxAge:Option[Duration]"></a>
       <h4 class="signature">
@@ -610,6 +638,17 @@ possible to check whether the contents of the list are of the requested typed.
       </span>
       </h4>
       
+            <p class="shortcomment cmt">Expiration time for items on this queue.</p>
+            <div class="fullcomment"><div class="comment cmt"><p>Expiration time for items on this queue. Any item that has been sitting on the queue longer
+than this duration will be discarded. Clients may also attach an expiration time when adding
+items to a queue, but if the expiration time is longer than <code>maxAge</code>, <code>max_Age</code> will be
+used instead.
+</p></div>
+            
+            
+            
+          </div>
+          
     </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.config.QueueBuilder#maxExpireSweep">
       <a id="maxExpireSweep:Int"></a>
       <h4 class="signature">
@@ -622,6 +661,14 @@ possible to check whether the contents of the list are of the requested typed.
       </span>
       </h4>
       
+            <p class="shortcomment cmt">Maximum number of expired items to move into the <code>expireToQueue</code> at once.</p>
+            <div class="fullcomment"><div class="comment cmt"><p>Maximum number of expired items to move into the <code>expireToQueue</code> at once.
+</p></div>
+            
+            
+            
+          </div>
+          
     </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.config.QueueBuilder#maxItemSize">
       <a id="maxItemSize:StorageUnit"></a>
       <h4 class="signature">
@@ -634,6 +681,15 @@ possible to check whether the contents of the list are of the requested typed.
       </span>
       </h4>
       
+            <p class="shortcomment cmt">Set a hard limit on the number of bytes a single queued item can contain.</p>
+            <div class="fullcomment"><div class="comment cmt"><p>Set a hard limit on the number of bytes a single queued item can contain.
+An add request for an item larger than this will be rejected.
+</p></div>
+            
+            
+            
+          </div>
+          
     </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.config.QueueBuilder#maxItems">
       <a id="maxItems:Int"></a>
       <h4 class="signature">
@@ -690,7 +746,8 @@ this, rebuild the journal.
       
             <p class="shortcomment cmt">Keep only this much of the queue in memory.</p>
             <div class="fullcomment"><div class="comment cmt"><p>Keep only this much of the queue in memory. The journal will be used to store backlogged
-items.
+items, and they'll be read back into memory as the queue is drained. This setting is a release
+valve to keep a backed-up queue from consuming all memory.
 </p></div>
             
             
@@ -731,6 +788,14 @@ to add another item.
       </span>
       </h4>
       
+            <p class="shortcomment cmt">Name of the queue being configured.</p>
+            <div class="fullcomment"><div class="comment cmt"><p>Name of the queue being configured.
+</p></div>
+            
+            
+            
+          </div>
+          
     </li><li visbl="pub" data-isabs="false" name="scala.AnyRef#ne">
       <a id="ne(AnyRef):Boolean"></a>
       <h4 class="signature">
@@ -813,6 +878,16 @@ to add another item.
       </span>
       </h4>
       
+            <p class="shortcomment cmt">How often to sync the journal file.</p>
+            <div class="fullcomment"><div class="comment cmt"><p>How often to sync the journal file. To sync after every write, set this to <code>0.milliseconds</code>.
+To never sync, set it to <code>Duration.MaxValue</code>. Syncing the journal will reduce the maximum
+throughput of the server in exchange for a lower chance of losing data.
+</p></div>
+            
+            
+            
+          </div>
+          
     </li><li visbl="pub" data-isabs="false" name="scala.AnyRef#synchronized">
       <a id="synchronized[T0](T0):T0"></a>
       <h4 class="signature">

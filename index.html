@@ -24,8 +24,10 @@ Shhh!</p>
 <p>For more information about what it is and how to use it, check out
 the included <a href="docs/guide.md">guide</a>.</p>
 
-<p>Kestrel has a mailing list here: <a href="&#109;&#97;&#105;&#108;to&#58;&#107;&#x65;&#115;&#x74;&#114;&#101;&#x6c;-&#x74;&#x61;&#x6c;&#x6b;@&#103;&#x6f;&#x6f;&#103;&#x6c;&#101;&#x67;&#x72;&#x6f;&#x75;&#x70;&#x73;&#46;&#x63;&#x6f;m">&#107;&#x65;&#115;&#x74;&#114;e&#x6c;&#x2d;ta&#x6c;&#107;&#x40;&#103;&#x6f;&#111;&#x67;&#108;&#101;&#103;r&#x6f;u&#x70;&#115;&#x2e;&#x63;&#111;&#x6d;</a>
+<p>Kestrel has a mailing list here: <a href="&#x6d;&#97;&#105;&#x6c;&#x74;&#111;:&#107;&#x65;&#x73;&#116;&#114;&#x65;&#108;&#45;t&#97;&#108;&#107;&#64;&#103;&#x6f;&#x6f;&#x67;l&#x65;&#103;&#x72;&#111;&#117;&#x70;&#x73;.&#99;&#x6f;&#x6d;">&#x6b;&#101;&#x73;&#x74;&#x72;&#101;&#108;&#45;&#116;&#97;&#x6c;&#x6b;&#x40;&#103;&#x6f;&#x6f;&#103;&#x6c;&#101;&#x67;r&#x6f;&#x75;&#x70;&#115;&#x2e;&#99;&#111;&#x6d;</a>
 http://groups.google.com/group/kestrel-talk</p>
+
+<p>Author's address: Robey Pointer &lt;<a href="&#109;&#97;&#x69;&#x6c;&#x74;&#x6f;&#x3a;&#114;&#x6f;&#x62;e&#x79;&#112;o&#105;n&#x74;&#101;&#114;&#x40;g&#109;&#97;&#x69;&#x6c;&#46;&#99;&#111;&#x6d;">&#114;&#111;&#98;&#101;&#121;&#x70;&#x6f;&#x69;n&#116;&#101;&#114;@&#x67;&#109;&#97;&#x69;&#108;&#46;&#x63;&#x6f;&#109;</a>></p>
 
 <h2>Features</h2>
 
@@ -119,83 +121,229 @@ logging), it will usually appear in <code>error</code> in the same folder.</p>
 
 <h2>Configuration</h2>
 
-<p>((------FIXME------))</p>
-
 <p>Queue configuration is described in detail in <code>docs/guide.md</code> (an operational
-guide). There are a few global config options that should be self-explanatory:</p>
-
-<ul>
-<li><p><code>host</code></p>
-
-<p>Host to accept connections on.</p></li>
-<li><p><code>port</code></p>
-
-<p>Port to listen on. 22133 is the standard.</p></li>
-<li><p><code>timeout</code></p>
-
-<p>Seconds after which an idle client is disconnected, or 0 to have no idle
-timeout.</p></li>
-<li><p><code>queue_path</code></p>
-
-<p>The folder to store queue journal files in. Each queue (and each client of
-a fanout queue) gets its own file here.</p></li>
-<li><p><code>log</code></p>
-
-<p>Logfile configuration, as described in configgy.</p></li>
-<li><p><code>expiration_timer_frequency_seconds</code></p>
-
-<p>Frequency (in seconds) that a timer thread should scan active queues for
-expired items. By default, this is off (0) and no automatic expiration
-scanning happens; instead, items expire when a client does a <code>SET</code> or <code>GET</code>
-on a queue. When this is set, a background thread will periodically flush
-expired items from the head of every queue.</p></li>
-</ul>
+guide). Scala docs for the config variables are here:
+http://robey.github.com/kestrel/doc/main/api/net/lag/kestrel/config/KestrelConfig.html</p>
 
 <h2>Performance</h2>
 
-<p>((------FIXME------))</p>
+<p>Several performance tests are included. To run them, first start up a kestrel instance
+locally.</p>
 
-<p>All of the below timings are on my 2GHz 2006-model macbook pro.</p>
-
-<p>Since starling uses eventmachine in a single-thread single-process form, it
-has similar results for all access types (and will never use more than one
-core).</p>
-
-<pre><code>=========  =================  ==========
-# Clients  Pushes per client  Total time
-=========  =================  ==========
-        1             10,000        3.8s
-       10              1,000        2.9s
-      100                100        3.1s
-=========  =================  ==========
+<pre><code>$ sbt clean update package-dist
+$ VERSION="2.1.0-SNAPSHOT"
+$ java -server -Xmx1024m -Dstage=development -jar ./dist/kestrel-$VERSION/kestrel-$VERSION.jar
 </code></pre>
 
-<p>Kestrel uses N+1 I/O processor threads (where N = the number of available CPU
-cores), and a pool of worker threads for handling actor events. Therefore it
-handles more poorly for small numbers of heavy-use clients, and better for
-large numbers of clients.</p>
+<h2>Put-many</h2>
 
-<pre><code>=========  =================  ==========
-# Clients  Pushes per client  Total time
-=========  =================  ==========
-        1             10,000        3.8s
-       10              1,000        2.4s
-      100                100        1.6s
-=========  =================  ==========
+<p>This test just spams a kestrel server with "put" operations, to see how
+quickly it can absorb and journal them.</p>
+
+<pre><code>$ sbt "put-many --help"
+usage: put-many [options]
+    spam items into kestrel
+
+options:
+    -c CLIENTS
+        use CLIENTS concurrent clients (default: 100)
+    -n ITEMS
+        put ITEMS items into the queue (default: 10000)
+    -b BYTES
+        put BYTES per queue item (default: 1024)
 </code></pre>
 
-<p>A single-threaded set of 5 million puts gives a fair idea of throughput
-distribution, this time on a 2.5GHz 2008-model macbook pro:</p>
+<p>A sample run on a 2010 MacBook Pro:</p>
 
-<pre><code>$ ant -f tests.xml put-many-1 -Ditems=5000000
-[java] Finished in 1137250 msec (227.5 usec/put throughput).
-[java] Transactions: min=106.00; max=108581.00 91335.00 60721.00; median=153.00; average=201.14 usec
-[java] Transactions distribution: 5.00%=129.00 10.00%=134.00 25.00%=140.00 50.00%=153.00 75.00%=177.00 90.00%=251.00 95.00%=345.00 99.00%=586.00 99.90%=5541.00 99.99%=26910.00
+<pre><code>[info] == put-many ==
+[info] Running net.lag.kestrel.load.PutMany -n 1000000
+Finished in 64921 msec (64.9 usec/put throughput).
+Transactions: min=95.00; max=528107.00 524847.00 521780.00;
+  median=3433.00; average=5551.77 usec
+Transactions distribution: 5.00%=810.00 10.00%=1526.00 25.00%=2414.00
+  50.00%=3433.00 75.00%=4851.00 90.00%=6933.00 95.00%=9145.00
+  99.00%=59133.00 99.90%=208001.00 99.99%=505030.00
+[info] == put-many ==
 </code></pre>
 
-<p>This works out to about 3.23MB/sec (over loopback) and about 4400 puts/sec.</p>
+<h2>Many-clients</h2>
 
-<p>Robey Pointer &lt;<a href="&#109;&#x61;&#105;&#108;&#116;&#x6f;&#58;&#114;&#x6f;&#98;&#101;&#x79;&#x70;&#x6f;&#x69;&#110;&#x74;&#x65;&#x72;&#64;&#x67;&#109;&#97;&#105;&#108;&#46;&#99;&#111;&#109;">&#x72;&#x6f;&#98;&#x65;&#x79;&#112;o&#105;n&#x74;&#101;&#114;&#64;&#103;&#109;&#x61;&#x69;&#x6c;&#46;c&#x6f;&#x6d;</a>></p>
+<p>This test has one producer that trickles out one item at a time, and a pile of
+consumers fighting for each item. It usually takes exactly as long as the
+number of items times the delay, but is useful as a validation test to make
+sure kestrel works as advertised without blowing up.</p>
+
+<pre><code>$ sbt "many-clients --help"
+usage: many-clients [options]
+    spin up N clients and have them do timeout reads on a queue while a
+    single producer trickles out.
+
+options:
+    -s MILLESCONDS
+        sleep MILLISECONDS between puts (default: 100)
+    -n ITEMS
+        put ITEMS total items into the queue (default: 100)
+    -c CLIENTS
+        use CLIENTS consumers (default: 100)
+</code></pre>
+
+<p>A sample run on a 2010 MacBook Pro:</p>
+
+<pre><code>[info] == many-clients ==
+[info] Running net.lag.kestrel.load.ManyClients
+Finished in 11104 msec.
+[info] == many-clients ==
+</code></pre>
+
+<h2>Flood</h2>
+
+<p>This test starts up one producer and one consumer, and just floods items
+through kestrel as fast as it can.</p>
+
+<pre><code>$ sbt "flood --help"
+usage: flood [options]
+    spin up a producer and consumer and flood N items through kestrel
+
+options:
+    -n ITEMS
+        put ITEMS items into the queue (default: 10000)
+    -k KILOBYTES
+        put KILOBYTES per queue item (default: 1)
+</code></pre>
+
+<p>A sample run on a 2010 MacBook Pro:</p>
+
+<pre><code>[info] == flood ==
+[info] Running net.lag.kestrel.load.Flood -n 100000
+flood: 100000 items of 1kB
+Finished in 16834 msec (168.3 usec/put throughput).
+Consumer spun 1 times in misses.
+</code></pre>
+
+<h2>Packing</h2>
+
+<p>This test starts up one producer and one consumer, seeds the queue with a
+bunch of items to cause it to fall behind, then does cycles of flooding items
+through the queue, separated by pauses. It's meant to test kestrel's behavior
+with a queue that's fallen behind and <em>stays</em> behind indefinitely, to make
+sure the journal files are packed periodically without affecting performance
+too badly.</p>
+
+<pre><code>$ sbt "packing --help"
+usage: packing [options]
+    spin up a producer and consumer, write N items, then do read/write cycles
+    with pauses
+
+options:
+    -q NAME
+        use named queue (default: spam)
+    -n ITEMS
+        put ITEMS items into the queue (default: 25000)
+    -k KILOBYTES
+        put KILOBYTES per queue item (default: 1)
+    -t SECONDS
+        pause SECONDS between cycles (default: 1)
+    -c CYCLES
+        do read/writes CYCLES times (default: 100)
+    -x
+        use transactions when fetching
+</code></pre>
+
+<p>A sample run on a 2010 MacBook Pro:</p>
+
+<pre><code>[info] == packing ==
+[info] Running net.lag.kestrel.load.JournalPacking -c 10 -q small
+packing: 25000 items of 1kB with 1 second pauses
+Wrote 25000 items starting at 0.
+cycle: 1
+Wrote 25000 items starting at 25000.
+Read 25000 items in 5402 msec. Consumer spun 0 times in misses.
+cycle: 2
+Wrote 25000 items starting at 50000.
+Read 25000 items in 5395 msec. Consumer spun 0 times in misses.
+cycle: 3
+Wrote 25000 items starting at 75000.
+Read 25000 items in 4584 msec. Consumer spun 0 times in misses.
+cycle: 4
+Wrote 25000 items starting at 100000.
+Read 25000 items in 4455 msec. Consumer spun 0 times in misses.
+cycle: 5
+Wrote 25000 items starting at 125000.
+Read 25000 items in 4742 msec. Consumer spun 0 times in misses.
+cycle: 6
+Wrote 25000 items starting at 150000.
+Read 25000 items in 4468 msec. Consumer spun 0 times in misses.
+cycle: 7
+Wrote 25000 items starting at 175000.
+Read 25000 items in 5127 msec. Consumer spun 0 times in misses.
+cycle: 8
+Wrote 25000 items starting at 200000.
+Read 25000 items in 4357 msec. Consumer spun 0 times in misses.
+cycle: 9
+Wrote 25000 items starting at 225000.
+Read 25000 items in 4500 msec. Consumer spun 0 times in misses.
+cycle: 10
+Wrote 25000 items starting at 250000.
+Read 25000 items in 4558 msec. Consumer spun 0 times in misses.
+Read 25000 items in 3141 msec. Consumer spun 0 times in misses.
+[info] == packing ==
+</code></pre>
+
+<p>You can see the journals being packed in the kestrel log:</p>
+
+<pre><code>INF [20110405-20:36:57.420] kestrel: Setting up queue small: maxItems=2147483647 maxSize=134217728.bytes maxItemSize=922
+3372036854775807.bytes maxAge=None defaultJournalSize=16777216.bytes maxMemorySize=16777216.bytes maxJournalSize=1342177
+28.bytes discardOldWhenFull=true keepJournal=true syncJournal=never expireToQueue=None maxExpireSweep=2147483647 fanoutO
+nly=false
+INF [20110405-20:36:57.421] kestrel: Replaying transaction journal for 'small'
+INF [20110405-20:36:57.422] kestrel: No transaction journal for 'small'; starting with empty queue.
+INF [20110405-20:36:57.422] kestrel: Finished transaction journal for 'small' (0 items, 0 bytes) xid=0
+INF [20110405-20:36:59.779] kestrel: Rotating journal file for 'small' (qsize=16440320)
+INF [20110405-20:36:59.852] kestrel: Dropping to read-behind for queue 'small' (16.0 MiB)
+INF [20110405-20:37:02.032] kestrel: Rotating journal file for 'small' (qsize=29139968)
+INF [20110405-20:37:04.583] kestrel: Rotating journal file for 'small' (qsize=35066880)
+INF [20110405-20:37:05.005] kestrel: Read-behind on 'small' moving from file small.1302061022051 to small.1302061024673
+INF [20110405-20:37:08.547] kestrel: Read-behind on 'small' moving from file small.1302061024673 to small
+INF [20110405-20:37:09.553] kestrel: Rotating journal file for 'small' (qsize=27975680)
+INF [20110405-20:37:12.412] kestrel: Read-behind on 'small' moving from file small.1302061029571 to small
+INF [20110405-20:37:14.511] kestrel: Rotating journal file for 'small' (qsize=26700800)
+INF [20110405-20:37:16.384] kestrel: Read-behind on 'small' moving from file small.1302061034588 to small
+INF [20110405-20:37:17.122] kestrel: Rotating journal file for 'small' (qsize=29371392)
+INF [20110405-20:37:20.164] kestrel: Read-behind on 'small' moving from file small.1302061037149 to small
+INF [20110405-20:37:21.410] kestrel: Rotating journal file for 'small' (qsize=26664960)
+INF [20110405-20:37:23.113] kestrel: Read-behind on 'small' moving from file small.1302061041427 to small
+INF [20110405-20:37:25.302] kestrel: Rotating journal file for 'small' (qsize=26168320)
+INF [20110405-20:37:27.118] kestrel: Read-behind on 'small' moving from file small.1302061045321 to small
+INF [20110405-20:37:27.119] kestrel: Rewriting journal file from checkpoint for 'small' (qsize=27889664)
+INF [20110405-20:37:27.129] kestrel: Packing journals for 'small': small.1302061019805, small.1302061022051, small.13020
+61024673, small.1302061029571, small.1302061034588, small.1302061037149, small.1302061041427, small.1302061045321
+INF [20110405-20:37:27.635] kestrel: Packing 'small' -- erasing old files.
+INF [20110405-20:37:27.646] kestrel: Packing 'small' done: small.1302061045321, small
+INF [20110405-20:37:28.115] kestrel: Rotating journal file for 'small' (qsize=28761088)
+INF [20110405-20:37:31.108] kestrel: Read-behind on 'small' moving from file small.1302061048143 to small
+INF [20110405-20:37:32.202] kestrel: Rotating journal file for 'small' (qsize=27242496)
+INF [20110405-20:37:34.048] kestrel: Read-behind on 'small' moving from file small.1302061052221 to small
+INF [20110405-20:37:36.255] kestrel: Rotating journal file for 'small' (qsize=25759744)
+INF [20110405-20:37:38.433] kestrel: Read-behind on 'small' moving from file small.1302061056360 to small
+INF [20110405-20:37:39.550] kestrel: Rotating journal file for 'small' (qsize=27325440)
+INF [20110405-20:37:42.266] kestrel: Read-behind on 'small' moving from file small.1302061059646 to small
+INF [20110405-20:37:43.464] kestrel: Rotating journal file for 'small' (qsize=26256384)
+INF [20110405-20:37:45.110] kestrel: Read-behind on 'small' moving from file small.1302061063469 to small
+INF [20110405-20:37:46.110] kestrel: Rotating journal file for 'small' (qsize=27487232)
+INF [20110405-20:37:48.928] kestrel: Read-behind on 'small' moving from file small.1302061066128 to small
+INF [20110405-20:37:49.875] kestrel: Rotating journal file for 'small' (qsize=28101632)
+INF [20110405-20:37:51.801] kestrel: Read-behind on 'small' moving from file small.1302061069893 to small
+INF [20110405-20:37:51.801] kestrel: Rewriting journal file from checkpoint for 'small' (qsize=26379264)
+INF [20110405-20:37:51.804] kestrel: Packing journals for 'small': small.1302061045321, small.1302061048143, small.13020
+61052221, small.1302061056360, small.1302061059646, small.1302061063469, small.1302061066128, small.1302061069893
+INF [20110405-20:37:52.237] kestrel: Packing 'small' -- erasing old files.
+INF [20110405-20:37:52.246] kestrel: Packing 'small' done: small.1302061069893, small
+INF [20110405-20:37:54.012] kestrel: Rotating journal file for 'small' (qsize=26510336)
+INF [20110405-20:37:55.808] kestrel: Read-behind on 'small' moving from file small.1302061074039 to small
+INF [20110405-20:37:56.594] kestrel: Rotating journal file for 'small' (qsize=29006848)
+INF [20110405-20:37:59.363] kestrel: Read-behind on 'small' moving from file small.1302061076614 to small
+INF [20110405-20:37:59.731] kestrel: Coming out of read-behind for queue 'small'
+</code></pre>
 
 
 <h1>DOC</h1>
