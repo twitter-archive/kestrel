@@ -13,14 +13,13 @@ class Plugins(info: ProjectInfo) extends PluginDefinition(info) {
   } else {
     super.repositories ++ Seq("twitter.com" at "http://maven.twttr.com/")
   }
-  override def ivyRepositories = Seq(Resolver.defaultLocal(None)) ++ repositories
+  override def ivyRepositories = Seq(Resolver.defaultLocal(None)) ++ repositories ++
+    Set("scala-tools" at "http://scala-tools.org/repo-releases/",
+        "freemarker" at "http://freemarker.sourceforge.net/maven2/")
 
-  val standardProject = "com.twitter" % "standard-project" % "0.11.11"
-
-  val lr = "less repo" at "http://repo.lessis.me"
-  val gh = "me.lessis" % "sbt-gh-issues" % "0.0.1"
+  val standardProject = "com.twitter" % "standard-project" % "0.12.3"
 
   val sbtIdeaRepo = "sbt-idea-repo" at "http://mpeltonen.github.com/maven/"
-  val sbtIdea = "com.github.mpeltonen" % "sbt-idea-plugin" % "0.3.0"
+  val sbtIdea = "com.github.mpeltonen" % "sbt-idea-plugin" % "0.4.0"
 }
 
