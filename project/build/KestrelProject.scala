@@ -4,7 +4,6 @@ import com.twitter.sbt._
 class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) with NoisyDependencies
   with SubversionPublisher
   with DefaultRepos
-  with gh.Issues
   with IdeaProject
   with PublishSourcesAndJavadocs
   with PublishSite
@@ -40,9 +39,6 @@ class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) wit
   override def releaseBuild = true
 
   override def subversionRepository = Some("http://svn.local.twitter.com/maven-public")
-
-  def ghCredentials = gh.LocalGhCreds(log)
-  def ghRepository = ("robey", "kestrel")
 
   // 100 times: 10,000 items of 1024 bytes each.
 //  override def fork = forkRun(List("-Xmx1024m", "-verbosegc", "-XX:+PrintGCDetails"))
