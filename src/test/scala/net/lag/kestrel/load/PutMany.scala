@@ -91,6 +91,8 @@ object PutMany {
   var clientCount = 100
   var totalItems = 10000
   var bytes = 1024
+  var hostname = "localhost"
+  var port = 22133
 
   def usage() {
     Console.println("usage: put-many [options]")
@@ -103,6 +105,10 @@ object PutMany {
     Console.println("        put ITEMS items into the queue (default: %d)".format(totalItems))
     Console.println("    -b BYTES")
     Console.println("        put BYTES per queue item (default: %d)".format(bytes))
+    Console.println("    -h HOSTNAME")
+    Console.println("        use kestrel on HOSTNAME (default: %s)".format(hostname))
+    Console.println("    -p PORT")
+    Console.println("        use kestrel on PORT (default: %d)".format(port))
   }
 
   def parseArgs(args: List[String]): Unit = args match {
@@ -118,6 +124,12 @@ object PutMany {
       parseArgs(xs)
     case "-b" :: x :: xs =>
       bytes = x.toInt
+      parseArgs(xs)
+    case "-h" :: x :: xs =>
+      hostname = x
+      parseArgs(xs)
+    case "-p" :: x :: xs =>
+      port = x.toInt
       parseArgs(xs)
     case _ =>
       usage()
@@ -147,7 +159,7 @@ object PutMany {
     for (i <- 0 until clientCount) {
       val t = new Thread {
         override def run = {
-          val socket = SocketChannel.open(new InetSocketAddress("localhost", 22133))
+          val socket = SocketChannel.open(new InetSocketAddress(hostname, port))
           val qName = "spam" + (i % totalQueues)
           put(socket, qName, totalItems / clientCount, timings, rawData.toString)
         }
@@ -171,7 +183,7 @@ object PutMany {
     val median = (sortedTimings(sortedTimings.size / 2 - 1) + sortedTimings(sortedTimings.size / 2)) / 2000.0
 
     println("Transactions: min=%.2f; max=%.2f %.2f %.2f; median=%.2f; average=%.2f usec".format(min, max, maxless, maxlesser, median, average))
-    var dist = Array(0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.999, 0.9999) map { r =>
+    val dist = Array(0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.999, 0.9999) map { r =>
       "%.2f%%=%.2f".format(r * 100, sortedTimings((sortedTimings.size * r).toInt) / 1000.0)
     }
     println("Transactions distribution: " + dist.mkString(" "))
