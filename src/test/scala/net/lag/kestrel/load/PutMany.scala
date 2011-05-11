@@ -138,6 +138,7 @@ object PutMany {
 
   def main(args: Array[String]) = {
     parseArgs(args.toList)
+    println("Put %d items of %d bytes to %s:%d using %d clients.".format(totalItems, bytes, hostname, port, clientCount))
 
     val totalCount = totalItems / clientCount * clientCount
     val totalQueues = System.getProperty("queues", "1").toInt
