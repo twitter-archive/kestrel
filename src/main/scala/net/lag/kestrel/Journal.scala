@@ -20,15 +20,14 @@ package net.lag.kestrel
 import java.io._
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.channels.FileChannel
-import scala.collection.Map
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.atomic.AtomicInteger
+import scala.annotation.tailrec
 import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.ostrich.admin.BackgroundProcess
-import java.util.concurrent.{LinkedBlockingQueue, ArrayBlockingQueue, Semaphore}
-import java.util.concurrent.atomic.AtomicInteger
 import com.twitter.util.{Future, Duration, Timer, Time}
-import annotation.tailrec
 
 case class BrokenItemException(lastValidPosition: Long, cause: Throwable) extends IOException(cause)
 
@@ -93,15 +92,15 @@ class Journal(queuePath: File, queueName: String, timer: Timer, syncJournal: Dur
   private val CMD_REMOVE_TENTATIVE_XID = 9
 
   def this(fullPath: String, syncJournal: Duration) =
-    this(new File(fullPath).getParentFile(), new File(fullPath).getName(), null, syncJournal)
+    this(new File(fullPath).getParentFile, new File(fullPath).getName, null, syncJournal)
 
   def this(fullPath: String) = this(fullPath, Duration.MaxValue)
 
-  private def open(file: File): Unit = {
+  private def open(file: File) {
     writer = new PeriodicSyncFile(file, timer, syncJournal)
   }
 
-  def open(): Unit = {
+  def open() {
     open(queueFile)
   }
 
@@ -152,7 +151,7 @@ class Journal(queuePath: File, queueName: String, timer: Timer, syncJournal: Dur
     val files = Journal.archivedFilesForQueue(queuePath, queueName)
     new File(queuePath, files(0)).renameTo(queueFile)
     calculateArchiveSize()
-    open
+    open()
   }
 
   def dump(reservedItems: Iterable[QItem], openItems: Iterable[QItem], pentUpDeletes: Int, queue: Iterable[QItem]) {
@@ -173,8 +172,9 @@ class Journal(queuePath: File, queueName: String, timer: Timer, syncJournal: Dur
     }
   }
 
-  def dump(reservedItems: Iterable[QItem], queue: Iterable[QItem]): Unit =
+  def dump(reservedItems: Iterable[QItem], queue: Iterable[QItem]) {
     dump(reservedItems, Nil, 0, queue)
+  }
 
   def startPack(checkpoint: Checkpoint, openItems: Iterable[QItem], queueState: Seq[QItem]) {
     val knownXids = checkpoint.reservedItems.map { _.xid }.toSet
@@ -187,16 +187,16 @@ class Journal(queuePath: File, queueName: String, timer: Timer, syncJournal: Dur
     packerQueue.add(PackRequest(this, checkpoint, newlyOpenItems, negs, queueState))
   }
 
-  def close(): Unit = {
+  def close() {
     writer.close()
-    reader.foreach { _.close }
+    reader.foreach { _.close() }
     reader = None
     readerFilename = None
     closed = true
     waitForPacksToFinish()
   }
 
-  def erase(): Unit = {
+  def erase() {
     try {
       close()
       Journal.archivedFilesForQueue(queuePath, queueName).foreach { filename =>
@@ -208,9 +208,9 @@ class Journal(queuePath: File, queueName: String, timer: Timer, syncJournal: Dur
     }
   }
 
-  def inReadBehind(): Boolean = reader.isDefined
+  def inReadBehind: Boolean = reader.isDefined
 
-  def isReplaying(): Boolean = replayer.isDefined
+  def isReplaying: Boolean = replayer.isDefined
 
   private def add(allowSync: Boolean, item: QItem): Future[Unit] = {
     val blob = item.pack(CMD_ADDX.toByte)
@@ -220,7 +220,7 @@ class Journal(queuePath: File, queueName: String, timer: Timer, syncJournal: Dur
 
   def add(item: QItem): Future[Unit] = add(true, item)
 
-  def continue(xid: Int, item: QItem) = {
+  def continue(xid: Int, item: QItem): Future[Unit] = {
     removesSinceReadBehind += 1
     val blob = item.pack(CMD_CONTINUE.toByte, xid)
     size += blob.limit
@@ -232,11 +232,11 @@ class Journal(queuePath: File, queueName: String, timer: Timer, syncJournal: Dur
     if (inReadBehind) removesSinceReadBehind += 1
   }
 
-  private def removeTentative(xid: Int ,allowSync: Boolean): Unit = {
+  private def removeTentative(xid: Int ,allowSync: Boolean) {
     size += write(allowSync, CMD_REMOVE_TENTATIVE_XID.toByte, xid)
   }
 
-  def removeTentative(xid: Int): Unit = removeTentative(xid, true)
+  def removeTentative(xid: Int) { removeTentative(xid, true) }
 
   def unremove(xid: Int) = {
     size += write(true, CMD_UNREMOVE.toByte, xid)
@@ -247,7 +247,7 @@ class Journal(queuePath: File, queueName: String, timer: Timer, syncJournal: Dur
     if (inReadBehind) removesSinceReadBehind += 1
   }
 
-  def startReadBehind(): Unit = {
+  def startReadBehind() {
     val pos = if (replayer.isDefined) replayer.get.position else writer.position
     val filename = if (replayerFilename.isDefined) replayerFilename.get else queueName
     val rj = new FileInputStream(new File(queuePath, filename)).getChannel
@@ -266,7 +266,7 @@ class Journal(queuePath: File, queueName: String, timer: Timer, syncJournal: Dur
     reader.foreach { rj =>
       if (rj.position == pos && readerFilename.get == filename) {
         // we've caught up.
-        rj.close
+        rj.close()
         reader = None
         readerFilename = None
       } else {
@@ -296,7 +296,7 @@ class Journal(queuePath: File, queueName: String, timer: Timer, syncJournal: Dur
     }
   }
 
-  def replay(f: JournalItem => Unit): Unit = {
+  def replay(f: JournalItem => Unit) {
     // first, erase any lingering temp files.
     queuePath.list().filter {
       _.startsWith(queueName + "~~")
@@ -326,7 +326,7 @@ class Journal(queuePath: File, queueName: String, timer: Timer, syncJournal: Dur
               size += itemsize
               f(x)
               if (size > lastUpdate + 10.megabytes.inBytes) {
-                log.info("Continuing to read '%s' journal (%s); %s so far...", name, filename, size.bytes.toHuman)
+                log.info("Continuing to read '%s' journal (%s); %s so far...", name, filename, size.bytes.toHuman())
                 lastUpdate = size
               }
           }
@@ -457,7 +457,7 @@ class Journal(queuePath: File, queueName: String, timer: Timer, syncJournal: Dur
       throw new IOException("Unexpected EOF")
     }
     byteBuffer.rewind
-    byteBuffer.getInt()
+    byteBuffer.getInt
   }
 
   private def write(allowSync: Boolean, items: Any*): Int = {
