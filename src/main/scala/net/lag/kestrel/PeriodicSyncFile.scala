@@ -23,18 +23,20 @@ class PeriodicSyncFile(file: File, timer: Timer, period: Duration) {
   }
 
   private def fsync() {
-    // race: we could underestimate the number of completed writes. that's okay.
-    val completed = promises.size
-    try {
-      writer.force(false)
-      for (i <- 0 until completed) {
-        promises.poll().setValue(())
-      }
-    } catch {
-      case e: IOException =>
+    synchronized {
+      // race: we could underestimate the number of completed writes. that's okay.
+      val completed = promises.size
+      try {
+        writer.force(false)
         for (i <- 0 until completed) {
-          promises.poll().setException(e)
+          promises.poll().setValue(())
         }
+      } catch {
+        case e: IOException =>
+          for (i <- 0 until completed) {
+            promises.poll().setException(e)
+          }
+      }
     }
   }
 
