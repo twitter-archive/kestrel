@@ -193,11 +193,12 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
           case Some(xid) => journal.continue(xid, item)
         }
       } else {
-        Future.void
+        Future.void()
       }
     }
     waiters.trigger()
-    future()
+    // for now, don't wait:
+    //future()
     true
   }
 
