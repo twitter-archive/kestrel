@@ -55,8 +55,9 @@ def fetch_all
 end
 
 def sort_data(data)
-  data.keys.each { |key| data[key] = data[key].sort_by { |h| [h[1], h[0]] } }
-  data
+  rv = {}
+  data.each { |key, v| rv[key] = v.sort_by { |h| [ h[1], h[0] ] } }
+  rv
 end
 
 def report(data, key)
@@ -82,8 +83,48 @@ def delete_all(queue_name)
   puts "Done."
 end
 
-# ----------
+def keep_unchanged_data(last, current)
+  rv = {}
+  current.keys.each { |key| rv[key] = keep_unchanged_hash(last[key], current[key]) }
+  rv
+end
 
+def keep_unchanged_hash(last, current)
+  rv = {}
+  last.each do |key, value|
+    rv[key] = value if current[key] == value
+  end
+  rv
+end
+
+# dump queues that appear to have neither :items nor :total_items changing.
+def find_stale(rounds)
+  puts "Check 1..."
+  last = fetch_all
+  (1...rounds).each do |i|
+    sleep 5
+    puts "Check #{i + 1}..."
+    current = fetch_all
+    last = keep_unchanged_data(last, current)
+  end
+
+  stale = (last[:total_items].keys & last[:items].keys).sort!
+  sorted = sort_data(last)
+
+  puts ""
+  puts "stale queue prediction"
+  puts "======================"
+  printf("%11s %11s %s\n", "total_items", "items", "queue")
+  printf("%11s %11s %s\n", "-----------", "-----------", "--------------------")
+  stale.each do |queue_name|
+    items = sorted[:items][stale]
+    total_items = sorted[:total_items][stale]
+    printf("%11d %11d %s\n", total_items, items, queue_name)
+  end
+end
+
+
+# ----------
 
 parser = OptionParser.new do |opts|
   opts.banner = "Usage: #{$0} [options] <command>"
@@ -106,6 +147,7 @@ parser = OptionParser.new do |opts|
   opts.separator "    max_age         show maximum age (msec) per queue"
   opts.separator ""
   opts.separator "    delete <name>   remove a queue across the cluster"
+  opts.separator "    stale [rounds]  try to detect stale queues (default: 5 rounds)"
   opts.separator ""
 end
 
@@ -140,6 +182,10 @@ elsif command == "delete" && ARGV.size == 2
   print "Really delete #{queue_name}? (yes/no) "
   STDOUT.flush
   delete_all(queue_name) if STDIN.gets.chomp == 'yes'
+  exit 0
+elsif command == "stale"
+  rounds = ARGV[1] ? ARGV[1].to_i : 5
+  find_stale(rounds)
   exit 0
 end
 
