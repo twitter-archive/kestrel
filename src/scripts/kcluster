@@ -1,0 +1,153 @@
+#!/usr/bin/env ruby
+
+$:.push(File.dirname($0))
+require 'optparse'
+require 'socket'
+
+$options = {
+  :config_filename => ENV['HOME'] + "/.kestrel_cluster",
+  :server_list => [],
+  :port => 22133,
+}
+
+def fetch_stats(host, port, data)
+  puts "--- Fetching stats from #{host}:#{port}"
+  sock = TCPSocket.open(host, port)
+  sock.puts("stats")
+  done = false
+  while !done && line = sock.gets.chomp
+    if (line == 'END') then
+      done = true
+    elsif line =~ /STAT queue_(\w+) (\d+)/
+      key = $1
+      value = $2.to_i
+      if key =~ /(\w+)_total_items/
+        data[:total_items][$1] += value
+      elsif key =~ /(\w+)_items/
+        data[:items][$1] += value
+      elsif key =~ /(\w+)_mem_bytes/
+        data[:mem_bytes][$1] += value
+      elsif key =~ /(\w+)_bytes/
+        data[:bytes][$1] += value
+      elsif key =~ /(\w+)_age/
+        data[:min_age][$1] = value if value < data[:min_age][$1]
+        data[:max_age][$1] = value if value > data[:max_age][$1]
+      end
+    end
+  end
+  sock.close
+end
+
+def fetch_all
+  data = Hash.new do |h, data_type|
+    h[data_type] = Hash.new do |h, k|
+      h[k] = (data_type == :min_age) ? 2**31 : 0
+    end
+  end
+  $options[:server_list].each do |server|
+    begin
+      fetch_stats(server, $options[:port], data)
+    rescue => e
+      puts "Could not connect to host #{server}: #{e}"
+    end
+  end
+  data
+end
+
+def sort_data(data)
+  data.keys.each { |key| data[key] = data[key].sort_by { |h| [h[1], h[0]] } }
+  data
+end
+
+def report(data, key)
+  puts ""
+  format = "%14s %s\n"
+  printf(format, key, "queue")
+  printf(format, "============", "====================")
+  data[key].each { |queue, value| printf("%14d %s\n", value, queue) }
+end
+
+def report_all(data, keys)
+  keys.each { |key| report(data, key) }
+  puts ""
+end
+
+def delete_all(queue_name)
+  $options[:server_list].each do |server|
+    puts "--- Deleting queue #{queue_name} from #{server}:#{$options[:port]}"
+    sock = TCPSocket.open(server, $options[:port])
+    sock.puts("delete " + queue_name)
+    sock.close
+  end
+  puts "Done."
+end
+
+# ----------
+
+
+parser = OptionParser.new do |opts|
+  opts.banner = "Usage: #{$0} [options] <command>"
+  opts.separator "Example: #{$0} -f shards.yml 11"
+
+  opts.on("-f", "--file=FILENAME", "load kestrel server list from file (use '-' for stdin) (default: #{$options[:config_filename]})") do |filename|
+    $options[:config_filename] = filename
+  end
+  opts.on("-p", "--port=N", "use port (default: #{$options[:port]})") do |port|
+    $options[:port] = port.to_i
+  end
+
+  opts.separator ""
+  opts.separator "Commands:"
+  opts.separator "    all             show all of the stats summaries below (items, etc)"
+  opts.separator "    items           show item counts per queue"
+  opts.separator "    bytes           show byte counts per queue"
+  opts.separator "    mem             show in-memory byte counts per queue"
+  opts.separator "    min_age         show minimum age (msec) per queue"
+  opts.separator "    max_age         show maximum age (msec) per queue"
+  opts.separator ""
+  opts.separator "    delete <name>   remove a queue across the cluster"
+  opts.separator ""
+end
+
+parser.parse!(ARGV)
+
+if ARGV.size < 1
+  puts
+  puts parser
+  exit 1
+end
+
+server_file = $options[:config_filename] == "-" ? STDIN : File.open($options[:config_filename], "r")
+$options[:server_list] = server_file.readlines.map { |line| line.chomp }
+server_file.close
+
+command = ARGV[0].downcase
+
+if command == "all"
+  $show = [ :items, :bytes, :mem_bytes, :min_age, :max_age ]
+elsif command == "items"
+  $show = [ :items ]
+elsif command == "bytes"
+  $show = [ :bytes ]
+elsif command == "mem"
+  $show = [ :mem_bytes ]
+elsif command == "min_age"
+  $show = [ :min_age ]
+elsif command == "max_age"
+  $show = [ :max_age ]
+elsif command == "delete" && ARGV.size == 2
+  queue_name = ARGV[1]
+  print "Really delete #{queue_name}? (yes/no) "
+  STDOUT.flush
+  delete_all(queue_name) if STDIN.gets.chomp == 'yes'
+  exit 0
+end
+
+if $show
+  report_all(sort_data(fetch_all), $show)
+  exit 0
+else
+  puts
+  puts parser
+  exit 1
+end
