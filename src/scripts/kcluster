@@ -75,9 +75,23 @@ end
 
 def delete_all(queue_name)
   $options[:server_list].each do |server|
-    puts "--- Deleting queue #{queue_name} from #{server}:#{$options[:port]}"
+    print "--- Deleting queue #{queue_name} from #{server}:#{$options[:port]} ... "
+    STDOUT.flush
     sock = TCPSocket.open(server, $options[:port])
     sock.puts("delete " + queue_name)
+    puts sock.readline.chomp
+    sock.close
+  end
+  puts "Done."
+end
+
+def flush_all(queue_name)
+  $options[:server_list].each do |server|
+    print "--- Flushing queue #{queue_name} from #{server}:#{$options[:port]} ... "
+    STDOUT.flush
+    sock = TCPSocket.open(server, $options[:port])
+    sock.puts("flush " + queue_name)
+    puts sock.readline.chomp
     sock.close
   end
   puts "Done."
@@ -147,6 +161,7 @@ parser = OptionParser.new do |opts|
   opts.separator "    max_age         show maximum age (msec) per queue"
   opts.separator ""
   opts.separator "    delete <name>   remove a queue across the cluster"
+  opts.separator "    flush <name>    drain a queue across the cluster"
   opts.separator "    stale [rounds]  try to detect stale queues (default: 5 rounds)"
   opts.separator ""
 end
@@ -182,6 +197,12 @@ elsif command == "delete" && ARGV.size == 2
   print "Really delete #{queue_name}? (yes/no) "
   STDOUT.flush
   delete_all(queue_name) if STDIN.gets.chomp == 'yes'
+  exit 0
+elsif command == "flush" && ARGV.size == 2
+  queue_name = ARGV[1]
+  print "Really flush #{queue_name}? (yes/no) "
+  STDOUT.flush
+  flush_all(queue_name) if STDIN.gets.chomp == 'yes'
   exit 0
 elsif command == "stale"
   rounds = ARGV[1] ? ARGV[1].to_i : 5
