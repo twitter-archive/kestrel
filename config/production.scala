@@ -21,6 +21,7 @@ new KestrelConfig {
   default.defaultJournalSize = 16.megabytes
   default.maxMemorySize = 128.megabytes
   default.maxJournalSize = 1.gigabyte
+  default.syncJournal = 20.milliseconds
 
   admin.httpPort = 2223
 
