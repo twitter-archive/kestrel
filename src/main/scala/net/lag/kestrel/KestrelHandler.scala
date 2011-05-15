@@ -18,10 +18,10 @@
 package net.lag.kestrel
 
 import scala.collection.mutable
-import com.twitter.admin.{BackgroundProcess, ServiceTracker}
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
-import com.twitter.stats.Stats
+import com.twitter.ostrich.admin.{BackgroundProcess, ServiceTracker}
+import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{Duration, Time}
 
 class TooManyOpenTransactionsException extends Exception("Too many open transactions.")
@@ -194,11 +194,6 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
   protected def flush(key: String) = {
     log.debug("flush -> q=%s", key)
     queues.flush(key)
-  }
-
-  protected def rollJournal(key: String) {
-    log.debug("roll -> q=%s", key)
-    queues.rollJournal(key)
   }
 
   protected def delete(key: String) = {

@@ -20,12 +20,13 @@ package net.lag.kestrel.load
 import java.net._
 import java.nio._
 import java.nio.channels._
+import scala.annotation.tailrec
 import scala.collection.mutable
 import com.twitter.conversions.string._
 
 /**
- * Spam a kestrel server with 1M copies of a pop song lyric, to see how
- * quickly it can absorb them.
+ * Seed a kestrel server with a backlog of items, then do cycles of put/get bursts to stress the
+ * background journal packer.
  */
 object JournalPacking extends LoadTesting {
   private val DATA = "x" * 1024
@@ -47,7 +48,7 @@ object JournalPacking extends LoadTesting {
   }
 
   def get(socket: SocketChannel, queueName: String, n: Int, data: String, counter: Long): Int = {
-    val req = ByteBuffer.wrap(("get " + queueName + "\r\n").getBytes)
+    val req = ByteBuffer.wrap(("get " + queueName + (if (useTransactions) "/t=1000/close/open" else "") + "\r\n").getBytes)
     val expectEnd = ByteBuffer.wrap("END\r\n".getBytes)
 
     var count = 0
@@ -65,6 +66,9 @@ object JournalPacking extends LoadTesting {
         count += 1
       }
     }
+    if (useTransactions) {
+      send(socket, ByteBuffer.wrap(("get " + queueName + "/close\r\n").getBytes))
+    }
     misses
   }
 
@@ -78,7 +82,6 @@ object JournalPacking extends LoadTesting {
       producerThread = new Thread {
         override def run() = {
           val socket = SocketChannel.open(new InetSocketAddress("localhost", 22133))
-          val qName = "spam"
           put(socket, qName, totalItems, data, writeCounter)
         }
       }
@@ -92,7 +95,6 @@ object JournalPacking extends LoadTesting {
       consumerThread = new Thread {
         override def run() = {
           val socket = SocketChannel.open(new InetSocketAddress("localhost", 22133))
-          val qName = "spam"
           misses = get(socket, qName, totalItems, data, readCounter)
         }
       }
@@ -105,19 +107,21 @@ object JournalPacking extends LoadTesting {
       writeCounter += totalItems
     }
     if (doReads) {
-      val duration = System.currentTimeMillis - startTime
       consumerThread.join()
+      val duration = System.currentTimeMillis - startTime
       readCounter += totalItems
       println("Read %d items in %d msec. Consumer spun %d times in misses.".format(totalItems, duration, misses))
     }
   }
 
+  var qName = "spam"
   var totalItems = 25000
   var kilobytes = 1
   var pause = 1
   var cycles = 100
   var readCounter: Long = 0
   var writeCounter: Long = 0
+  var useTransactions: Boolean = false
 
   def usage() {
     Console.println("usage: packing [options]")
@@ -125,6 +129,8 @@ object JournalPacking extends LoadTesting {
     Console.println("    with pauses")
     Console.println()
     Console.println("options:")
+    Console.println("    -q NAME")
+    Console.println("        use named queue (default: %s)".format(qName))
     Console.println("    -n ITEMS")
     Console.println("        put ITEMS items into the queue (default: %d)".format(totalItems))
     Console.println("    -k KILOBYTES")
@@ -133,13 +139,19 @@ object JournalPacking extends LoadTesting {
     Console.println("        pause SECONDS between cycles (default: %d)".format(pause))
     Console.println("    -c CYCLES")
     Console.println("        do read/writes CYCLES times (default: %d)".format(cycles))
+    Console.println("    -x")
+    Console.println("        use transactions when fetching")
   }
 
+  @tailrec
   def parseArgs(args: List[String]): Unit = args match {
     case Nil =>
     case "--help" :: xs =>
       usage()
       System.exit(0)
+    case "-q" :: x :: xs =>
+      qName = x
+      parseArgs(xs)
     case "-n" :: x :: xs =>
       totalItems = x.toInt
       parseArgs(xs)
@@ -148,6 +160,12 @@ object JournalPacking extends LoadTesting {
       parseArgs(xs)
     case "-t" :: x :: xs =>
       pause = x.toInt
+      parseArgs(xs)
+    case "-c" :: x :: xs =>
+      cycles = x.toInt
+      parseArgs(xs)
+    case "-x" :: xs =>
+      useTransactions = true
       parseArgs(xs)
     case _ =>
       usage()
@@ -160,6 +178,7 @@ object JournalPacking extends LoadTesting {
     println("packing: " + totalItems + " items of " + kilobytes + "kB with " + pause + " second pauses")
     cycle(false, true)
     for (i <- 0 until cycles) {
+      println("cycle: " + (i + 1))
       cycle(true, true)
       Thread.sleep(pause * 1000)
     }

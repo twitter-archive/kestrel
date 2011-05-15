@@ -22,7 +22,7 @@ import java.net.InetSocketAddress
 import scala.collection.mutable
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
-import com.twitter.naggati.{NettyMessage, ProtocolError}
+import com.twitter.naggati.ProtocolError
 import com.twitter.util.{Duration, Time}
 import org.jboss.netty.channel._
 import org.jboss.netty.channel.group.ChannelGroup

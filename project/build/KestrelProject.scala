@@ -1,10 +1,17 @@
 import sbt._
 import com.twitter.sbt._
 
-class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info)
-with SubversionPublisher with DefaultRepos with gh.Issues {
-  val util = "com.twitter" % "util" % "1.6.6"
+class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) with NoisyDependencies
+  with SubversionPublisher
+  with DefaultRepos
+  with IdeaProject
+  with PublishSourcesAndJavadocs
+  with PublishSite
+{
+  val util = "com.twitter" % "util-core" % "1.8.1"
 
+  val ostrich = "com.twitter" % "ostrich" % "4.2.0"
+  val naggati = "com.twitter" % "naggati" % "2.1.1"
   val ostrich = "com.twitter" % "ostrich" % "3.0.4"
   val naggati = "com.twitter" % "naggati" % "2.0.0"
   val finagle = "com.twitter" % "finagle-core" % "1.1.25-SNAPSHOT"
@@ -36,19 +43,22 @@ with SubversionPublisher with DefaultRepos with gh.Issues {
 
   override def subversionRepository = Some("http://svn.local.twitter.com/maven-public")
 
-  def ghCredentials = gh.LocalGhCreds(log)
-  def ghRepository = ("robey", "kestrel")
-
   // 100 times: 10,000 items of 1024 bytes each.
-  override def fork = forkRun
-  lazy val putMany = runTask(Some("net.lag.kestrel.load.PutMany"), testClasspath, "100", "10000", "1024").dependsOn(testCompile) describedAs "Run a load test."
-  lazy val manyClients = runTask(Some("net.lag.kestrel.load.ManyClients"), testClasspath).dependsOn(testCompile)
+//  override def fork = forkRun(List("-Xmx1024m", "-verbosegc", "-XX:+PrintGCDetails"))
+
+  lazy val putMany = task { args =>
+    runTask(Some("net.lag.kestrel.load.PutMany"), testClasspath, args).dependsOn(testCompile)
+  } describedAs "Run a load test on PUT."
+
+  lazy val manyClients = task { args =>
+    runTask(Some("net.lag.kestrel.load.ManyClients"), testClasspath, args).dependsOn(testCompile)
+  } describedAs "Run a load test on many slow clients."
 
   lazy val flood = task { args =>
     runTask(Some("net.lag.kestrel.load.Flood"), testClasspath, args).dependsOn(testCompile)
-  }
+  } describedAs "Run a load test on a flood of PUT/GET."
 
   lazy val packing = task { args =>
     runTask(Some("net.lag.kestrel.load.JournalPacking"), testClasspath, args).dependsOn(testCompile)
-  }
+  } describedAs "Run a load test on journal packing."
 }

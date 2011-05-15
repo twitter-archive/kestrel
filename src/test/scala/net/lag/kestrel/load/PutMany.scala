@@ -88,16 +88,58 @@ object PutMany {
     }
   }
 
-  def main(args: Array[String]) = {
-    if (args.length < 3) {
-      Console.println("usage: put-many <clients> <count> <bytes>")
-      Console.println("    spin up <clients> and put <count> items of <bytes> size into kestrel")
-      System.exit(1)
-    }
+  var clientCount = 100
+  var totalItems = 10000
+  var bytes = 1024
+  var hostname = "localhost"
+  var port = 22133
 
-    val clientCount = args(0).toInt
-    val totalItems = args(1).toInt
-    val bytes = args(2).toInt
+  def usage() {
+    Console.println("usage: put-many [options]")
+    Console.println("    spam items into kestrel")
+    Console.println()
+    Console.println("options:")
+    Console.println("    -c CLIENTS")
+    Console.println("        use CLIENTS concurrent clients (default: %d)".format(clientCount))
+    Console.println("    -n ITEMS")
+    Console.println("        put ITEMS items into the queue (default: %d)".format(totalItems))
+    Console.println("    -b BYTES")
+    Console.println("        put BYTES per queue item (default: %d)".format(bytes))
+    Console.println("    -h HOSTNAME")
+    Console.println("        use kestrel on HOSTNAME (default: %s)".format(hostname))
+    Console.println("    -p PORT")
+    Console.println("        use kestrel on PORT (default: %d)".format(port))
+  }
+
+  def parseArgs(args: List[String]): Unit = args match {
+    case Nil =>
+    case "--help" :: xs =>
+      usage()
+      System.exit(0)
+    case "-c" :: x :: xs =>
+      clientCount = x.toInt
+      parseArgs(xs)
+    case "-n" :: x :: xs =>
+      totalItems = x.toInt
+      parseArgs(xs)
+    case "-b" :: x :: xs =>
+      bytes = x.toInt
+      parseArgs(xs)
+    case "-h" :: x :: xs =>
+      hostname = x
+      parseArgs(xs)
+    case "-p" :: x :: xs =>
+      port = x.toInt
+      parseArgs(xs)
+    case _ =>
+      usage()
+      System.exit(1)
+  }
+
+  def main(args: Array[String]) = {
+    parseArgs(args.toList)
+    println("Put %d items of %d bytes to %s:%d using %d clients.".format(totalItems, bytes, hostname, port, clientCount))
+
     val totalCount = totalItems / clientCount * clientCount
     val totalQueues = System.getProperty("queues", "1").toInt
 
@@ -118,7 +160,7 @@ object PutMany {
     for (i <- 0 until clientCount) {
       val t = new Thread {
         override def run = {
-          val socket = SocketChannel.open(new InetSocketAddress("localhost", 22133))
+          val socket = SocketChannel.open(new InetSocketAddress(hostname, port))
           val qName = "spam" + (i % totalQueues)
           put(socket, qName, totalItems / clientCount, timings, rawData.toString)
         }
@@ -142,7 +184,7 @@ object PutMany {
     val median = (sortedTimings(sortedTimings.size / 2 - 1) + sortedTimings(sortedTimings.size / 2)) / 2000.0
 
     println("Transactions: min=%.2f; max=%.2f %.2f %.2f; median=%.2f; average=%.2f usec".format(min, max, maxless, maxlesser, median, average))
-    var dist = Array(0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.999, 0.9999) map { r =>
+    val dist = Array(0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.999, 0.9999) map { r =>
       "%.2f%%=%.2f".format(r * 100, sortedTimings((sortedTimings.size * r).toInt) / 1000.0)
     }
     println("Transactions distribution: " + dist.mkString(" "))

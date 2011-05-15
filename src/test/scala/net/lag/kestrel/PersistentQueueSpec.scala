@@ -27,25 +27,12 @@ import org.specs.Specification
 import org.specs.matcher.Matcher
 import config._
 
-class PersistentQueueSpec extends Specification with TempFolder with TestLogging with QueueMatchers {
-  def dumpJournal(qname: String): String = {
-    var rv = new mutable.ListBuffer[JournalItem]
-    new Journal(new File(folderName, qname).getCanonicalPath, false).replay(qname) { item => rv += item }
-    rv map {
-      case JournalItem.Add(item) =>
-        if (item.data.size > 0 && item.data(0) > 0) {
-          "add(%d:%d:%s)".format(item.data.size, item.xid, new String(item.data))
-        } else {
-          "add(%d:%d)".format(item.data.size, item.xid)
-        }
-      case JournalItem.Remove => "remove"
-      case JournalItem.RemoveTentative => "remove-tentative"
-      case JournalItem.SavedXid(xid) => "xid(%d)".format(xid)
-      case JournalItem.Unremove(xid) => "unremove(%d)".format(xid)
-      case JournalItem.ConfirmRemove(xid) => "confirm-remove(%d)".format(xid)
-    } mkString ", "
-  }
-
+class PersistentQueueSpec extends Specification
+  with TempFolder
+  with TestLogging
+  with QueueMatchers
+  with DumpJournal
+{
   "PersistentQueue" should {
     val timer = new FakeTimer()
 
@@ -122,7 +109,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
     "rotate journals" in {
       withTempFolder {
         val config = new QueueBuilder {
-          maxJournalSize = 64.bytes
+          defaultJournalSize = 64.bytes
         }.apply()
         val q = new PersistentQueue("rolling", folderName, config, timer)
         q.setup()
@@ -132,27 +119,27 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
         q.length mustEqual 2
         q.totalItems() mustEqual 2
         q.bytes mustEqual 32 + 64
-        (q.journalSize > 96) mustBe true
+        (q.journalTotalSize > 96) mustBe true
 
         q.remove()
         q.length mustEqual 1
         q.totalItems() mustEqual 2
         q.bytes mustEqual 64
-        (q.journalSize > 96) mustBe true
+        (q.journalTotalSize > 96) mustBe true
 
         // now it should rotate:
         q.remove()
         q.length mustEqual 0
         q.totalItems() mustEqual 2
         q.bytes mustEqual 0
-        (q.journalSize < 10) mustBe true
+        (q.journalTotalSize < 10) mustBe true
       }
     }
 
     "rotate journals with an open transaction" in {
       withTempFolder {
         val config = new QueueBuilder {
-          maxJournalSize = 64.bytes
+          defaultJournalSize = 64.bytes
         }.apply()
         val q = new PersistentQueue("rolling", folderName, config, timer)
         q.setup()
@@ -202,6 +189,33 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
         q3.setup
         q3.journalSize mustEqual 5 + 6 + 16 + 16 + 5 + 5 + 1 + 1
         q3.length mustEqual 0
+      }
+    }
+
+    "recover a journal with a rewritten transaction" in {
+      withTempFolder {
+        val q = new PersistentQueue("rolling", folderName, new QueueBuilder().apply(), timer)
+        q.setup()
+        q.add("zero".getBytes)
+        q.add("first".getBytes)
+        q.add("second".getBytes)
+
+        // force-bump xid
+        val zero = q.remove(true).get
+        new String(zero.data) mustEqual "zero"
+        q.confirmRemove(zero.xid)
+
+        val item = q.remove(true).get
+        new String(item.data) mustEqual "first"
+        q.forceRewrite()
+        q.confirmRemove(item.xid)
+        q.close()
+
+        val q2 = new PersistentQueue("rolling", folderName, new QueueBuilder().apply(), timer)
+        q2.setup()
+        new String(q2.remove().get.data) mustEqual "second"
+        q2.close()
+        dumpJournal("rolling") mustEqual "add(5:0:first), remove-tentative(2), add(6:0:second), confirm-remove(2), remove"
       }
     }
 
@@ -304,23 +318,26 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
         q.setup
         q.add("house".getBytes)
         q.add("cat".getBytes)
-        q.journalSize mustEqual 2 * 21 + 8
+        dumpJournal("things") mustEqual "add(5:0:house), add(3:0:cat)"
 
         val house = q.remove(true).get
         new String(house.data) mustEqual "house"
         house.xid mustEqual 1
-        q.journalSize mustEqual 2 * 21 + 8 + 1
+        dumpJournal("things") mustEqual "add(5:0:house), add(3:0:cat), remove-tentative(1)"
 
         val cat = q.remove(true).get
         new String(cat.data) mustEqual "cat"
         cat.xid mustEqual 2
-        q.journalSize mustEqual 2 * 21 + 8 + 1 + 1
+        dumpJournal("things") mustEqual
+          "add(5:0:house), add(3:0:cat), remove-tentative(1), remove-tentative(2)"
 
         q.unremove(house.xid)
-        q.journalSize mustEqual 2 * 21 + 8 + 1 + 1 + 5
+        dumpJournal("things") mustEqual
+          "add(5:0:house), add(3:0:cat), remove-tentative(1), remove-tentative(2), unremove(1)"
 
         q.confirmRemove(cat.xid)
-        q.journalSize mustEqual 2 * 21 + 8 + 1 + 1 + 5 + 5
+        dumpJournal("things") mustEqual
+          "add(5:0:house), add(3:0:cat), remove-tentative(1), remove-tentative(2), unremove(1), confirm-remove(2)"
         q.length mustEqual 1
         q.bytes mustEqual 5
 
@@ -330,7 +347,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
 
         q.close
         dumpJournal("things") mustEqual
-          "add(5:0:house), add(3:0:cat), remove-tentative, remove-tentative, unremove(1), confirm-remove(2), remove"
+          "add(5:0:house), add(3:0:cat), remove-tentative(1), remove-tentative(2), unremove(1), confirm-remove(2), remove"
 
         // and journal is replayed correctly.
         val q2 = new PersistentQueue("things", folderName, config, timer)
@@ -375,42 +392,60 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
       }
     }
 
+    "continue a queue item" in {
+      withTempFolder {
+        val q = new PersistentQueue("things", folderName, new QueueBuilder().apply(), timer)
+        q.setup
+        q.add("one".getBytes)
+
+        val item1 = q.remove(true)
+        new String(item1.get.data) mustEqual "one"
+
+        q.continue(item1.get.xid, "two".getBytes)
+        q.close
+
+        val q2 = new PersistentQueue("things", folderName, new QueueBuilder().apply(), timer)
+        q2.setup
+        q2.length mustEqual 1
+        q2.openTransactionCount mustEqual 0
+        new String(q2.remove.get.data) mustEqual "two"
+        q2.length mustEqual 0
+      }
+    }
+
     "recreate the journal file when it gets too big" in {
       withTempFolder {
         val config = new QueueBuilder {
-          maxJournalSize = 1.kilobyte
-          maxJournalOverflow = 3
+          maxJournalSize = 3.kilobytes
         }.apply()
         val q = new PersistentQueue("things", folderName, config, timer)
         q.setup
         q.add(new Array[Byte](512))
         // can't roll the journal normally, cuz there's always one item left.
-        for (i <- 0 until 5) {
+        for (i <- 0 until 4) {
           q.add(new Array[Byte](512))
-          // last remove will be an incomplete transaction:
-          q.remove(i == 4) must beSomeQItem(512)
+          q.remove(false) must beSomeQItem(512)
         }
-        q.length mustEqual 1
-        q.openTransactionCount mustEqual 1
-        q.journalSize mustEqual (512 * 6) + (6 * 21) + 5
-
-        // next add should force a recreate.
         q.add(new Array[Byte](512))
         q.length mustEqual 2
-        q.openTransactionCount mustEqual 1
-        q.journalSize mustEqual ((512 + 16) * 3) + 9 + 1 + 5 + (5 * 2)
+        q.journalSize mustEqual (512 * 6) + (6 * 21) + 4
 
-        // journal should contain exactly: one unfinished transaction, 2 items.
+        // next remove should force a recreate, because the queue size will be 512.
+        q.remove(false) must beSomeQItem(512)
+        q.length mustEqual 1
+        q.journalSize mustEqual (512 + 21)
+
+        // journal should contain exactly 1 item.
         q.close
-        dumpJournal("things") mustEqual "add(512:1), remove-tentative, xid(1), add(512:0), add(512:0)"
+        dumpJournal("things") mustEqual "add(512:0)"
       }
     }
 
     "don't recreate the journal file if the queue itself is still huge" in {
       withTempFolder {
         val config = new QueueBuilder {
-          maxJournalSize = 1.kilobyte
-          maxJournalOverflow = 3
+          maxMemorySize = 1.kilobyte
+          maxJournalSize = 3.kilobytes
         }.apply()
         val q = new PersistentQueue("things", folderName, config, timer)
         q.setup
@@ -419,8 +454,7 @@ class PersistentQueueSpec extends Specification with TempFolder with TestLogging
         }
         q.length mustEqual 8
         q.bytes mustEqual 4096
-        dumpJournal("things").contains("xid") mustBe false
-        q.journalSize mustEqual (512 + 21) * 8
+        q.journalSize must be_<(q.journalTotalSize)
       }
     }
 

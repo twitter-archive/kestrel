@@ -25,7 +25,7 @@ import scala.collection.mutable
 import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
-import com.twitter.stats.Stats
+import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{Duration, Future, Promise, Time, Timer, TimerTask, Try}
 import config._
 
@@ -67,7 +67,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   private var paused = false
 
   private var journal =
-    new Journal(new File(persistencePath).getCanonicalPath, name, config.syncJournal, config.multifileJournal)
+    new Journal(new File(persistencePath).getCanonicalFile, name, timer, config.syncJournal)
 
   private val waiters = new DeadlineWaitQueue(timer)
 
@@ -80,6 +80,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   def length: Long = synchronized { queueLength }
   def bytes: Long = synchronized { queueSize }
   def journalSize: Long = synchronized { journal.size }
+  def journalTotalSize: Long = journal.archivedSize + journalSize
   def currentAge: Duration = synchronized { if (queueSize == 0) 0.milliseconds else _currentAge }
   def waiterCount: Long = synchronized { waiters.size }
   def isClosed: Boolean = synchronized { closed || paused }
@@ -92,22 +93,6 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   if (!config.keepJournal) journal.erase()
 
   @volatile var expireQueue: Option[PersistentQueue] = config.expireToQueue.flatMap { name => queueLookup.flatMap(_(name)) }
-
-  // FIXME
-  def dumpConfig(): Array[String] = synchronized {
-    Array(
-      "max_items=" + config.maxItems,
-      "max_size=" + config.maxSize,
-      "max_age=" + config.maxAge,
-      "max_journal_size=" + config.maxJournalSize.inBytes,
-      "max_memory_size=" + config.maxMemorySize.inBytes,
-      "max_journal_overflow=" + config.maxJournalOverflow,
-      "discard_old_when_full=" + config.discardOldWhenFull,
-      "journal=" + config.keepJournal,
-      "sync_journal=" + config.syncJournal,
-      "move_expired_to=" + config.expireToQueue.getOrElse("(none)")
-    )
-  }
 
   def dumpStats(): Array[(String, String)] = synchronized {
     Array(
@@ -129,7 +114,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
 
   gauge("items", length)
   gauge("bytes", bytes)
-  gauge("journal_size", journal.totalSize)
+  gauge("journal_size", journalTotalSize)
   gauge("mem_items", memoryLength)
   gauge("mem_bytes", memoryBytes)
   gauge("age_msec", currentAge.inMilliseconds)
@@ -145,24 +130,34 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     }
   }
 
-  final def rollJournal() {
-    if (config.keepJournal) {
-      log.info("Rolling journal file for '%s' (qsize=%d)", name, queueSize)
-      synchronized {
-        if (config.multifileJournal) {
-          journal.rotate()
-        } else {
-          journal.roll(xidCounter, openTransactionIds map { openTransactions(_) }, queue)
-        }
-      }
+  // you are holding the lock, and config.keepJournal is true.
+  private def checkRotateJournal() {
+    /*
+     * if the queue is empty, and the journal is larger than defaultJournalSize, rebuild it.
+     * if the queue is smaller than maxMemorySize, and the combined journals are larger than
+     *   maxJournalSize, rebuild them. (we are not in read-behind.)
+     * if the current journal is larger than maxMemorySize, rotate to a new file. if the combined
+     *   journals are larger than maxJournalSize, checkpoint in preparation for rebuilding the
+     *   older files in the background.
+     */
+    if ((journal.size >= config.defaultJournalSize.inBytes && queueLength == 0) ||
+        (journal.size + journal.archivedSize > config.maxJournalSize.inBytes &&
+         queueSize < config.maxMemorySize.inBytes)) {
+      log.info("Rewriting journal file for '%s' (qsize=%d)", name, queueSize)
+      journal.rewrite(openTransactionIds.map { openTransactions(_) }, queue)
+    } else if (journal.size > config.maxMemorySize.inBytes) {
+      log.info("Rotating journal file for '%s' (qsize=%d)", name, queueSize)
+      val setCheckpoint = (journal.size + journal.archivedSize > config.maxJournalSize.inBytes)
+      journal.rotate(openTransactionIds.map { openTransactions(_) }, setCheckpoint)
     }
   }
 
-  final def checkRotateJournal() {
-    if (config.keepJournal && config.multifileJournal && journal.size > config.maxJournalSize.inBytes) {
-      synchronized {
-        log.info("Rotating journal file for '%s'", name)
-        journal.rotate()
+  // for tests.
+  def forceRewrite() {
+    synchronized {
+      if (config.keepJournal) {
+        log.info("Rewriting journal file for '%s' (qsize=%d)", name, queueSize)
+        journal.rewrite(openTransactionIds.map { openTransactions(_) }, queue)
       }
     }
   }
@@ -170,39 +165,48 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   /**
    * Add a value to the end of the queue, transactionally.
    */
-  def add(value: Array[Byte], expiry: Option[Time]): Boolean = {
-    synchronized {
+  def add(value: Array[Byte], expiry: Option[Time], xid: Option[Int]): Boolean = {
+    val future = synchronized {
       if (closed || value.size > config.maxItemSize.inBytes) return false
       if (config.fanoutOnly && !isFanout) return true
       while (queueLength >= config.maxItems || queueSize >= config.maxSize.inBytes) {
         if (!config.discardOldWhenFull) return false
-        _remove(false)
+        _remove(false, None)
         totalDiscarded.incr()
         if (config.keepJournal) journal.remove()
       }
 
       val now = Time.now
       val item = QItem(now, adjustExpiry(now, expiry), value, 0)
-      if (config.keepJournal && !journal.inReadBehind) {
-        if (journal.size > config.maxJournalSize.inBytes * config.maxJournalOverflow &&
-            queueSize < config.maxJournalSize.inBytes) {
-          // force re-creation of the journal.
-          rollJournal()
-        }
-        if (queueSize >= config.maxMemorySize.inBytes) {
-          log.info("Dropping to read-behind for queue '%s' (%s)", name, queueSize.bytes.toHuman)
-          journal.startReadBehind
+      if (config.keepJournal) {
+        checkRotateJournal()
+        if (!journal.inReadBehind && (queueSize >= config.maxMemorySize.inBytes)) {
+          log.info("Dropping to read-behind for queue '%s' (%s)", name, queueSize.bytes.toHuman())
+          journal.startReadBehind()
         }
       }
-      checkRotateJournal()
+      if (xid != None) openTransactions.remove(xid.get)
       _add(item)
-      if (config.keepJournal) journal.add(item)
+      if (config.keepJournal) {
+        xid match {
+          case None => journal.add(item)
+          case Some(xid) => journal.continue(xid, item)
+        }
+      } else {
+        Future.void()
+      }
     }
     waiters.trigger()
+    // for now, don't wait:
+    //future()
     true
   }
 
-  def add(value: Array[Byte]): Boolean = add(value, None)
+  def add(value: Array[Byte]): Boolean = add(value, None, None)
+  def add(value: Array[Byte], expiry: Option[Time]): Boolean = add(value, expiry, None)
+
+  def continue(xid: Int, value: Array[Byte]): Boolean = add(value, None, Some(xid))
+  def continue(xid: Int, value: Array[Byte], expiry: Option[Time]): Boolean = add(value, expiry, Some(xid))
 
   /**
    * Peek at the head item in the queue, if there is one.
@@ -229,13 +233,9 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       if (closed || paused || queueLength == 0) {
         None
       } else {
-        val item = _remove(transaction)
-        if (config.keepJournal) {
-          if (transaction) journal.removeTentative() else journal.remove()
-
-          if ((queueLength == 0) && (journal.size >= config.maxJournalSize.inBytes)) {
-            rollJournal()
-          }
+        val item = _remove(transaction, None)
+        if (config.keepJournal && item.isDefined) {
+          if (transaction) journal.removeTentative(item.get.xid) else journal.remove()
           checkRotateJournal()
         }
         item
@@ -269,7 +269,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
 
   final def waitPeek(deadline: Option[Time]): Future[Option[QItem]] = {
     val promise = new Promise[Option[QItem]]()
-    waitOperation(peek, deadline, promise)
+    waitOperation(peek(), deadline, promise)
     promise
   }
 
@@ -277,7 +277,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
    * Return a transactionally-removed item to the queue. This is a rolled-
    * back transaction.
    */
-  def unremove(xid: Int): Unit = {
+  def unremove(xid: Int) {
     synchronized {
       if (!closed) {
         if (config.keepJournal) journal.unremove(xid)
@@ -287,7 +287,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     }
   }
 
-  def confirmRemove(xid: Int): Unit = {
+  def confirmRemove(xid: Int) {
     synchronized {
       if (!closed) {
         if (config.keepJournal) journal.confirmRemove(xid)
@@ -296,51 +296,64 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     }
   }
 
-  def flush(): Unit = {
+  def flush() {
     while (remove(false).isDefined) { }
   }
 
   /**
    * Close the queue's journal file. Not safe to call on an active queue.
    */
-  def close(): Unit = synchronized {
-    closed = true
-    if (config.keepJournal) journal.close()
-    waiters.triggerAll()
+  def close() {
+    synchronized {
+      closed = true
+      if (config.keepJournal) journal.close()
+      waiters.triggerAll()
+    }
   }
 
-  def pauseReads(): Unit = synchronized {
-    paused = true
-    waiters.triggerAll()
+  def pauseReads() {
+    synchronized {
+      paused = true
+      waiters.triggerAll()
+    }
   }
 
-  def resumeReads(): Unit = synchronized {
-    paused = false
+  def resumeReads() {
+    synchronized {
+      paused = false
+    }
   }
 
-  def setup(): Unit = synchronized {
-    queueSize = 0
-    replayJournal
+  def setup() {
+    synchronized {
+      queueSize = 0
+      replayJournal()
+    }
   }
 
-  def destroyJournal(): Unit = synchronized {
-    if (config.keepJournal) journal.erase()
+  def destroyJournal() {
+    synchronized {
+      if (config.keepJournal) journal.erase()
+    }
   }
 
   private final def nextXid(): Int = {
     do {
       xidCounter += 1
-    } while (openTransactions contains xidCounter)
+    } while ((openTransactions contains xidCounter) || (xidCounter == 0))
     xidCounter
   }
 
-  private final def fillReadBehind(): Unit = {
+  private final def fillReadBehind() {
     // if we're in read-behind mode, scan forward in the journal to keep memory as full as
     // possible. this amortizes the disk overhead across all reads.
     while (config.keepJournal && journal.inReadBehind && _memoryBytes < config.maxMemorySize.inBytes) {
       journal.fillReadBehind { item =>
         queue += item
         _memoryBytes += item.data.length
+      } { checkpoint =>
+        log.info("Rewriting journal file from checkpoint for '%s' (qsize=%d)", name, queueSize)
+        journal.startPack(checkpoint, openTransactions.values.toList, queue.toList)
       }
       if (!journal.inReadBehind) {
         log.info("Coming out of read-behind for queue '%s'", name)
@@ -348,31 +361,36 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     }
   }
 
-  def replayJournal(): Unit = {
+  def replayJournal() {
     if (!config.keepJournal) return
 
     log.info("Replaying transaction journal for '%s'", name)
     xidCounter = 0
 
-    journal.replay(name) {
+    journal.replay {
       case JournalItem.Add(item) =>
         _add(item)
         // when processing the journal, this has to happen after:
         if (!journal.inReadBehind && queueSize >= config.maxMemorySize.inBytes) {
           log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
-          journal.startReadBehind
+          journal.startReadBehind()
         }
-      case JournalItem.Remove => _remove(false)
-      case JournalItem.RemoveTentative => _remove(true)
+      case JournalItem.Remove => _remove(false, None)
+      case JournalItem.RemoveTentative(xid) =>
+        _remove(true, Some(xid))
+        xidCounter = xid
       case JournalItem.SavedXid(xid) => xidCounter = xid
       case JournalItem.Unremove(xid) => _unremove(xid)
       case JournalItem.ConfirmRemove(xid) => openTransactions.remove(xid)
+      case JournalItem.Continue(item, xid) =>
+        openTransactions.remove(xid)
+        _add(item)
       case x => log.error("Unexpected item in journal: %s", x)
     }
 
-    log.info("Finished transaction journal for '%s' (%d items, %d bytes)", name, queueLength,
-             journal.size)
-    journal.open
+    log.info("Finished transaction journal for '%s' (%d items, %d bytes) xid=%d", name, queueLength,
+             journal.size, xidCounter)
+    journal.open()
 
     // now, any unfinished transactions must be backed out.
     for (xid <- openTransactionIds) {
@@ -384,7 +402,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
 
   //  -----  internal implementations
 
-  private def _add(item: QItem): Unit = {
+  private def _add(item: QItem) {
     discardExpired(config.maxExpireSweep)
     if (!journal.inReadBehind) {
       queue += item
@@ -400,23 +418,21 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     if (queue.isEmpty) None else Some(queue.front)
   }
 
-  private def _remove(transaction: Boolean): Option[QItem] = {
+  private def _remove(transaction: Boolean, xid: Option[Int]): Option[QItem] = {
     discardExpired(config.maxExpireSweep)
     if (queue.isEmpty) return None
 
     val now = Time.now
-    val item = queue.dequeue
+    val item = queue.dequeue()
     val len = item.data.length
     queueSize -= len
     _memoryBytes -= len
     queueLength -= 1
-    val xid = if (transaction) nextXid else 0
-
-    fillReadBehind
+    fillReadBehind()
     _currentAge = now - item.addTime
     if (transaction) {
-      item.xid = xid
-      openTransactions(xid) = item
+      item.xid = xid.getOrElse { nextXid() }
+      openTransactions(item.xid) = item
     }
     Some(item)
   }
@@ -432,12 +448,12 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
           val realExpiry = adjustExpiry(queue.front.addTime, queue.front.expiry)
           if (realExpiry.isDefined && realExpiry.get < Time.now) {
             totalExpired.incr()
-            val item = queue.dequeue
+            val item = queue.dequeue()
             val len = item.data.length
             queueSize -= len
             _memoryBytes -= len
             queueLength -= 1
-            fillReadBehind
+            fillReadBehind()
             if (config.keepJournal) journal.remove()
             toRemove += item
           } else {

@@ -24,8 +24,8 @@ import scala.collection.mutable
 import com.twitter.conversions.string._
 
 /**
- * Spam a kestrel server with 1M copies of a pop song lyric, to see how
- * quickly it can absorb them.
+ * Flood a kestrel server with a bunch of puts and gets, and time how long it takes for them to
+ * filter through.
  */
 object Flood extends LoadTesting {
   private val DATA = "x" * 1024

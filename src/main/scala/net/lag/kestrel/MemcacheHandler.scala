@@ -22,7 +22,7 @@ import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.naggati.ProtocolError
 import com.twitter.naggati.codec.{MemcacheRequest, MemcacheResponse}
-import com.twitter.stats.Stats
+import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{Duration, Time}
 import org.jboss.netty.channel.Channel
 import org.jboss.netty.channel.group.ChannelGroup
@@ -81,8 +81,6 @@ extends NettyHandler[MemcacheRequest](channelGroup, queueCollection, maxOpenTran
       case "flush_all" =>
         flushAllQueues()
         channel.write(new MemcacheResponse("Flushed all queues."))
-      case "dump_config" =>
-        dumpConfig()
       case "dump_stats" =>
         dumpStats()
       case "delete" =>
@@ -93,9 +91,6 @@ extends NettyHandler[MemcacheRequest](channelGroup, queueCollection, maxOpenTran
       case "flush_all_expired" =>
         val flushed = queues.flushAllExpired()
         channel.write(new MemcacheResponse(flushed.toString))
-      case "roll" =>
-        rollJournal(request.line(1))
-        channel.write(new MemcacheResponse("END"))
       case "version" =>
         version()
       case "quit" =>
@@ -210,16 +205,6 @@ extends NettyHandler[MemcacheRequest](channelGroup, queueCollection, maxOpenTran
       for ((key, value) <- report) yield "STAT %s %s".format(key, value)
     }.mkString("", "\r\n", "\r\nEND")
     channel.write(new MemcacheResponse(summary))
-  }
-
-  private def dumpConfig() = {
-    val dump = new mutable.ListBuffer[String]
-    for (qName <- queues.queueNames) {
-      dump += "queue '" + qName + "' {"
-      dump += queues.dumpConfig(qName).mkString("  ", "\r\n  ", "")
-      dump += "}"
-    }
-    channel.write(new MemcacheResponse(dump.mkString("", "\r\n", "\r\nEND\r\n")))
   }
 
   private def dumpStats() = {
