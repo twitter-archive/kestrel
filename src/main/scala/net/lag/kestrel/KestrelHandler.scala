@@ -22,7 +22,7 @@ import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.ostrich.admin.{BackgroundProcess, ServiceTracker}
 import com.twitter.ostrich.stats.Stats
-import com.twitter.util.{Duration, Time}
+import com.twitter.util.{Future, Duration, Time}
 
 class TooManyOpenTransactionsException extends Exception("Too many open transactions.")
 object TooManyOpenTransactionsException extends TooManyOpenTransactionsException
@@ -158,7 +158,7 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
     }
   }
 
-  def getItem(key: String, timeout: Option[Time], opening: Boolean, peeking: Boolean)(f: Option[QItem] => Unit) {
+  def getItem(key: String, timeout: Option[Time], opening: Boolean, peeking: Boolean): Future[Option[QItem]] = {
     if (opening && pendingTransactions.size(key) >= maxOpenTransactions) {
       log.warning("Attempt to open too many transactions on '%s' (sid %d, %s)", key, sessionId,
                   clientDescription)
@@ -171,13 +171,12 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
     } else {
       Stats.incr("cmd_get")
     }
-    queues.remove(key, timeout, opening, peeking).onSuccess {
-      case None =>
-        f(None)
-      case Some(item) =>
+    queues.remove(key, timeout, opening, peeking).map { itemOption =>
+      itemOption.foreach { item =>
         log.debug("get <- %s", item)
         if (opening) pendingTransactions.add(key, item.xid)
-        f(Some(item))
+      }
+      itemOption
     }
   }
 

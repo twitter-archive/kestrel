@@ -22,8 +22,9 @@ import java.util.concurrent.{Executors, ExecutorService, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.{immutable, mutable}
 import com.twitter.conversions.time._
+import com.twitter.finagle.{ServerCodec, Service => FinagleService}
+import com.twitter.finagle.builder.Server
 import com.twitter.logging.Logger
-import com.twitter.naggati.codec.MemcacheCodec
 import com.twitter.ostrich.admin.{RuntimeEnvironment, Service, ServiceTracker}
 import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{Duration, Eval, Time, Timer => TTimer, TimerTask => TTimerTask}
@@ -34,8 +35,11 @@ import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory
 import org.jboss.netty.util.{HashedWheelTimer, Timeout, Timer, TimerTask}
 import config._
 
-import com.twitter.finagle.builder.ServerBuilder
+import com.twitter.finagle.builder.{ServerBuilder, Server => FinagleServer}
+import com.twitter.finagle.stats.OstrichStatsReceiver
 import com.twitter.finagle.util.{Timer => FinagleTimer}
+import com.twitter.util.Future
+import com.twitter.naggati.codec.{MemcacheResponse, MemcacheRequest, MemcacheCodec}
 
 class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
               listenAddress: String, memcacheListenPort: Option[Int], textListenPort: Option[Int],
@@ -47,11 +51,8 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
 
   var queueCollection: QueueCollection = null
   var timer: Timer = null
-  var executor: ExecutorService = null
-  var channelFactory: ChannelFactory = null
-  var memcacheAcceptor: Option[Channel] = None
+  var memcacheService: Option[FinagleServer] = None
   var textAcceptor: Option[Channel] = None
-  val channelGroup = new DefaultChannelGroup("channels")
 
   private def bytesRead(n: Int) {
     Stats.incr("bytes_read", n)
@@ -78,38 +79,32 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
           case Protocol.Ascii => MemcacheCodec.asciiCodec(bytesRead, bytesWritten)
           case Protocol.Binary => throw new Exception("Binary protocol not supported yet.")
         }
-        val handler = new MemcacheHandler(channelGroup, queueCollection, maxOpenTransactions, clientTimeout)
-        Channels.pipeline(protocolCodec, handler)
+        Channels.pipeline(protocolCodec)
       }
     }
-    val memcachePipelineFactoryCodec = new FinagleCodec[Req, Resp] {
-      val clientPipelineFactory = null
-      val serverPipelineFactory = memcachePipelineFactory
+    val memcachePipelineFactoryCodec = new ServerCodec[MemcacheRequest, MemcacheResponse] {
+      val pipelineFactory = memcachePipelineFactory
+    }
+    val memcacheHandler = new MemcacheHandler(queueCollection, maxOpenTransactions)
+    val agricola = new FinagleService[MemcacheRequest, MemcacheResponse] {
+      def apply(request: MemcacheRequest): Future[MemcacheResponse] = {
+        memcacheHandler(request)
+      }
     }
     // finagle setup:
-    memcacheListenPort.foreach { port =>
+    memcacheService = memcacheListenPort.map { port =>
       val address = new InetSocketAddress(listenAddress, port)
-      val server: Server[MemcacheRequest, MemcacheResponse] = ServerBuilder()
+      val builder = ServerBuilder()
         .codec(memcachePipelineFactoryCodec)
+        .name("kestrel-memcache")
+        .reportTo(new OstrichStatsReceiver)
         .bindTo(address)
-        .build(service....)
+      clientTimeout.foreach { timeout => builder.readTimeout(timeout) }
+      // calling build() is equivalent to calling start() in fingale.
+      builder.build(agricola)
     }
 
-    memcacheAcceptor = memcacheListenPort.map { port =>
-      makeAcceptor(channelFactory, memcachePipelineFactory, address)
-    }
-
-
-
-
-    val service: Service[HttpRequest, HttpResponse] = new Service[HttpRequest, HttpResponse] {
-      def apply(request: HttpRequest) = Future(new DefaultHttpResponse(HTTP_1_1, OK))
-    }
-
-
-
-
-
+    /*
     val textPipelineFactory = new ChannelPipelineFactory() {
       def getPipeline() = {
         val protocolCodec = TextCodec(bytesRead, bytesWritten)
@@ -121,6 +116,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
       val address = new InetSocketAddress(listenAddress, port)
       makeAcceptor(channelFactory, textPipelineFactory, address)
     }
+*/
 
     // optionally, start a periodic timer to clean out expired items.
     if (expirationTimerFrequency.isDefined) {
@@ -141,14 +137,10 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
   def shutdown() {
     log.info("Shutting down!")
 
-    memcacheAcceptor.foreach { _.close().awaitUninterruptibly() }
-    textAcceptor.foreach { _.close().awaitUninterruptibly() }
+    memcacheService.foreach { _.close() }
+//    textAcceptor.foreach { _.close().awaitUninterruptibly() }
     queueCollection.shutdown()
-    channelGroup.close().awaitUninterruptibly()
-    channelFactory.releaseExternalResources()
 
-    executor.shutdown()
-    executor.awaitTermination(5, TimeUnit.SECONDS)
     timer.stop()
     timer = null
     log.info("Goodbye.")
