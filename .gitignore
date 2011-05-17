@@ -12,3 +12,6 @@ project/plugins/src_managed/
 project/plugins/project/
 lib_managed/
 ignore/
+.idea
+go
+*.iml
