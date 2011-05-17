@@ -55,8 +55,8 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
         val handler = new FakeKestrelHandler(queues, 10)
         handler.setItem("test", 0, None, "one".getBytes)
         handler.setItem("test", 0, None, "two".getBytes)
-        handler.getItem("test", None, false, false) { _ must beString("one") }
-        handler.getItem("test", None, false, false) { _ must beString("two") }
+        handler.getItem("test", None, false, false).map { _ must beString("one") }
+        handler.getItem("test", None, false, false).map { _ must beString("two") }
       }
     }
 
@@ -75,13 +75,13 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
         Stats.getCounter("cmd_set")() mustEqual 1
         Stats.getCounter("cmd_get")() mustEqual 0
 
-        handler.getItem("test", None, false, false) { _ must beString("one") }
+        handler.getItem("test", None, false, false).map { _ must beString("one") }
         Stats.getCounter("cmd_set")() mustEqual 1
         Stats.getCounter("cmd_get")() mustEqual 1
         Stats.getCounter("get_hits")() mustEqual 1
         Stats.getCounter("get_misses")() mustEqual 0
 
-        handler.getItem("test2", None, false, false) { _ mustEqual None }
+        handler.getItem("test2", None, false, false).map { _ mustEqual None }
         Stats.getCounter("cmd_set")() mustEqual 1
         Stats.getCounter("cmd_get")() mustEqual 2
         Stats.getCounter("get_hits")() mustEqual 1
@@ -94,12 +94,12 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
         queues = new QueueCollection(folderName, timer, config, Nil)
         val handler = new FakeKestrelHandler(queues, 10)
         handler.setItem("test", 0, None, "one".getBytes)
-        handler.getItem("test", None, true, false) { _ must beString("one") }
-        handler.getItem("test", None, true, false) { _ mustEqual None }
+        handler.getItem("test", None, true, false).map { _ must beString("one") }
+        handler.getItem("test", None, true, false).map { _ mustEqual None }
         handler.abortTransaction("test") mustEqual true
-        handler.getItem("test", None, true, false) { _ must beString("one") }
+        handler.getItem("test", None, true, false).map { _ must beString("one") }
         handler.closeTransaction("test") mustEqual true
-        handler.getItem("test", None, true, false) { _ mustEqual None }
+        handler.getItem("test", None, true, false).map { _ mustEqual None }
       }
     }
 
@@ -111,14 +111,14 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
           handler.setItem("test", 0, None, "one".getBytes)
           handler.setItem("test", 0, None, "two".getBytes)
           handler.setItem("test", 0, None, "three".getBytes)
-          handler.getItem("test", None, true, false) { _ must beString("one") }
-          handler.getItem("test", None, true, false) { _ must beString("two") }
+          handler.getItem("test", None, true, false).map { _ must beString("one") }
+          handler.getItem("test", None, true, false).map { _ must beString("two") }
           handler.abortTransaction("test") mustEqual true
-          handler.getItem("test", None, true, false) { _ must beString("one") }
+          handler.getItem("test", None, true, false).map { _ must beString("one") }
           handler.closeTransaction("test") mustEqual true
-          handler.getItem("test", None, true, false) { _ must beString("three") }
+          handler.getItem("test", None, true, false).map { _ must beString("three") }
           handler.abortTransaction("test") mustEqual true
-          handler.getItem("test", None, true, false) { _ must beString("one") }
+          handler.getItem("test", None, true, false).map { _ must beString("one") }
         }
       }
 
@@ -133,21 +133,21 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
           handler.setItem("blue", 0, None, "blue1".getBytes)
           handler.setItem("blue", 0, None, "blue2".getBytes)
 
-          handler.getItem("red", None, true, false) { _ must beString("red1") }
-          handler.getItem("green", None, true, false) { _ must beString("green1") }
-          handler.getItem("blue", None, true, false) { _ must beString("blue1") }
+          handler.getItem("red", None, true, false).map { _ must beString("red1") }
+          handler.getItem("green", None, true, false).map { _ must beString("green1") }
+          handler.getItem("blue", None, true, false).map { _ must beString("blue1") }
           handler.abortTransaction("green") mustEqual true
 
-          handler.getItem("red", None, true, false) { _ must beString("red2") }
+          handler.getItem("red", None, true, false).map { _ must beString("red2") }
           handler.closeTransaction("red") mustEqual true
           handler.closeTransaction("red") mustEqual true
-          handler.getItem("red", None, true, false) { _ mustEqual None }
+          handler.getItem("red", None, true, false).map { _ mustEqual None }
 
-          handler.getItem("green", None, true, false) { _ must beString("green1") }
+          handler.getItem("green", None, true, false).map { _ must beString("green1") }
           handler.closeTransaction("blue") mustEqual true
           handler.abortTransaction("green") mustEqual true
-          handler.getItem("blue", None, true, false) { _ must beString("blue2") }
-          handler.getItem("green", None, true, false) { _ must beString("green1") }
+          handler.getItem("blue", None, true, false).map { _ must beString("blue2") }
+          handler.getItem("green", None, true, false).map { _ must beString("green1") }
         }
       }
 
@@ -157,8 +157,8 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
           val handler = new FakeKestrelHandler(queues, 1)
           handler.setItem("red", 0, None, "red1".getBytes)
           handler.setItem("red", 0, None, "red2".getBytes)
-          handler.getItem("red", None, true, false) { _ must beString("red1") }
-          handler.getItem("red", None, true, false) { x => x } must throwA[TooManyOpenTransactionsException]
+          handler.getItem("red", None, true, false).map { _ must beString("red1") }
+          handler.getItem("red", None, true, false).map { x => x } must throwA[TooManyOpenTransactionsException]
         }
       }
 
@@ -168,8 +168,8 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
           val handler = new FakeKestrelHandler(queues, 2)
           handler.setItem("red", 0, None, "red1".getBytes)
           handler.setItem("red", 0, None, "red2".getBytes)
-          handler.getItem("red", None, true, false) { _ must beString("red1") }
-          handler.getItem("red", None, true, false) { _ must beString("red2") }
+          handler.getItem("red", None, true, false).map { _ must beString("red1") }
+          handler.getItem("red", None, true, false).map { _ must beString("red2") }
           handler.closeAllTransactions("red") mustEqual 2
           handler.abortTransaction("red") mustEqual false
           handler.pendingTransactions.size("red") mustEqual 0
