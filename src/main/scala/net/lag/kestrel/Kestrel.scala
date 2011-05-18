@@ -62,6 +62,21 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
     Stats.incr("bytes_written", n)
   }
 
+  def makeService(memcacheHandler: MemcacheHandler): FinagleService[MemcacheRequest, MemcacheResponse] = {
+    new FinagleService[MemcacheRequest, MemcacheResponse] {
+      println("i was created!")
+
+      def apply(request: MemcacheRequest): Future[MemcacheResponse] = {
+        memcacheHandler(request)
+      }
+
+      override def release() {
+        println("i was released.")
+        super.release()
+      }
+    }
+  }
+
   def start() {
     log.info("Kestrel config: listenAddress=%s memcachePort=%s textPort=%s queuePath=%s " +
              "protocol=%s expirationTimerFrequency=%s clientTimeout=%s maxOpenTransactions=%d",
@@ -86,11 +101,6 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
       val pipelineFactory = memcachePipelineFactory
     }
     val memcacheHandler = new MemcacheHandler(queueCollection, maxOpenTransactions)
-    val agricola = new FinagleService[MemcacheRequest, MemcacheResponse] {
-      def apply(request: MemcacheRequest): Future[MemcacheResponse] = {
-        memcacheHandler(request)
-      }
-    }
     // finagle setup:
     memcacheService = memcacheListenPort.map { port =>
       val address = new InetSocketAddress(listenAddress, port)
@@ -101,7 +111,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
         .bindTo(address)
       clientTimeout.foreach { timeout => builder.readTimeout(timeout) }
       // calling build() is equivalent to calling start() in fingale.
-      builder.build(agricola)
+      builder.build(() => makeService(memcacheHandler))
     }
 
     /*
