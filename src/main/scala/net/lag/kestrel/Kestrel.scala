@@ -22,7 +22,6 @@ import java.util.concurrent.{Executors, ExecutorService, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.{immutable, mutable}
 import com.twitter.conversions.time._
-import com.twitter.finagle.{ServerCodec, Service => FinagleService}
 import com.twitter.finagle.builder.Server
 import com.twitter.logging.Logger
 import com.twitter.ostrich.admin.{RuntimeEnvironment, Service, ServiceTracker}
@@ -40,6 +39,7 @@ import com.twitter.finagle.stats.OstrichStatsReceiver
 import com.twitter.finagle.util.{Timer => FinagleTimer}
 import com.twitter.util.Future
 import com.twitter.naggati.codec.{MemcacheResponse, MemcacheRequest, MemcacheCodec}
+import com.twitter.finagle.{ClientConnection, ServerCodec, Service => FinagleService}
 
 class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
               listenAddress: String, memcacheListenPort: Option[Int], textListenPort: Option[Int],
@@ -62,16 +62,22 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
     Stats.incr("bytes_written", n)
   }
 
-  def makeService(memcacheHandler: MemcacheHandler): FinagleService[MemcacheRequest, MemcacheResponse] = {
+  def makeService(connection: ClientConnection, queueCollection: QueueCollection, maxOpenTransactions: Int): FinagleService[MemcacheRequest, MemcacheResponse] = {
     new FinagleService[MemcacheRequest, MemcacheResponse] {
-      println("i was created!")
+      val log = Logger.get(getClass)
+      val memcacheHandler = new MemcacheHandler(connection, queueCollection, maxOpenTransactions)
 
       def apply(request: MemcacheRequest): Future[MemcacheResponse] = {
         memcacheHandler(request)
       }
 
+      override def connected() {
+        val remoteAddress = connection.remoteAddress.asInstanceOf[InetSocketAddress]
+        log.debug("New session %d from %s:%d", memcacheHandler.sessionId, remoteAddress.getHostName, remoteAddress.getPort)
+      }
+
       override def release() {
-        println("i was released.")
+        memcacheHandler.finish()
         super.release()
       }
     }
@@ -84,23 +90,22 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
              expirationTimerFrequency, clientTimeout, maxOpenTransactions)
 
     // this means no timeout will be at better granularity than 10ms.
+    // FIXME: would make more sense to use the finagle Timer. but they'd have to expose it.
     timer = new HashedWheelTimer(10, TimeUnit.MILLISECONDS)
     queueCollection = new QueueCollection(queuePath, new FinagleTimer(timer), defaultQueueConfig, builders)
     queueCollection.loadQueues()
 
-    val memcachePipelineFactory = new ChannelPipelineFactory() {
-      def getPipeline() = {
-        val protocolCodec = protocol match {
-          case Protocol.Ascii => MemcacheCodec.asciiCodec(bytesRead, bytesWritten)
-          case Protocol.Binary => throw new Exception("Binary protocol not supported yet.")
+    val memcachePipelineFactoryCodec = new ServerCodec[MemcacheRequest, MemcacheResponse] {
+      val pipelineFactory = new ChannelPipelineFactory() {
+        def getPipeline() = {
+          val protocolCodec = protocol match {
+            case Protocol.Ascii => MemcacheCodec.asciiCodec(bytesRead, bytesWritten)
+            case Protocol.Binary => throw new Exception("Binary protocol not supported yet.")
+          }
+          Channels.pipeline(protocolCodec)
         }
-        Channels.pipeline(protocolCodec)
       }
     }
-    val memcachePipelineFactoryCodec = new ServerCodec[MemcacheRequest, MemcacheResponse] {
-      val pipelineFactory = memcachePipelineFactory
-    }
-    val memcacheHandler = new MemcacheHandler(queueCollection, maxOpenTransactions)
     // finagle setup:
     memcacheService = memcacheListenPort.map { port =>
       val address = new InetSocketAddress(listenAddress, port)
@@ -111,7 +116,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
         .bindTo(address)
       clientTimeout.foreach { timeout => builder.readTimeout(timeout) }
       // calling build() is equivalent to calling start() in fingale.
-      builder.build(() => makeService(memcacheHandler))
+      builder.build((connection: ClientConnection) => makeService(connection, queueCollection, maxOpenTransactions))
     }
 
     /*

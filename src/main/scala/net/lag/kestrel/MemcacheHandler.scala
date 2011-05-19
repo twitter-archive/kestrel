@@ -20,22 +20,29 @@ package net.lag.kestrel
 import scala.collection.mutable
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
-import com.twitter.naggati.ProtocolError
 import com.twitter.naggati.codec.{MemcacheRequest, MemcacheResponse}
 import com.twitter.ostrich.stats.Stats
 import org.jboss.netty.channel.Channel
 import org.jboss.netty.channel.group.ChannelGroup
 import com.twitter.util.{Future, Duration, Time}
+import com.twitter.finagle.ClientConnection
+import java.net.InetSocketAddress
+import com.twitter.naggati.{Codec, ProtocolError}
 
 /**
  * Memcache protocol handler for a kestrel connection.
  */
-class MemcacheHandler(queueCollection: QueueCollection, maxOpenTransactions: Int)
+class MemcacheHandler(connection: ClientConnection, queueCollection: QueueCollection, maxOpenTransactions: Int)
 extends KestrelHandler(queueCollection, maxOpenTransactions) {
   val log = Logger.get(getClass.getName)
 
   protected def clientDescription: String = {
-    "FIXME"
+    val address = connection.remoteAddress.asInstanceOf[InetSocketAddress]
+    "%s:%d".format(address.getHostName, address.getPort)
+  }
+
+  protected def disconnect() = {
+    Future(new MemcacheResponse("") then Codec.Disconnect)
   }
 
   final def apply(request: MemcacheRequest): Future[MemcacheResponse] = {
@@ -74,7 +81,7 @@ extends KestrelHandler(queueCollection, maxOpenTransactions) {
         Future(stats())
       case "shutdown" =>
         shutdown()
-        Future(new MemcacheResponse("FIXME"))
+        disconnect()
       case "reload" =>
         Kestrel.kestrel.reload()
         Future(new MemcacheResponse("Reloaded config."))
@@ -97,9 +104,9 @@ extends KestrelHandler(queueCollection, maxOpenTransactions) {
       case "version" =>
         Future(version())
       case "quit" =>
-        Future(quit())
+        disconnect()
       case x =>
-        Future(new MemcacheResponse("CLIENT_ERROR"))
+        Future(new MemcacheResponse("CLIENT_ERROR") then Codec.Disconnect)
     }
   }
 
@@ -127,8 +134,7 @@ extends KestrelHandler(queueCollection, maxOpenTransactions) {
     }
 
     if ((key.length == 0) || ((peeking || aborting) && (opening || closing)) || (peeking && aborting)) {
-      return Future(new MemcacheResponse("CLIENT_ERROR"))
-      // FIXME: channel.close()
+      return Future(new MemcacheResponse("CLIENT_ERROR") then Codec.Disconnect)
     }
 
     if (aborting) {
@@ -142,8 +148,7 @@ extends KestrelHandler(queueCollection, maxOpenTransactions) {
         if (pendingTransactions.size(key) > 0 && !peeking && !opening) {
           log.warning("Attempt to perform a non-transactional fetch with an open transaction on " +
                       " '%s' (sid %d, %s)", key, sessionId, clientDescription)
-          return Future(new MemcacheResponse("ERROR"))
-          // channel.close() FIXME
+          return Future(new MemcacheResponse("ERROR") then Codec.Disconnect)
         }
         try {
           getItem(key, timeout, opening, peeking).map { itemOption =>
@@ -151,13 +156,12 @@ extends KestrelHandler(queueCollection, maxOpenTransactions) {
               case None =>
                 new MemcacheResponse("END")
               case Some(item) =>
-                new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), item.data)
+                new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), Some(item.data))
             }
           }
         } catch {
           case e: TooManyOpenTransactionsException =>
-            Future(new MemcacheResponse("ERROR"))
-            //channel.close() FIXME
+            Future(new MemcacheResponse("ERROR") then Codec.Disconnect)
         }
       } else {
         Future(new MemcacheResponse("END"))
@@ -166,11 +170,12 @@ extends KestrelHandler(queueCollection, maxOpenTransactions) {
   }
 
   private def monitor(key: String, timeout: Int): MemcacheResponse = {
+    // FIXME
     monitorUntil(key, Time.now + timeout.seconds) {
       case None =>
         new MemcacheResponse("END")
       case Some(item) =>
-        new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), item.data)
+        new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), Some(item.data))
     }
     null
   }
@@ -215,10 +220,5 @@ extends KestrelHandler(queueCollection, maxOpenTransactions) {
 
   private def version() = {
     new MemcacheResponse("VERSION " + Kestrel.runtime.jarVersion + "\r\n")
-  }
-
-  private def quit() = {
-//    channel.close() FIXME
-    new MemcacheResponse("BAD")
   }
 }

@@ -90,7 +90,7 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
   protected def clientDescription: String
 
   // usually called when netty sends a disconnect signal.
-  protected def finish() {
+  def finish() {
     log.debug("End of session %d", sessionId)
     abortAnyTransaction()
     Kestrel.sessions.decrementAndGet()

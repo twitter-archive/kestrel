@@ -9,8 +9,8 @@ class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) wit
 {
   val util = "com.twitter" % "util-core" % "1.8.1"
 
-  val ostrich = "com.twitter" % "ostrich" % "4.2.0"
-  val naggati = "com.twitter" % "naggati" % "2.1.1"
+  val ostrich = "com.twitter" % "ostrich" % "4.2.2"
+  val naggati = "com.twitter" % "naggati" % "2.1.2-SNAPSHOT"
   val finagle = "com.twitter" % "finagle-core" % "1.4.1-SNAPSHOT"
   val finagle_ostrich4 = "com.twitter" % "finagle-ostrich4" % "1.4.1-SNAPSHOT"
 
