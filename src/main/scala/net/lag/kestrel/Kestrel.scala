@@ -62,27 +62,6 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
     Stats.incr("bytes_written", n)
   }
 
-  def makeService(connection: ClientConnection, queueCollection: QueueCollection, maxOpenTransactions: Int): FinagleService[MemcacheRequest, MemcacheResponse] = {
-    new FinagleService[MemcacheRequest, MemcacheResponse] {
-      val log = Logger.get(getClass)
-      val memcacheHandler = new MemcacheHandler(connection, queueCollection, maxOpenTransactions)
-
-      def apply(request: MemcacheRequest): Future[MemcacheResponse] = {
-        memcacheHandler(request)
-      }
-
-      override def connected() {
-        val remoteAddress = connection.remoteAddress.asInstanceOf[InetSocketAddress]
-        log.debug("New session %d from %s:%d", memcacheHandler.sessionId, remoteAddress.getHostName, remoteAddress.getPort)
-      }
-
-      override def release() {
-        memcacheHandler.finish()
-        super.release()
-      }
-    }
-  }
-
   def start() {
     log.info("Kestrel config: listenAddress=%s memcachePort=%s textPort=%s queuePath=%s " +
              "protocol=%s expirationTimerFrequency=%s clientTimeout=%s maxOpenTransactions=%d",
@@ -116,7 +95,9 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
         .bindTo(address)
       clientTimeout.foreach { timeout => builder.readTimeout(timeout) }
       // calling build() is equivalent to calling start() in fingale.
-      builder.build((connection: ClientConnection) => makeService(connection, queueCollection, maxOpenTransactions))
+      builder.build { connection: ClientConnection =>
+        new MemcacheHandler(connection, queueCollection, maxOpenTransactions)
+      }
     }
 
     /*

@@ -22,21 +22,32 @@ import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.naggati.codec.{MemcacheRequest, MemcacheResponse}
 import com.twitter.ostrich.stats.Stats
-import org.jboss.netty.channel.Channel
-import org.jboss.netty.channel.group.ChannelGroup
 import com.twitter.util.{Future, Duration, Time}
-import com.twitter.finagle.ClientConnection
+import com.twitter.finagle.{ClientConnection, Service}
 import java.net.InetSocketAddress
 import com.twitter.naggati.{Codec, ProtocolError}
 
 /**
  * Memcache protocol handler for a kestrel connection.
  */
-class MemcacheHandler(connection: ClientConnection, queueCollection: QueueCollection, maxOpenTransactions: Int) {
+class MemcacheHandler(
+  connection: ClientConnection,
+  queueCollection: QueueCollection,
+  maxOpenTransactions: Int
+) extends Service[MemcacheRequest, MemcacheResponse] {
   val log = Logger.get(getClass.getName)
 
   val sessionId = Kestrel.sessionId.incrementAndGet()
   protected val handler = new KestrelHandler(queueCollection, maxOpenTransactions, clientDescription, sessionId)
+
+  override def connected() {
+    log.debug("New session %d from %s", sessionId, clientDescription)
+  }
+
+  override def release() {
+    handler.finish()
+    super.release()
+  }
 
   protected def clientDescription: String = {
     val address = connection.remoteAddress.asInstanceOf[InetSocketAddress]
@@ -45,10 +56,6 @@ class MemcacheHandler(connection: ClientConnection, queueCollection: QueueCollec
 
   protected def disconnect() = {
     Future(new MemcacheResponse("") then Codec.Disconnect)
-  }
-
-  def finish() {
-    handler.finish()
   }
 
   final def apply(request: MemcacheRequest): Future[MemcacheResponse] = {
