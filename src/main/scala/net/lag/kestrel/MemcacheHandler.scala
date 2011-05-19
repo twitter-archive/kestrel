@@ -17,15 +17,15 @@
 
 package net.lag.kestrel
 
+import java.net.InetSocketAddress
 import scala.collection.mutable
 import com.twitter.conversions.time._
+import com.twitter.finagle.{ClientConnection, Service}
 import com.twitter.logging.Logger
+import com.twitter.naggati.{Codec, ProtocolError}
 import com.twitter.naggati.codec.{MemcacheRequest, MemcacheResponse}
 import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{Future, Duration, Time}
-import com.twitter.finagle.{ClientConnection, Service}
-import java.net.InetSocketAddress
-import com.twitter.naggati.{Codec, ProtocolError}
 
 /**
  * Memcache protocol handler for a kestrel connection.

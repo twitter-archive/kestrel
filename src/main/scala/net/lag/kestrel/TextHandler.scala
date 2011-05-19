@@ -21,11 +21,14 @@ import scala.collection.mutable
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.naggati._
+import codec.{MemcacheResponse, MemcacheRequest}
 import com.twitter.naggati.Stages._
-import com.twitter.util.{Duration, Time}
 import org.jboss.netty.buffer.{ChannelBuffer, ChannelBuffers}
 import org.jboss.netty.channel.Channel
 import org.jboss.netty.channel.group.ChannelGroup
+import java.net.InetSocketAddress
+import com.twitter.finagle.{ClientConnection, Service}
+import com.twitter.util.{Future, Duration, Time}
 
 object TextCodec {
   val MAX_PUT_BUFFER = 1024
@@ -94,69 +97,78 @@ case class CountResponse(count: Long) extends TextResponse {
  * Simple text-line protocol handler for a kestrel connection.
  */
 class TextHandler(
-  channelGroup: ChannelGroup,
+  connection: ClientConnection,
   queueCollection: QueueCollection,
-  maxOpenTransactions: Int,
-  clientTimeout: Option[Duration])
-extends NettyHandler[TextRequest](channelGroup, queueCollection, maxOpenTransactions, clientTimeout) {
-  final def handle(request: TextRequest) = {
+  maxOpenTransactions: Int
+) extends Service[TextRequest, TextResponse] {
+  val sessionId = Kestrel.sessionId.incrementAndGet()
+  val handler = new KestrelHandler(queueCollection, maxOpenTransactions, clientDescription, sessionId)
+
+  protected def clientDescription: String = {
+    val address = connection.remoteAddress.asInstanceOf[InetSocketAddress]
+    "%s:%d".format(address.getHostName, address.getPort)
+  }
+
+  def apply(request: TextRequest) = {
     request.command match {
       case "put" =>
         // put <queue> [expiry]:
         if (request.args.size < 1) {
-          channel.write(ErrorResponse("Queue name required."))
+          Future(ErrorResponse("Queue name required."))
         } else {
           val queueName = request.args(0)
           try {
             val expiry = request.args.drop(1).headOption.map { Time.now + _.toInt.milliseconds }
             var count = 0
             request.items.foreach { item =>
-              if (setItem(queueName, 0, expiry, item)) count += 1
+              if (handler.setItem(queueName, 0, expiry, item)) count += 1
             }
-            channel.write(CountResponse(count))
+            Future(CountResponse(count))
           } catch {
             case e: NumberFormatException =>
-              channel.write(ErrorResponse("Error parsing expiration time."))
+              Future(ErrorResponse("Error parsing expiration time."))
           }
         }
       case "get" =>
         // get <queue> [timeout]
         if (request.args.size < 1) {
-          channel.write(ErrorResponse("Queue name required."))
+          Future(ErrorResponse("Queue name required."))
         } else {
           val queueName = request.args(0)
           try {
             val timeout = request.args.drop(1).headOption.map { _.toInt.milliseconds.fromNow }
-            closeAllTransactions(queueName)
-            getItem(queueName, timeout, true, false).map { item =>
-              channel.write(ItemResponse(item.map { _.data }))
+            handler.closeAllTransactions(queueName)
+            handler.getItem(queueName, timeout, true, false).map { item =>
+              ItemResponse(item.map { _.data })
             }
           } catch {
             case e: NumberFormatException =>
-              channel.write(ErrorResponse("Error parsing timeout."))
+              Future(ErrorResponse("Error parsing timeout."))
             case e: TooManyOpenTransactionsException =>
-              channel.write(ErrorResponse("Too many open transactions; limit=" + maxOpenTransactions))
+              Future(ErrorResponse("Too many open transactions; limit=" + maxOpenTransactions))
           }
         }
       case "peek" =>
         // peek <queue> [timeout]
         if (request.args.size < 1) {
-          channel.write(ErrorResponse("Queue name required."))
+          Future(ErrorResponse("Queue name required."))
         } else {
           val queueName = request.args(0)
           try {
             val timeout = request.args.drop(1).headOption.map { _.toInt.milliseconds.fromNow }
-            closeAllTransactions(queueName)
-            getItem(queueName, timeout, false, true).map { item =>
-              channel.write(ItemResponse(item.map { _.data }))
+            handler.closeAllTransactions(queueName)
+            handler.getItem(queueName, timeout, false, true).map { item =>
+              ItemResponse(item.map { _.data })
             }
           } catch {
             case e: NumberFormatException =>
-              channel.write(ErrorResponse("Error parsing timeout."))
+              Future(ErrorResponse("Error parsing timeout."))
           }
         }
       case "monitor" =>
         // monitor <queue> <timeout>
+        Future(null) // FIXME
+        /*
         if (request.args.size < 2) {
           channel.write(ErrorResponse("Queue name & timeout required."))
         } else {
@@ -167,41 +179,35 @@ extends NettyHandler[TextRequest](channelGroup, queueCollection, maxOpenTransact
             channel.write(ItemResponse(item.map { _.data }))
           }
         }
+        */
       case "confirm" =>
         // confirm <queue> <count>
         if (request.args.size < 2) {
-          channel.write(ErrorResponse("Queue name & timeout required."))
+          Future(ErrorResponse("Queue name & timeout required."))
         } else {
           val queueName = request.args(0)
           val count = request.args(1).toInt
-          if (closeTransactions(queueName, count)) {
-            channel.write(CountResponse(count))
+          if (handler.closeTransactions(queueName, count)) {
+            Future(CountResponse(count))
           } else {
-            channel.write(ErrorResponse("Not that many transactions open."))
+            Future(ErrorResponse("Not that many transactions open."))
           }
         }
       case "flush" =>
         if (request.args.size < 1) {
-          channel.write(ErrorResponse("Queue name required."))
+          Future(ErrorResponse("Queue name required."))
         } else {
-          flush(request.args(0))
-          channel.write(CountResponse(0))
+          handler.flush(request.args(0))
+          Future(CountResponse(0))
         }
       case "quit" =>
-        channel.close()
+        connection.close()
+        Future(CountResponse(0))
       case "shutdown" =>
-        shutdown()
-        channel.write(CountResponse(0))
+        handler.shutdown()
+        Future(CountResponse(0))
       case x =>
-        channel.write(ErrorResponse("Unknown command: " + x))
+        Future(ErrorResponse("Unknown command: " + x))
     }
-  }
-
-  protected final def handleProtocolError() {
-    channel.write(ErrorResponse("Protocol error."))
-  }
-
-  protected final def handleException(e: Throwable) {
-    channel.write(ErrorResponse("Internal error."))
   }
 }

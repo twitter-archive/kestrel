@@ -52,6 +52,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
   var queueCollection: QueueCollection = null
   var timer: Timer = null
   var memcacheService: Option[FinagleServer] = None
+  var textService: Option[FinagleServer] = None
   var textAcceptor: Option[Channel] = None
 
   private def bytesRead(n: Int) {
@@ -100,19 +101,28 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
       }
     }
 
-    /*
-    val textPipelineFactory = new ChannelPipelineFactory() {
-      def getPipeline() = {
-        val protocolCodec = TextCodec(bytesRead, bytesWritten)
-        val handler = new TextHandler(channelGroup, queueCollection, maxOpenTransactions, clientTimeout)
-        Channels.pipeline(protocolCodec, handler)
+    val textPipelineFactory = new ServerCodec[TextRequest, TextResponse] {
+      val pipelineFactory = new ChannelPipelineFactory() {
+        def getPipeline() = {
+          val protocolCodec = TextCodec(bytesRead, bytesWritten)
+          Channels.pipeline(protocolCodec)
+        }
       }
     }
-    textAcceptor = textListenPort.map { port =>
+    // finagle setup:
+    textService = textListenPort.map { port =>
       val address = new InetSocketAddress(listenAddress, port)
-      makeAcceptor(channelFactory, textPipelineFactory, address)
+      val builder = ServerBuilder()
+        .codec(textPipelineFactory)
+        .name("kestrel-text")
+        .reportTo(new OstrichStatsReceiver)
+        .bindTo(address)
+      clientTimeout.foreach { timeout => builder.readTimeout(timeout) }
+      // calling build() is equivalent to calling start() in fingale.
+      builder.build { connection: ClientConnection =>
+        new TextHandler(connection, queueCollection, maxOpenTransactions)
+      }
     }
-*/
 
     // optionally, start a periodic timer to clean out expired items.
     if (expirationTimerFrequency.isDefined) {

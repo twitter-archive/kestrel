@@ -25,6 +25,7 @@ import org.jboss.netty.channel._
 import org.jboss.netty.channel.group.ChannelGroup
 import org.specs.Specification
 import org.specs.mock.{ClassMocker, JMocker}
+import com.twitter.finagle.ClientConnection
 
 class TextHandlerSpec extends Specification with JMocker with ClassMocker {
   def wrap(s: String) = ChannelBuffers.wrappedBuffer(s.getBytes)
@@ -81,31 +82,24 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
   }
 
   "TextHandler" should {
-    val channel = mock[Channel]
-    val channelGroup = mock[ChannelGroup]
     val queueCollection = mock[QueueCollection]
+    val connection = mock[ClientConnection]
     val qitem = QItem(Time.now, None, "state shirt".getBytes, 23)
 
     "get request" in {
-      expect {
-        one(channel).getRemoteAddress() willReturn new InetSocketAddress(0)
-        one(channelGroup).add(channel) willReturn true
-      }
-
-      val textHandler = new TextHandler(channelGroup, queueCollection, 10, None)
-      textHandler.handleUpstream(null, new UpstreamChannelStateEvent(channel, ChannelState.OPEN, true))
+      val textHandler = new TextHandler(connection, queueCollection, 10)
+      textHandler.connected()
 
       "closes transactions" in {
         expect {
           one(queueCollection).remove("test", None, true, false) willReturn Future.value(Some(qitem))
           one(queueCollection).confirmRemove("test", 100)
-          one(channel).write(ItemResponse(Some(qitem.data)))
         }
 
-        textHandler.pendingTransactions.add("test", 100)
-        textHandler.pendingTransactions.peek("test") mustEqual List(100)
-        textHandler.handle(TextRequest("get", List("test"), Nil))
-        textHandler.pendingTransactions.peek("test") mustEqual List(qitem.xid)
+        textHandler.handler.pendingTransactions.add("test", 100)
+        textHandler.handler.pendingTransactions.peek("test") mustEqual List(100)
+        textHandler(TextRequest("get", List("test"), Nil))() mustEqual ItemResponse(Some(qitem.data))
+        textHandler.handler.pendingTransactions.peek("test") mustEqual List(qitem.xid)
       }
 
       "with timeout" in {
@@ -113,10 +107,9 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
           Time.withCurrentTimeFrozen { time =>
             expect {
               one(queueCollection).remove("test", Some(500.milliseconds.fromNow), true, false) willReturn Future.value(Some(qitem))
-              one(channel).write(ItemResponse(Some(qitem.data)))
             }
 
-            textHandler.handle(TextRequest("get", List("test", "500"), Nil))
+            textHandler(TextRequest("get", List("test", "500"), Nil))() mustEqual ItemResponse(Some(qitem.data))
           }
         }
 
@@ -128,13 +121,10 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
               one(queueCollection).remove("test", Some(500.milliseconds.fromNow), true, false) willReturn promise
             }
 
-            textHandler.handle(TextRequest("get", List("test", "500"), Nil))
-
-            expect {
-              one(channel).write(ItemResponse(Some(qitem.data)))
-            }
+            val future = textHandler(TextRequest("get", List("test", "500"), Nil))
 
             promise.setValue(Some(qitem))
+            future() mustEqual ItemResponse(Some(qitem.data))
           }
         }
 
@@ -146,13 +136,10 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
               one(queueCollection).remove("test", Some(500.milliseconds.fromNow), true, false) willReturn promise
             }
 
-            textHandler.handle(TextRequest("get", List("test", "500"), Nil))
-
-            expect {
-              one(channel).write(ItemResponse(None))
-            }
+            val future = textHandler(TextRequest("get", List("test", "500"), Nil))
 
             promise.setValue(None)
+            future() mustEqual ItemResponse(None)
           }
         }
       }
@@ -160,33 +147,28 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
       "empty queue" in {
         expect {
           one(queueCollection).remove("test", None, true, false) willReturn Future.value(None)
-          one(channel).write(ItemResponse(None))
         }
 
-        textHandler.handle(TextRequest("get", List("test"), Nil))
+        textHandler(TextRequest("get", List("test"), Nil))() mustEqual ItemResponse(None)
       }
 
       "item ready" in {
         expect {
           one(queueCollection).remove("test", None, true, false) willReturn Future.value(Some(qitem))
-          one(channel).write(ItemResponse(Some(qitem.data)))
         }
 
-        textHandler.handle(TextRequest("get", List("test"), Nil))
+        textHandler(TextRequest("get", List("test"), Nil))() mustEqual ItemResponse(Some(qitem.data))
       }
     }
 
     "put request" in {
       expect {
-        one(channel).getRemoteAddress() willReturn new InetSocketAddress(0)
-        one(channelGroup).add(channel) willReturn true
         one(queueCollection).add("test", "hello".getBytes, None) willReturn true
-        one(channel).write(CountResponse(1))
       }
 
-      val textHandler = new TextHandler(channelGroup, queueCollection, 10, None)
-      textHandler.handleUpstream(null, new UpstreamChannelStateEvent(channel, ChannelState.OPEN, true))
-      textHandler.handle(TextRequest("put", List("test"), List("hello".getBytes)))
+      val textHandler = new TextHandler(connection, queueCollection, 10)
+      textHandler.connected()
+      textHandler(TextRequest("put", List("test"), List("hello".getBytes)))() mustEqual CountResponse(1)
     }
 
     // FIXME: peek, monitor, confirm, flush, quit, shutdown, unknown
