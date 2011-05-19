@@ -38,6 +38,7 @@ import com.twitter.finagle.builder.{ServerBuilder, Server => FinagleServer}
 import com.twitter.finagle.stats.OstrichStatsReceiver
 import com.twitter.finagle.util.{Timer => FinagleTimer}
 import com.twitter.util.Future
+import com.twitter.naggati.Codec
 import com.twitter.naggati.codec.{MemcacheResponse, MemcacheRequest, MemcacheCodec}
 import com.twitter.finagle.{ClientConnection, ServerCodec, Service => FinagleService}
 
@@ -54,6 +55,30 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
   var memcacheService: Option[FinagleServer] = None
   var textService: Option[FinagleServer] = None
   var textAcceptor: Option[Channel] = None
+
+  private def finagledCodec[Req, Resp](codec: => Codec) = {
+    new ServerCodec[Req, Resp] {
+      val pipelineFactory = new ChannelPipelineFactory() {
+        def getPipeline = Channels.pipeline(codec)
+      }
+    }
+  }
+
+  def startFinagleServer[Req, Resp](
+    name: String,
+    port: Int,
+    serverCodec: ServerCodec[Req, Resp]
+  )(factory: ClientConnection => FinagleService[Req, Resp]): FinagleServer = {
+    val address = new InetSocketAddress(listenAddress, port)
+    val builder = ServerBuilder()
+      .codec(serverCodec)
+      .name(name)
+      .reportTo(new OstrichStatsReceiver)
+      .bindTo(address)
+    clientTimeout.foreach { timeout => builder.readTimeout(timeout) }
+    // calling build() is equivalent to calling start() in fingale.
+    builder.build(factory)
+  }
 
   private def bytesRead(n: Int) {
     Stats.incr("bytes_read", n)
@@ -75,51 +100,22 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
     queueCollection = new QueueCollection(queuePath, new FinagleTimer(timer), defaultQueueConfig, builders)
     queueCollection.loadQueues()
 
-    val memcachePipelineFactoryCodec = new ServerCodec[MemcacheRequest, MemcacheResponse] {
-      val pipelineFactory = new ChannelPipelineFactory() {
-        def getPipeline() = {
-          val protocolCodec = protocol match {
-            case Protocol.Ascii => MemcacheCodec.asciiCodec(bytesRead, bytesWritten)
-            case Protocol.Binary => throw new Exception("Binary protocol not supported yet.")
-          }
-          Channels.pipeline(protocolCodec)
-        }
+    // finagle setup:
+    val memcachePipelineFactoryCodec = finagledCodec[MemcacheRequest, MemcacheResponse] {
+      protocol match {
+        case Protocol.Ascii => MemcacheCodec.asciiCodec(bytesRead, bytesWritten)
+        case Protocol.Binary => throw new Exception("Binary protocol not supported yet.")
       }
     }
-    // finagle setup:
     memcacheService = memcacheListenPort.map { port =>
-      val address = new InetSocketAddress(listenAddress, port)
-      val builder = ServerBuilder()
-        .codec(memcachePipelineFactoryCodec)
-        .name("kestrel-memcache")
-        .reportTo(new OstrichStatsReceiver)
-        .bindTo(address)
-      clientTimeout.foreach { timeout => builder.readTimeout(timeout) }
-      // calling build() is equivalent to calling start() in fingale.
-      builder.build { connection: ClientConnection =>
+      startFinagleServer("kestrel-memcache", port, memcachePipelineFactoryCodec) { connection =>
         new MemcacheHandler(connection, queueCollection, maxOpenTransactions)
       }
     }
 
-    val textPipelineFactory = new ServerCodec[TextRequest, TextResponse] {
-      val pipelineFactory = new ChannelPipelineFactory() {
-        def getPipeline() = {
-          val protocolCodec = TextCodec(bytesRead, bytesWritten)
-          Channels.pipeline(protocolCodec)
-        }
-      }
-    }
-    // finagle setup:
+    val textPipelineFactory = finagledCodec[TextRequest, TextResponse] { TextCodec(bytesRead, bytesWritten) }
     textService = textListenPort.map { port =>
-      val address = new InetSocketAddress(listenAddress, port)
-      val builder = ServerBuilder()
-        .codec(textPipelineFactory)
-        .name("kestrel-text")
-        .reportTo(new OstrichStatsReceiver)
-        .bindTo(address)
-      clientTimeout.foreach { timeout => builder.readTimeout(timeout) }
-      // calling build() is equivalent to calling start() in fingale.
-      builder.build { connection: ClientConnection =>
+      startFinagleServer("kestrel-text", port, textPipelineFactory) { connection =>
         new TextHandler(connection, queueCollection, maxOpenTransactions)
       }
     }
@@ -144,7 +140,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
     log.info("Shutting down!")
 
     memcacheService.foreach { _.close() }
-//    textAcceptor.foreach { _.close().awaitUninterruptibly() }
+    textService.foreach { _.close() }
     queueCollection.shutdown()
 
     timer.stop()
