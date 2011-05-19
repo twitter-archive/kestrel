@@ -32,9 +32,11 @@ import com.twitter.naggati.{Codec, ProtocolError}
 /**
  * Memcache protocol handler for a kestrel connection.
  */
-class MemcacheHandler(connection: ClientConnection, queueCollection: QueueCollection, maxOpenTransactions: Int)
-extends KestrelHandler(queueCollection, maxOpenTransactions) {
+class MemcacheHandler(connection: ClientConnection, queueCollection: QueueCollection, maxOpenTransactions: Int) {
   val log = Logger.get(getClass.getName)
+
+  val sessionId = Kestrel.sessionId.incrementAndGet()
+  protected val handler = new KestrelHandler(queueCollection, maxOpenTransactions, clientDescription, sessionId)
 
   protected def clientDescription: String = {
     val address = connection.remoteAddress.asInstanceOf[InetSocketAddress]
@@ -45,6 +47,10 @@ extends KestrelHandler(queueCollection, maxOpenTransactions) {
     Future(new MemcacheResponse("") then Codec.Disconnect)
   }
 
+  def finish() {
+    handler.finish()
+  }
+
   final def apply(request: MemcacheRequest): Future[MemcacheResponse] = {
     request.line(0) match {
       case "get" =>
@@ -52,7 +58,7 @@ extends KestrelHandler(queueCollection, maxOpenTransactions) {
       case "monitor" =>
         Future(monitor(request.line(1), request.line(2).toInt))
       case "confirm" =>
-        if (closeTransactions(request.line(1), request.line(2).toInt)) {
+        if (handler.closeTransactions(request.line(1), request.line(2).toInt)) {
           Future(new MemcacheResponse("END"))
         } else {
           Future(new MemcacheResponse("ERROR"))
@@ -68,7 +74,7 @@ extends KestrelHandler(queueCollection, maxOpenTransactions) {
           Some(Time.epoch + expiry.seconds)
         }
         try {
-          if (setItem(request.line(1), request.line(2).toInt, normalizedExpiry, request.data.get)) {
+          if (handler.setItem(request.line(1), request.line(2).toInt, normalizedExpiry, request.data.get)) {
             Future(new MemcacheResponse("STORED"))
           } else {
             Future(new MemcacheResponse("NOT_STORED"))
@@ -80,26 +86,26 @@ extends KestrelHandler(queueCollection, maxOpenTransactions) {
       case "stats" =>
         Future(stats())
       case "shutdown" =>
-        shutdown()
+        handler.shutdown()
         disconnect()
       case "reload" =>
         Kestrel.kestrel.reload()
         Future(new MemcacheResponse("Reloaded config."))
       case "flush" =>
-        flush(request.line(1))
+        handler.flush(request.line(1))
         Future(new MemcacheResponse("END"))
       case "flush_all" =>
-        flushAllQueues()
+        handler.flushAllQueues()
         Future(new MemcacheResponse("Flushed all queues."))
       case "dump_stats" =>
         Future(dumpStats())
       case "delete" =>
-        delete(request.line(1))
+        handler.delete(request.line(1))
         Future(new MemcacheResponse("END"))
       case "flush_expired" =>
-        Future(new MemcacheResponse(flushExpired(request.line(1)).toString))
+        Future(new MemcacheResponse(handler.flushExpired(request.line(1)).toString))
       case "flush_all_expired" =>
-        val flushed = queues.flushAllExpired()
+        val flushed = queueCollection.flushAllExpired()
         Future(new MemcacheResponse(flushed.toString))
       case "version" =>
         Future(version())
@@ -138,20 +144,20 @@ extends KestrelHandler(queueCollection, maxOpenTransactions) {
     }
 
     if (aborting) {
-      abortTransaction(key)
+      handler.abortTransaction(key)
       Future(new MemcacheResponse("END"))
     } else {
       if (closing) {
-        closeTransaction(key)
+        handler.closeTransaction(key)
       }
       if (opening || !closing) {
-        if (pendingTransactions.size(key) > 0 && !peeking && !opening) {
+        if (handler.pendingTransactions.size(key) > 0 && !peeking && !opening) {
           log.warning("Attempt to perform a non-transactional fetch with an open transaction on " +
                       " '%s' (sid %d, %s)", key, sessionId, clientDescription)
           return Future(new MemcacheResponse("ERROR") then Codec.Disconnect)
         }
         try {
-          getItem(key, timeout, opening, peeking).map { itemOption =>
+          handler.getItem(key, timeout, opening, peeking).map { itemOption =>
             itemOption match {
               case None =>
                 new MemcacheResponse("END")
@@ -171,7 +177,7 @@ extends KestrelHandler(queueCollection, maxOpenTransactions) {
 
   private def monitor(key: String, timeout: Int): MemcacheResponse = {
     // FIXME
-    monitorUntil(key, Time.now + timeout.seconds) {
+    handler.monitorUntil(key, Time.now + timeout.seconds) {
       case None =>
         new MemcacheResponse("END")
       case Some(item) =>
@@ -185,9 +191,9 @@ extends KestrelHandler(queueCollection, maxOpenTransactions) {
     report += (("uptime", Kestrel.uptime.inSeconds.toString))
     report += (("time", (Time.now.inMilliseconds / 1000).toString))
     report += (("version", Kestrel.runtime.jarVersion))
-    report += (("curr_items", queues.currentItems.toString))
+    report += (("curr_items", queueCollection.currentItems.toString))
     report += (("total_items", Stats.getCounter("total_items")().toString))
-    report += (("bytes", queues.currentBytes.toString))
+    report += (("bytes", queueCollection.currentBytes.toString))
     report += (("curr_connections", Kestrel.sessions.get().toString))
     report += (("total_connections", Stats.getCounter("total_connections")().toString))
     report += (("cmd_get", Stats.getCounter("cmd_get")().toString))
@@ -198,8 +204,8 @@ extends KestrelHandler(queueCollection, maxOpenTransactions) {
     report += (("bytes_read", Stats.getCounter("bytes_read")().toString))
     report += (("bytes_written", Stats.getCounter("bytes_written")().toString))
 
-    for (qName <- queues.queueNames) {
-      report ++= queues.stats(qName).map { case (k, v) => ("queue_" + qName + "_" + k, v) }
+    for (qName <- queueCollection.queueNames) {
+      report ++= queueCollection.stats(qName).map { case (k, v) => ("queue_" + qName + "_" + k, v) }
     }
 
     val summary = {
@@ -210,9 +216,9 @@ extends KestrelHandler(queueCollection, maxOpenTransactions) {
 
   private def dumpStats() = {
     val dump = new mutable.ListBuffer[String]
-    for (qName <- queues.queueNames) {
+    for (qName <- queueCollection.queueNames) {
       dump += "queue '" + qName + "' {"
-      dump += queues.stats(qName).map { case (k, v) => k + "=" + v }.mkString("  ", "\r\n  ", "")
+      dump += queueCollection.stats(qName).map { case (k, v) => k + "=" + v }.mkString("  ", "\r\n  ", "")
       dump += "}"
     }
     new MemcacheResponse(dump.mkString("", "\r\n", "\r\nEND\r\n"))

@@ -30,10 +30,13 @@ object TooManyOpenTransactionsException extends TooManyOpenTransactionsException
 /**
  * Common implementations of kestrel commands that don't depend on which protocol you're using.
  */
-abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactions: Int) {
+class KestrelHandler(
+  val queues: QueueCollection,
+  val maxOpenTransactions: Int,
+  clientDescription: => String,
+  sessionId: Int
+) {
   private val log = Logger.get(getClass.getName)
-
-  val sessionId = Kestrel.sessionId.incrementAndGet()
 
   object pendingTransactions {
     private val transactions = new mutable.HashMap[String, mutable.ListBuffer[Int]] {
@@ -87,8 +90,6 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
   Kestrel.sessions.incrementAndGet()
   Stats.incr("total_connections")
 
-  protected def clientDescription: String
-
   // usually called when netty sends a disconnect signal.
   def finish() {
     log.debug("End of session %d", sessionId)
@@ -96,7 +97,7 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
     Kestrel.sessions.decrementAndGet()
   }
 
-  protected def flushAllQueues() {
+  def flushAllQueues() {
     queues.queueNames.foreach { qName => queues.flush(qName) }
   }
 
@@ -180,7 +181,7 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
     }
   }
 
-  protected def abortAnyTransaction() = {
+  def abortAnyTransaction() {
     pendingTransactions.cancelAll()
   }
 
@@ -190,22 +191,22 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
     queues.add(key, data, expiry)
   }
 
-  protected def flush(key: String) = {
+  def flush(key: String) {
     log.debug("flush -> q=%s", key)
     queues.flush(key)
   }
 
-  protected def delete(key: String) = {
+  def delete(key: String) {
     log.debug("delete -> q=%s", key)
     queues.delete(key)
   }
 
-  protected def flushExpired(key: String) = {
+  def flushExpired(key: String) = {
     log.debug("flush_expired -> q=%s", key)
     queues.flushExpired(key)
   }
 
-  protected def shutdown() = {
+  def shutdown() {
     BackgroundProcess {
       Thread.sleep(100)
       ServiceTracker.shutdown()
