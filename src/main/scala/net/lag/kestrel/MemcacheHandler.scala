@@ -39,10 +39,7 @@ class MemcacheHandler(
 
   val sessionId = Kestrel.sessionId.incrementAndGet()
   protected val handler = new KestrelHandler(queueCollection, maxOpenTransactions, clientDescription, sessionId)
-
-  override def connected() {
-    log.debug("New session %d from %s", sessionId, clientDescription)
-  }
+  log.debug("New session %d from %s", sessionId, clientDescription)
 
   override def release() {
     handler.finish()

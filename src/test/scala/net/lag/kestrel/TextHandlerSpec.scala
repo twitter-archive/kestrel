@@ -88,7 +88,6 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
 
     "get request" in {
       val textHandler = new TextHandler(connection, queueCollection, 10)
-      textHandler.connected()
 
       "closes transactions" in {
         expect {
@@ -167,7 +166,6 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
       }
 
       val textHandler = new TextHandler(connection, queueCollection, 10)
-      textHandler.connected()
       textHandler(TextRequest("put", List("test"), List("hello".getBytes)))() mustEqual CountResponse(1)
     }
 
