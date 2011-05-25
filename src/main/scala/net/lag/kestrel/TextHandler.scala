@@ -55,9 +55,8 @@ object TextCodec {
     }
   }
 
-  val write: PartialFunction[Any, ChannelBuffer] = {
-    case response: TextResponse =>
-      response.toBuffer
+  val write = new Encoder[TextResponse] {
+    def encode(response: TextResponse, channel: Channel) = Some(response.toBuffer)
   }
 }
 

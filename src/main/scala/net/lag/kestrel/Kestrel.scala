@@ -56,7 +56,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
   var textService: Option[FinagleServer] = None
   var textAcceptor: Option[Channel] = None
 
-  private def finagledCodec[Req, Resp](codec: => Codec) = {
+  private def finagledCodec[Req, Resp](codec: => Codec[Resp]) = {
     new ServerCodec[Req, Resp] {
       val pipelineFactory = new ChannelPipelineFactory() {
         def getPipeline = Channels.pipeline(codec)
