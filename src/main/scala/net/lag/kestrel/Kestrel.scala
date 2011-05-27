@@ -162,18 +162,6 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
   def reload(newDefaultQueueConfig: QueueConfig, newQueueBuilders: List[QueueBuilder]) {
     queueCollection.reload(newDefaultQueueConfig, newQueueBuilders)
   }
-
-  private def makeAcceptor(channelFactory: ChannelFactory, pipelineFactory: ChannelPipelineFactory,
-                           address: InetSocketAddress): Channel = {
-    val bootstrap = new ServerBootstrap(channelFactory)
-    bootstrap.setPipelineFactory(pipelineFactory)
-    bootstrap.setOption("backlog", 1000)
-    bootstrap.setOption("reuseAddress", true)
-    bootstrap.setOption("child.keepAlive", true)
-    bootstrap.setOption("child.tcpNoDelay", true)
-    bootstrap.setOption("child.receiveBufferSize", 2048)
-    bootstrap.bind(address)
-  }
 }
 
 object Kestrel {
