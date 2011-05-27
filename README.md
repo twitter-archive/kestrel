@@ -17,7 +17,7 @@ multicast, no clustering, no "elections", no coordination at all. No talking!
 Shhh!
 
 For more information about what it is and how to use it, check out
-the included [guide](docs/guide.md).
+the included [guide](https://github.com/robey/kestrel/blob/master/docs/guide.md).
 
 Kestrel has a mailing list here: <kestrel-talk@googlegroups.com>
 http://groups.google.com/group/kestrel-talk
