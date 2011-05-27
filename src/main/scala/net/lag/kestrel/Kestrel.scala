@@ -183,7 +183,6 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
     bootstrap.setOption("reuseAddress", true)
     bootstrap.setOption("child.keepAlive", true)
     bootstrap.setOption("child.tcpNoDelay", true)
-    bootstrap.setOption("child.receiveBufferSize", 2048)
     bootstrap.bind(address)
   }
 }
