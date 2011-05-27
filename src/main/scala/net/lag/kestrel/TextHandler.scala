@@ -56,7 +56,7 @@ object TextCodec {
   }
 
   val write = new Encoder[TextResponse] {
-    def encode(response: TextResponse, channel: Channel) = Some(response.toBuffer)
+    def encode(response: TextResponse, streamer: TextResponse => Unit) = Some(response.toBuffer)
   }
 }
 

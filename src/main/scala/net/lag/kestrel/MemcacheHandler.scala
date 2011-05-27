@@ -19,6 +19,7 @@ package net.lag.kestrel
 
 import java.net.InetSocketAddress
 import scala.collection.mutable
+import com.twitter.concurrent.ChannelSource
 import com.twitter.conversions.time._
 import com.twitter.finagle.{ClientConnection, Service}
 import com.twitter.logging.Logger
@@ -180,14 +181,15 @@ class MemcacheHandler(
   }
 
   private def monitor(key: String, timeout: Int): MemcacheResponse = {
-    // FIXME
+    val channel = new ChannelSource[MemcacheResponse]
     handler.monitorUntil(key, Time.now + timeout.seconds) {
       case None =>
-        new MemcacheResponse("END")
+        channel.send(new MemcacheResponse("END"))
+        channel.close()
       case Some(item) =>
-        new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), Some(item.data))
+        channel.send(new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), Some(item.data)))
     }
-    null
+    new MemcacheResponse("", stream = Some(channel))
   }
 
   private def stats() = {
