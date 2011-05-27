@@ -18,14 +18,13 @@
 package net.lag.kestrel
 
 import scala.collection.mutable
+import com.twitter.concurrent.ChannelSource
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.naggati._
 import codec.{MemcacheResponse, MemcacheRequest}
 import com.twitter.naggati.Stages._
 import org.jboss.netty.buffer.{ChannelBuffer, ChannelBuffers}
-import org.jboss.netty.channel.Channel
-import org.jboss.netty.channel.group.ChannelGroup
 import java.net.InetSocketAddress
 import com.twitter.finagle.{ClientConnection, Service}
 import com.twitter.util.{Future, Duration, Time}
@@ -56,7 +55,7 @@ object TextCodec {
   }
 
   val write = new Encoder[TextResponse] {
-    def encode(response: TextResponse, streamer: TextResponse => Unit) = Some(response.toBuffer)
+    def encode(response: TextResponse, streamer: => ChannelSource[TextResponse]) = Some(response.toBuffer)
   }
 }
 
