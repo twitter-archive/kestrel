@@ -23,7 +23,7 @@ import com.twitter.concurrent.ChannelSource
 import com.twitter.conversions.time._
 import com.twitter.finagle.{ClientConnection, Service}
 import com.twitter.logging.Logger
-import com.twitter.naggati.{Codec, ProtocolError}
+import com.twitter.naggati.{Codec, LatchedChannelSource, ProtocolError}
 import com.twitter.naggati.codec.{MemcacheRequest, MemcacheResponse}
 import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{Future, Duration, Time}
@@ -181,7 +181,7 @@ class MemcacheHandler(
   }
 
   private def monitor(key: String, timeout: Int): MemcacheResponse = {
-    val channel = new ChannelSource[MemcacheResponse]
+    val channel = new LatchedChannelSource[MemcacheResponse]
     handler.monitorUntil(key, Time.now + timeout.seconds) {
       case None =>
         channel.send(new MemcacheResponse("END"))
@@ -189,7 +189,7 @@ class MemcacheHandler(
       case Some(item) =>
         channel.send(new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), Some(item.data)))
     }
-    new MemcacheResponse("", stream = Some(channel))
+    new MemcacheResponse("") then Codec.Stream(channel)
   }
 
   private def stats() = {
