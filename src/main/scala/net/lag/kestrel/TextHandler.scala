@@ -110,6 +110,11 @@ class TextHandler(
     "%s:%d".format(address.getHostName, address.getPort)
   }
 
+  override def release() {
+    handler.finish()
+    super.release()
+  }
+
   def apply(request: TextRequest) = {
     request.command match {
       case "put" =>
