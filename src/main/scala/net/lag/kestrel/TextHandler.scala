@@ -55,20 +55,20 @@ object TextCodec {
   }
 
   val write = new Encoder[TextResponse] {
-    def encode(response: TextResponse, streamer: => ChannelSource[TextResponse]) = Some(response.toBuffer)
+    def encode(response: TextResponse) = response.toBuffer
   }
 }
 
 case class TextRequest(command: String, args: List[String], items: List[Array[Byte]])
 
 object TextResponse {
-  val NO_ITEM = ChannelBuffers.wrappedBuffer("*\n".getBytes)
+  val NO_ITEM = Some(ChannelBuffers.wrappedBuffer("*\n".getBytes))
   val COLON = ':'.toByte
   val LF = '\n'.toByte
 }
 
-abstract class TextResponse {
-  def toBuffer: ChannelBuffer
+abstract class TextResponse extends Codec.Signalling {
+  def toBuffer: Option[ChannelBuffer]
 }
 case class ItemResponse(data: Option[Array[Byte]]) extends TextResponse {
   def toBuffer = {
@@ -78,17 +78,20 @@ case class ItemResponse(data: Option[Array[Byte]]) extends TextResponse {
       buffer.writeByte(TextResponse.COLON)
       buffer.writeBytes(bytes)
       buffer.writeByte(TextResponse.LF)
-      buffer
+      Some(buffer)
     } else {
       TextResponse.NO_ITEM
     }
   }
 }
 case class ErrorResponse(message: String) extends TextResponse {
-  def toBuffer = ChannelBuffers.wrappedBuffer(("-" + message + "\n").getBytes("ascii"))
+  def toBuffer = Some(ChannelBuffers.wrappedBuffer(("-" + message + "\n").getBytes("ascii")))
 }
 case class CountResponse(count: Long) extends TextResponse {
-  def toBuffer = ChannelBuffers.wrappedBuffer(("+" + count.toString + "\n").getBytes("ascii"))
+  def toBuffer = Some(ChannelBuffers.wrappedBuffer(("+" + count.toString + "\n").getBytes("ascii")))
+}
+case object NoResponse extends TextResponse {
+  def toBuffer = None
 }
 
 /**
@@ -165,19 +168,22 @@ class TextHandler(
         }
       case "monitor" =>
         // monitor <queue> <timeout>
-        Future(null) // FIXME
-        /*
         if (request.args.size < 2) {
-          channel.write(ErrorResponse("Queue name & timeout required."))
+          Future(ErrorResponse("Queue name & timeout required."))
         } else {
           val queueName = request.args(0)
           val timeout = request.args(1).toInt.milliseconds.fromNow
-          closeAllTransactions(queueName)
-          monitorUntil(queueName, timeout) { item =>
-            channel.write(ItemResponse(item.map { _.data }))
+          handler.closeAllTransactions(queueName)
+          val channel = new LatchedChannelSource[TextResponse]
+          handler.monitorUntil(queueName, timeout) {
+            case None =>
+              channel.send(ItemResponse(None))
+              channel.close()
+            case Some(item) =>
+              channel.send(ItemResponse(Some(item.data)))
           }
+          Future(NoResponse then Codec.Stream(channel))
         }
-        */
       case "confirm" =>
         // confirm <queue> <count>
         if (request.args.size < 2) {
