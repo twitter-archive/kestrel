@@ -7,12 +7,10 @@ class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) wit
   with PublishSourcesAndJavadocs
   with PublishSite
 {
-  val util = "com.twitter" % "util-core" % "1.8.1"
-
-  val ostrich = "com.twitter" % "ostrich" % "4.2.2"
+  val ostrich = "com.twitter" % "ostrich" % "4.2.3"
   val naggati = "com.twitter" % "naggati" % "2.2.0-SNAPSHOT"
-  val finagle = "com.twitter" % "finagle-core" % "1.5.0-SNAPSHOT"
-  val finagle_ostrich4 = "com.twitter" % "finagle-ostrich4" % "1.5.0-SNAPSHOT"
+  val finagle = "com.twitter" % "finagle-core" % "1.5.2-SNAPSHOT"
+  val finagle_ostrich4 = "com.twitter" % "finagle-ostrich4" % "1.5.2-SNAPSHOT"
 
   val specs = "org.scala-tools.testing" % "specs_2.8.1" % "1.6.7" % "test"
   val jmock = "org.jmock" % "jmock" % "2.4.0" % "test"
