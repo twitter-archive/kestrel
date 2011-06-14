@@ -58,9 +58,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
 
   private def finagledCodec[Req, Resp](codec: => Codec[Resp]) = {
     new ServerCodec[Req, Resp] {
-      val pipelineFactory = new ChannelPipelineFactory() {
-        def getPipeline = Channels.pipeline(codec)
-      }
+      val pipelineFactory = codec.pipelineFactory
     }
   }
 
