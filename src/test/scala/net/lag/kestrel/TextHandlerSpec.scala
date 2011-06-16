@@ -171,15 +171,11 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
 
     "delete request" in {
       expect {
-        one(channel).getRemoteAddress() willReturn new InetSocketAddress(0)
-        one(channelGroup).add(channel) willReturn true
         one(queueCollection).delete("test")
-        one(channel).write(CountResponse(0))
       }
 
-      val textHandler = new TextHandler(channelGroup, queueCollection, 10, None)
-      textHandler.handleUpstream(null, new UpstreamChannelStateEvent(channel, ChannelState.OPEN, true))
-      textHandler.handle(TextRequest("delete", List("test"), Nil))
+      val textHandler = new TextHandler(connection, queueCollection, 10)
+      textHandler(TextRequest("delete", List("test"), Nil))() mustEqual CountResponse(0)
     }
 
     // FIXME: peek, monitor, confirm, flush, quit, shutdown, unknown
