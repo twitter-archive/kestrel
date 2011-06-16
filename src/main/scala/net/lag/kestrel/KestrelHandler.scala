@@ -191,12 +191,12 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
     queues.add(key, data, expiry)
   }
 
-  protected def flush(key: String) = {
+  protected def flush(key: String) {
     log.debug("flush -> q=%s", key)
     queues.flush(key)
   }
 
-  protected def delete(key: String) = {
+  protected def delete(key: String) {
     log.debug("delete -> q=%s", key)
     queues.delete(key)
   }
