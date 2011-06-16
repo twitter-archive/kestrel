@@ -7,10 +7,10 @@ class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) wit
   with PublishSourcesAndJavadocs
   with PublishSite
 {
-  val util = "com.twitter" % "util-core" % "1.8.1"
-
-  val ostrich = "com.twitter" % "ostrich" % "4.2.0"
-  val naggati = "com.twitter" % "naggati" % "2.1.1"
+  val ostrich = "com.twitter" % "ostrich" % "4.4.0"
+  val naggati = "com.twitter" % "naggati" % "2.2.0"
+  val finagle = "com.twitter" % "finagle-core" % "1.5.3"
+  val finagle_ostrich4 = "com.twitter" % "finagle-ostrich4" % "1.5.3"
 
   val specs = "org.scala-tools.testing" % "specs_2.8.1" % "1.6.7" % "test"
   val jmock = "org.jmock" % "jmock" % "2.4.0" % "test"
@@ -39,7 +39,6 @@ class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) wit
 
   override def subversionRepository = Some("http://svn.local.twitter.com/maven-public")
 
-  // 100 times: 10,000 items of 1024 bytes each.
 //  override def fork = forkRun(List("-Xmx1024m", "-verbosegc", "-XX:+PrintGCDetails"))
 
   lazy val putMany = task { args =>

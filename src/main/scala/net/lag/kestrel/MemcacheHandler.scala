@@ -17,36 +17,56 @@
 
 package net.lag.kestrel
 
+import java.net.InetSocketAddress
 import scala.collection.mutable
+import com.twitter.concurrent.ChannelSource
 import com.twitter.conversions.time._
+import com.twitter.finagle.{ClientConnection, Service}
 import com.twitter.logging.Logger
-import com.twitter.naggati.ProtocolError
+import com.twitter.naggati.{Codec, LatchedChannelSource, ProtocolError}
 import com.twitter.naggati.codec.{MemcacheRequest, MemcacheResponse}
 import com.twitter.ostrich.stats.Stats
-import com.twitter.util.{Duration, Time}
-import org.jboss.netty.channel.Channel
-import org.jboss.netty.channel.group.ChannelGroup
+import com.twitter.util.{Future, Duration, Time}
 
 /**
  * Memcache protocol handler for a kestrel connection.
  */
 class MemcacheHandler(
-  channelGroup: ChannelGroup,
+  connection: ClientConnection,
   queueCollection: QueueCollection,
-  maxOpenTransactions: Int,
-  clientTimeout: Option[Duration])
-extends NettyHandler[MemcacheRequest](channelGroup, queueCollection, maxOpenTransactions, clientTimeout) {
-  protected final def handle(request: MemcacheRequest) = {
+  maxOpenTransactions: Int
+) extends Service[MemcacheRequest, MemcacheResponse] {
+  val log = Logger.get(getClass.getName)
+
+  val sessionId = Kestrel.sessionId.incrementAndGet()
+  protected val handler = new KestrelHandler(queueCollection, maxOpenTransactions, clientDescription, sessionId)
+  log.debug("New session %d from %s", sessionId, clientDescription)
+
+  override def release() {
+    handler.finish()
+    super.release()
+  }
+
+  protected def clientDescription: String = {
+    val address = connection.remoteAddress.asInstanceOf[InetSocketAddress]
+    "%s:%d".format(address.getHostName, address.getPort)
+  }
+
+  protected def disconnect() = {
+    Future(new MemcacheResponse("") then Codec.Disconnect)
+  }
+
+  final def apply(request: MemcacheRequest): Future[MemcacheResponse] = {
     request.line(0) match {
       case "get" =>
         get(request.line(1))
       case "monitor" =>
-        monitor(request.line(1), request.line(2).toInt)
+        Future(monitor(request.line(1), request.line(2).toInt))
       case "confirm" =>
-        if (closeTransactions(request.line(1), request.line(2).toInt)) {
-          channel.write(new MemcacheResponse("END"))
+        if (handler.closeTransactions(request.line(1), request.line(2).toInt)) {
+          Future(new MemcacheResponse("END"))
         } else {
-          channel.write(new MemcacheResponse("ERROR"))
+          Future(new MemcacheResponse("ERROR"))
         }
       case "set" =>
         val now = Time.now
@@ -59,56 +79,49 @@ extends NettyHandler[MemcacheRequest](channelGroup, queueCollection, maxOpenTran
           Some(Time.epoch + expiry.seconds)
         }
         try {
-          if (setItem(request.line(1), request.line(2).toInt, normalizedExpiry, request.data.get)) {
-            channel.write(new MemcacheResponse("STORED"))
+          if (handler.setItem(request.line(1), request.line(2).toInt, normalizedExpiry, request.data.get)) {
+            Future(new MemcacheResponse("STORED"))
           } else {
-            channel.write(new MemcacheResponse("NOT_STORED"))
+            Future(new MemcacheResponse("NOT_STORED"))
           }
         } catch {
           case e: NumberFormatException =>
-            throw new ProtocolError("bad request: " + request)
+            Future(new MemcacheResponse("CLIENT_ERROR"))
         }
       case "stats" =>
-        stats()
+        Future(stats())
       case "shutdown" =>
-        shutdown()
+        handler.shutdown()
+        disconnect()
       case "reload" =>
         Kestrel.kestrel.reload()
-        channel.write(new MemcacheResponse("Reloaded config."))
+        Future(new MemcacheResponse("Reloaded config."))
       case "flush" =>
-        flush(request.line(1))
-        channel.write(new MemcacheResponse("END"))
+        handler.flush(request.line(1))
+        Future(new MemcacheResponse("END"))
       case "flush_all" =>
-        flushAllQueues()
-        channel.write(new MemcacheResponse("Flushed all queues."))
+        handler.flushAllQueues()
+        Future(new MemcacheResponse("Flushed all queues."))
       case "dump_stats" =>
-        dumpStats()
+        Future(dumpStats())
       case "delete" =>
-        delete(request.line(1))
-        channel.write(new MemcacheResponse("END"))
+        handler.delete(request.line(1))
+        Future(new MemcacheResponse("END"))
       case "flush_expired" =>
-        channel.write(new MemcacheResponse(flushExpired(request.line(1)).toString))
+        Future(new MemcacheResponse(handler.flushExpired(request.line(1)).toString))
       case "flush_all_expired" =>
-        val flushed = queues.flushAllExpired()
-        channel.write(new MemcacheResponse(flushed.toString))
+        val flushed = queueCollection.flushAllExpired()
+        Future(new MemcacheResponse(flushed.toString))
       case "version" =>
-        version()
+        Future(version())
       case "quit" =>
-        quit()
+        disconnect()
       case x =>
-        channel.write(new MemcacheResponse("CLIENT_ERROR"))
+        Future(new MemcacheResponse("CLIENT_ERROR") then Codec.Disconnect)
     }
   }
 
-  protected final def handleProtocolError() {
-    channel.write(new MemcacheResponse("CLIENT_ERROR"))
-  }
-
-  protected final def handleException(e: Throwable) {
-    channel.write(new MemcacheResponse("ERROR"))
-  }
-
-  private def get(name: String): Unit = {
+  private def get(name: String): Future[MemcacheResponse] = {
     var key = name
     var timeout: Option[Time] = None
     var closing = false
@@ -132,51 +145,51 @@ extends NettyHandler[MemcacheRequest](channelGroup, queueCollection, maxOpenTran
     }
 
     if ((key.length == 0) || ((peeking || aborting) && (opening || closing)) || (peeking && aborting)) {
-      channel.write(new MemcacheResponse("CLIENT_ERROR"))
-      channel.close()
-      return
+      return Future(new MemcacheResponse("CLIENT_ERROR") then Codec.Disconnect)
     }
 
     if (aborting) {
-      abortTransaction(key)
-      channel.write(new MemcacheResponse("END"))
+      handler.abortTransaction(key)
+      Future(new MemcacheResponse("END"))
     } else {
       if (closing) {
-        closeTransaction(key)
-        if (!opening) channel.write(new MemcacheResponse("END"))
+        handler.closeTransaction(key)
       }
       if (opening || !closing) {
-        if (pendingTransactions.size(key) > 0 && !peeking && !opening) {
+        if (handler.pendingTransactions.size(key) > 0 && !peeking && !opening) {
           log.warning("Attempt to perform a non-transactional fetch with an open transaction on " +
                       " '%s' (sid %d, %s)", key, sessionId, clientDescription)
-          channel.write(new MemcacheResponse("ERROR"))
-          channel.close()
-          return
+          return Future(new MemcacheResponse("ERROR") then Codec.Disconnect)
         }
         try {
-          getItem(key, timeout, opening, peeking) {
-            case None =>
-              channel.write(new MemcacheResponse("END"))
-            case Some(item) =>
-              channel.write(new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), item.data))
+          handler.getItem(key, timeout, opening, peeking).map { itemOption =>
+            itemOption match {
+              case None =>
+                new MemcacheResponse("END")
+              case Some(item) =>
+                new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), Some(item.data))
+            }
           }
         } catch {
           case e: TooManyOpenTransactionsException =>
-            channel.write(new MemcacheResponse("ERROR"))
-            channel.close()
-            return
+            Future(new MemcacheResponse("ERROR") then Codec.Disconnect)
         }
+      } else {
+        Future(new MemcacheResponse("END"))
       }
     }
   }
 
-  private def monitor(key: String, timeout: Int) {
-    monitorUntil(key, Time.now + timeout.seconds) {
+  private def monitor(key: String, timeout: Int): MemcacheResponse = {
+    val channel = new LatchedChannelSource[MemcacheResponse]
+    handler.monitorUntil(key, Time.now + timeout.seconds) {
       case None =>
-        channel.write(new MemcacheResponse("END"))
+        channel.send(new MemcacheResponse("END"))
+        channel.close()
       case Some(item) =>
-        channel.write(new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), item.data))
+        channel.send(new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), Some(item.data)))
     }
+    new MemcacheResponse("") then Codec.Stream(channel)
   }
 
   private def stats() = {
@@ -184,9 +197,9 @@ extends NettyHandler[MemcacheRequest](channelGroup, queueCollection, maxOpenTran
     report += (("uptime", Kestrel.uptime.inSeconds.toString))
     report += (("time", (Time.now.inMilliseconds / 1000).toString))
     report += (("version", Kestrel.runtime.jarVersion))
-    report += (("curr_items", queues.currentItems.toString))
+    report += (("curr_items", queueCollection.currentItems.toString))
     report += (("total_items", Stats.getCounter("total_items")().toString))
-    report += (("bytes", queues.currentBytes.toString))
+    report += (("bytes", queueCollection.currentBytes.toString))
     report += (("curr_connections", Kestrel.sessions.get().toString))
     report += (("total_connections", Stats.getCounter("total_connections")().toString))
     report += (("cmd_get", Stats.getCounter("cmd_get")().toString))
@@ -197,31 +210,27 @@ extends NettyHandler[MemcacheRequest](channelGroup, queueCollection, maxOpenTran
     report += (("bytes_read", Stats.getCounter("bytes_read")().toString))
     report += (("bytes_written", Stats.getCounter("bytes_written")().toString))
 
-    for (qName <- queues.queueNames) {
-      report ++= queues.stats(qName).map { case (k, v) => ("queue_" + qName + "_" + k, v) }
+    for (qName <- queueCollection.queueNames) {
+      report ++= queueCollection.stats(qName).map { case (k, v) => ("queue_" + qName + "_" + k, v) }
     }
 
     val summary = {
       for ((key, value) <- report) yield "STAT %s %s".format(key, value)
     }.mkString("", "\r\n", "\r\nEND")
-    channel.write(new MemcacheResponse(summary))
+    new MemcacheResponse(summary)
   }
 
   private def dumpStats() = {
     val dump = new mutable.ListBuffer[String]
-    for (qName <- queues.queueNames) {
+    for (qName <- queueCollection.queueNames) {
       dump += "queue '" + qName + "' {"
-      dump += queues.stats(qName).map { case (k, v) => k + "=" + v }.mkString("  ", "\r\n  ", "")
+      dump += queueCollection.stats(qName).map { case (k, v) => k + "=" + v }.mkString("  ", "\r\n  ", "")
       dump += "}"
     }
-    channel.write(new MemcacheResponse(dump.mkString("", "\r\n", "\r\nEND\r\n")))
+    new MemcacheResponse(dump.mkString("", "\r\n", "\r\nEND\r\n"))
   }
 
   private def version() = {
-    channel.write(new MemcacheResponse("VERSION " + Kestrel.runtime.jarVersion + "\r\n"))
-  }
-
-  private def quit() = {
-    channel.close()
+    new MemcacheResponse("VERSION " + Kestrel.runtime.jarVersion + "\r\n")
   }
 }
