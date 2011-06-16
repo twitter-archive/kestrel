@@ -209,6 +209,13 @@ class TextHandler(
           handler.flush(request.args(0))
           Future(CountResponse(0))
         }
+      case "delete" =>
+        if (request.args.size < 1) {
+          channel.write(ErrorResponse("Queue name required."))
+        } else {
+          delete(request.args(0))
+          channel.write(CountResponse(0))
+        }
       case "quit" =>
         connection.close()
         Future(CountResponse(0))
