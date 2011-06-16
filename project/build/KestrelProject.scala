@@ -9,8 +9,8 @@ class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) wit
 {
   val ostrich = "com.twitter" % "ostrich" % "4.4.0-SNAPSHOT"
   val naggati = "com.twitter" % "naggati" % "2.2.0-SNAPSHOT"
-  val finagle = "com.twitter" % "finagle-core" % "1.5.2"
-  val finagle_ostrich4 = "com.twitter" % "finagle-ostrich4" % "1.5.2"
+  val finagle = "com.twitter" % "finagle-core" % "1.5.3"
+  val finagle_ostrich4 = "com.twitter" % "finagle-ostrich4" % "1.5.3"
 
   val specs = "org.scala-tools.testing" % "specs_2.8.1" % "1.6.7" % "test"
   val jmock = "org.jmock" % "jmock" % "2.4.0" % "test"
