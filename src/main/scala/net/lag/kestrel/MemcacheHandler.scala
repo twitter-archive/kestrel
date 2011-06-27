@@ -154,11 +154,13 @@ extends NettyHandler[MemcacheRequest](channelGroup, queueCollection, maxOpenTran
           return
         }
         try {
-          getItem(key, timeout, opening, peeking) {
-            case None =>
-              channel.write(new MemcacheResponse("END"))
-            case Some(item) =>
-              channel.write(new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), item.data))
+          getItem(key, timeout, opening, peeking).map { itemOption =>
+            itemOption match {
+              case None =>
+                channel.write(new MemcacheResponse("END"))
+              case Some(item) =>
+                channel.write(new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), item.data))
+            }
           }
         } catch {
           case e: TooManyOpenTransactionsException =>

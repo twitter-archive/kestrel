@@ -128,7 +128,7 @@ extends NettyHandler[TextRequest](channelGroup, queueCollection, maxOpenTransact
           try {
             val timeout = request.args.drop(1).headOption.map { _.toInt.milliseconds.fromNow }
             closeAllTransactions(queueName)
-            getItem(queueName, timeout, true, false) { item =>
+            getItem(queueName, timeout, true, false).map { item =>
               channel.write(ItemResponse(item.map { _.data }))
             }
           } catch {
@@ -147,7 +147,7 @@ extends NettyHandler[TextRequest](channelGroup, queueCollection, maxOpenTransact
           try {
             val timeout = request.args.drop(1).headOption.map { _.toInt.milliseconds.fromNow }
             closeAllTransactions(queueName)
-            getItem(queueName, timeout, false, true) { item =>
+            getItem(queueName, timeout, false, true).map { item =>
               channel.write(ItemResponse(item.map { _.data }))
             }
           } catch {
