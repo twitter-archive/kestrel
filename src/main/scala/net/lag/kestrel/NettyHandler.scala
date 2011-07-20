@@ -72,7 +72,8 @@ extends KestrelHandler(queueCollection, maxOpenTransactions) with ChannelUpstrea
             channel.getPipeline.addFirst("idle", new IdleStateHandler(Kestrel.kestrel.timer, 0, 0, clientTimeout.get.inSeconds.toInt))
           }
           channelGroup.add(channel)
-          log.debug("New session %d from %s:%d", sessionId, remoteAddress.getHostName, remoteAddress.getPort)
+          // don't use `remoteAddress.getHostName` because it may do a DNS lookup.
+          log.debug("New session %d from %s:%d", sessionId, remoteAddress.getAddress.getHostAddress, remoteAddress.getPort)
         }
       case i: IdleStateEvent =>
         log.debug("Idle timeout on session %s", channel)
