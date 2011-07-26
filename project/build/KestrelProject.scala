@@ -3,6 +3,8 @@ import com.twitter.sbt.StandardProject
 
 
 class KestrelProject(info: ProjectInfo) extends StandardProject(info) {
+  val twitterRepo = "twitter" at "http://maven.twttr.com/"
+
   val specs = "org.scala-tools.testing" % "specs" % "1.6.2.1"
   val xrayspecs = "com.twitter" % "xrayspecs" % "1.0.7"
   val vscaladoc = "org.scala-tools" % "vscaladoc" % "1.1-md-3"
