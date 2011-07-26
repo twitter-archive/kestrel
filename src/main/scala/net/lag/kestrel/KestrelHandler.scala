@@ -58,7 +58,7 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
 
   KestrelStats.sessions.incr
   KestrelStats.totalConnections.incr
-  log.debug("New session %d from %s:%d", sessionID, remoteAddress.getHostName, remoteAddress.getPort)
+  log.debug("New session %d from %s:%d", sessionID, remoteAddress.getAddress.getHostAddress, remoteAddress.getPort)
   start
 
   def act = {
@@ -182,14 +182,14 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
       if (aborting) {
         if (!abortTransaction(key)) {
           log.warning("Attempt to abort a non-existent transaction on '%s' (sid %d, %s:%d)",
-                      key, sessionID, remoteAddress.getHostName, remoteAddress.getPort)
+                      key, sessionID, remoteAddress.getAddress.getHostAddress, remoteAddress.getPort)
         }
         writeResponse("END\r\n")
       } else {
         if (closing) {
           if (!closeTransaction(key)) {
             log.debug("Attempt to close a non-existent transaction on '%s' (sid %d, %s:%d)",
-                      key, sessionID, remoteAddress.getHostName, remoteAddress.getPort)
+                      key, sessionID, remoteAddress.getAddress.getHostAddress, remoteAddress.getPort)
             // let the client continue. it may be optimistically closing previous transactions as
             // it randomly jumps servers.
           }
@@ -198,7 +198,7 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
         if (opening || !closing) {
           if (pendingTransaction.isDefined && !peeking) {
             log.warning("Attempt to perform a non-transactional fetch with an open transaction on " +
-                        " '%s' (sid %d, %s:%d)", key, sessionID, remoteAddress.getHostName,
+                        " '%s' (sid %d, %s:%d)", key, sessionID, remoteAddress.getAddress.getHostAddress,
                         remoteAddress.getPort)
             writeResponse("ERROR\r\n")
             session.close(false)
@@ -222,7 +222,7 @@ class KestrelHandler(val session: IoSession, val config: Config) extends Actor {
     } catch {
       case e: MismatchedQueueException =>
         log.warning("Attempt to close a transaction on the wrong queue '%s' (sid %d, %s:%d)",
-                    key, sessionID, remoteAddress.getHostName, remoteAddress.getPort)
+                    key, sessionID, remoteAddress.getAddress.getHostAddress, remoteAddress.getPort)
         writeResponse("ERROR\r\n")
         session.close(false)
     }
