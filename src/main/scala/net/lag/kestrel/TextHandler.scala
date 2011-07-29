@@ -22,6 +22,7 @@ import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.naggati._
 import com.twitter.naggati.Stages._
+import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{Duration, Time}
 import org.jboss.netty.buffer.{ChannelBuffer, ChannelBuffers}
 import org.jboss.netty.channel.Channel
@@ -88,6 +89,9 @@ case class ErrorResponse(message: String) extends TextResponse {
 }
 case class CountResponse(count: Long) extends TextResponse {
   def toBuffer = ChannelBuffers.wrappedBuffer(("+" + count.toString + "\n").getBytes("ascii"))
+}
+case class StringResponse(message: String) extends TextResponse {
+    def toBuffer = ChannelBuffers.wrappedBuffer(("+" + message + "\n").getBytes("ascii"))
 }
 
 /**
@@ -199,9 +203,53 @@ extends NettyHandler[TextRequest](channelGroup, queueCollection, maxOpenTransact
       case "shutdown" =>
         shutdown()
         channel.write(CountResponse(0))
+      case "dump_stats" =>
+        dumpStats()
+      case "stats" =>
+        stats()
+      case "version" =>
+        channel.write(new StringResponse("VERSION " + Kestrel.runtime.jarVersion + "\r\n"))
       case x =>
         channel.write(ErrorResponse("Unknown command: " + x))
     }
+  }
+
+  private def stats() = {
+    var report = new mutable.ArrayBuffer[(String, String)]
+    report += (("uptime", Kestrel.uptime.inSeconds.toString))
+    report += (("time", (Time.now.inMilliseconds / 1000).toString))
+    report += (("version", Kestrel.runtime.jarVersion))
+    report += (("curr_items", queues.currentItems.toString))
+    report += (("total_items", Stats.getCounter("total_items")().toString))
+    report += (("bytes", queues.currentBytes.toString))
+    report += (("curr_connections", Kestrel.sessions.get().toString))
+    report += (("total_connections", Stats.getCounter("total_connections")().toString))
+    report += (("cmd_get", Stats.getCounter("cmd_get")().toString))
+    report += (("cmd_set", Stats.getCounter("cmd_set")().toString))
+    report += (("cmd_peek", Stats.getCounter("cmd_peek")().toString))
+    report += (("get_hits", Stats.getCounter("get_hits")().toString))
+    report += (("get_misses", Stats.getCounter("get_misses")().toString))
+    report += (("bytes_read", Stats.getCounter("bytes_read")().toString))
+    report += (("bytes_written", Stats.getCounter("bytes_written")().toString))
+
+    for (qName <- queues.queueNames) {
+      report ++= queues.stats(qName).map { case (k, v) => ("queue_" + qName + "_" + k, v) }
+    }
+
+    val summary = {
+      for ((key, value) <- report) yield "STAT %s %s".format(key, value)
+    }.mkString("", "\r\n", "\r\nEND")
+    channel.write(new StringResponse(summary))
+  }
+
+  private def dumpStats() = {
+    val dump = new mutable.ListBuffer[String]
+    for (qName <- queues.queueNames) {
+      dump += "queue '" + qName + "' {"
+      dump += queues.stats(qName).map { case (k, v) => k + "=" + v }.mkString("  ", "\r\n  ", "")
+      dump += "}"
+    }
+    channel.write(new StringResponse(dump.mkString("", "\r\n", "\r\nEND\r\n")))
   }
 
   protected final def handleProtocolError() {
