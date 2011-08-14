@@ -33,6 +33,7 @@ import org.jboss.netty.channel.group.DefaultChannelGroup
 import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory
 import org.jboss.netty.util.{HashedWheelTimer, Timeout, Timer, TimerTask}
 import config._
+import main.java.net.lag.kestrel.ScheduledThreadPoolExecutorTimer
 
 
 // FIXME move me!
@@ -93,7 +94,8 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
              expirationTimerFrequency, clientTimeout, maxOpenTransactions)
 
     // this means no timeout will be at better granularity than 10ms.
-    timer = new HashedWheelTimer(10, TimeUnit.MILLISECONDS)
+    //timer = new HashedWheelTimer(10, TimeUnit.MILLISECONDS)
+    timer = new ScheduledThreadPoolExecutorTimer(10);
     queueCollection = new QueueCollection(queuePath, new NettyTimer(timer), defaultQueueConfig, builders)
     queueCollection.loadQueues()
 
