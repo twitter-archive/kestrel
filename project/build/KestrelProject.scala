@@ -1,3 +1,4 @@
+import scala.io.Source
 import sbt._
 import com.twitter.sbt._
 
@@ -39,8 +40,7 @@ class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) wit
 
   override def subversionRepository = Some("http://svn.local.twitter.com/maven-public")
 
-  // 100 times: 10,000 items of 1024 bytes each.
-//  override def fork = forkRun(List("-Xmx1024m", "-verbosegc", "-XX:+PrintGCDetails"))
+  override lazy val markdownTemplate = Source.fromFile("site/markdown.template").mkString
 
   lazy val putMany = task { args =>
     runTask(Some("net.lag.kestrel.load.PutMany"), testClasspath, args).dependsOn(testCompile)

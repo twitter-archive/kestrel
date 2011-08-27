@@ -1,0 +1,82 @@
+<html>
+<head>
+<style type="text/css">
+
+body {
+  padding: 1em 1em 1em 2em;
+  background: #ebeaff;
+  font-family: Geneva, Helvetica, sans-serif;
+  color: #142524;
+}
+
+h1 {
+  color: #42525B;
+  font-size: 150%;
+}
+
+h2 {
+  color: #42525B;
+  font-size: 125%;
+}
+
+h3 {
+  color: #42525B;
+  font-size: 100%;
+}
+
+p, dl {
+  margin-left: 2em;
+  margin-right: 2em;
+}
+
+ul, ol {
+  margin-left: 1em;
+  margin-right: 2em;
+}
+
+ul p, ol p {
+  margin-left: 0em;
+  margin-right: 0em;
+}
+
+a:link, a:visited {
+  color: #630E08;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+a:active {
+  color: #142524;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+ul li {
+  display: list-item;
+  list-style-type: disc;
+}
+
+pre {
+  margin-left: 2.5em;
+  margin-right: 6em;
+  padding: 1em;
+  background: #efecca;
+  border: 1px dotted #a7a37e;
+}
+
+code {
+  font-weight: bold;
+}
+
+pre code {
+  font-weight: normal;
+}
+</style>
+</head>
+
+<body>
+
+{{content}}
+
+</body>
+</html>
