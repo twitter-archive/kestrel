@@ -1,0 +1,170 @@
+<html>
+<head>
+<style type="text/css">
+
+body {
+  padding: 1em 1em 1em 2em;
+  background: #ebeaff;
+  font-family: Geneva, Helvetica, sans-serif;
+  color: #142524;
+}
+
+h1 {
+  color: #42525B;
+  font-size: 150%;
+}
+
+h2 {
+  color: #42525B;
+  font-size: 125%;
+}
+
+h3 {
+  color: #42525B;
+  font-size: 100%;
+}
+
+p, dl {
+  margin-left: 2em;
+  margin-right: 2em;
+}
+
+ul, ol {
+  margin-left: 1em;
+  margin-right: 2em;
+}
+
+ul p, ol p {
+  margin-left: 0em;
+  margin-right: 0em;
+}
+
+a:link, a:visited {
+  color: #630E08;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+a:active {
+  color: #142524;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+ul li {
+  display: list-item;
+  list-style-type: disc;
+}
+
+pre {
+  margin-left: 2.5em;
+  margin-right: 6em;
+  padding: 1em;
+  background: #efecca;
+  border: 1px dotted #a7a37e;
+}
+
+code {
+  font-weight: bold;
+}
+
+pre code {
+  font-weight: normal;
+}
+</style>
+</head>
+
+<body>
+
+<h1>Text protocol for kestrel</h1>
+
+<h2>Assumptions</h2>
+
+<p>All items in queues are assumed to be encoded such that they have no embedded linefeeds. Typically
+this would be json.</p>
+
+<p>Linefeeds are used to terminate items in requests and responses.</p>
+
+<p>All times are in milliseconds, relative to now.</p>
+
+<h2>Responses</h2>
+
+<p>Responses always start with a single character that tells you what kind of response it is, and ends
+with a linefeed.</p>
+
+<p>Success/failure will either indicate the number of successful things done, or a human error message.</p>
+
+<pre><code>+&lt;number&gt;
+-&lt;error message&gt;
+</code></pre>
+
+<p>Items will be prefixed with a colon and end with a linefeed.</p>
+
+<pre><code>:&lt;item&gt;
+</code></pre>
+
+<p>If multiple items were requested, the last item will be followed by a success indicator telling you
+how many items you got.</p>
+
+<p>If you specified a timeout or were just peeking, you may get "no item", represented by a star.</p>
+
+<pre><code>*
+</code></pre>
+
+<h2>Requests</h2>
+
+<p>Put items into a queue. Response will be success/failure.</p>
+
+<pre><code>put &lt;queue&gt; [expiration]:
+&lt;item&gt;
+&lt;item&gt;
+...
+&lt;empty-line&gt;
+</code></pre>
+
+<p>Get items from a queue. Response will be one or more items. All fetched items are "transactional" --
+if you disconnect before confirming them, they may be given to other consumers. Any fetch operation
+is an implicit confirmation of a previous fetch operation, or in other words, every fetch operation
+closes the previous transaction and opens a new one. Timeout is in milliseconds.</p>
+
+<pre><code>peek &lt;queue&gt; [timeout]
+
+get &lt;queue&gt; [timeout]
+
+monitor &lt;queue&gt; [timeout]
+</code></pre>
+
+<p>You can explicitly confirm previous fetches if you like.</p>
+
+<pre><code>confirm &lt;queue&gt; &lt;count&gt;
+</code></pre>
+
+<p>Flush (empty) a queue.</p>
+
+<pre><code>flush &lt;queue&gt;
+</code></pre>
+
+<h2>Maintenance</h2>
+
+<p>Various maintenance tasks work:</p>
+
+<pre><code>shutdown
+</code></pre>
+
+<p>And you can close your connection explicitly:</p>
+
+<pre><code>quit
+</code></pre>
+
+<h2>To-do</h2>
+
+<p>flush_all
+flush_expired
+flush<em>all</em>expired
+roll
+version
+reload</p>
+
+
+</body>
+</html>

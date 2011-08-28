@@ -1,0 +1,185 @@
+<html>
+<head>
+<style type="text/css">
+
+body {
+  padding: 1em 1em 1em 2em;
+  background: #ebeaff;
+  font-family: Geneva, Helvetica, sans-serif;
+  color: #142524;
+}
+
+h1 {
+  color: #42525B;
+  font-size: 150%;
+}
+
+h2 {
+  color: #42525B;
+  font-size: 125%;
+}
+
+h3 {
+  color: #42525B;
+  font-size: 100%;
+}
+
+p, dl {
+  margin-left: 2em;
+  margin-right: 2em;
+}
+
+ul, ol {
+  margin-left: 1em;
+  margin-right: 2em;
+}
+
+ul p, ol p {
+  margin-left: 0em;
+  margin-right: 0em;
+}
+
+a:link, a:visited {
+  color: #630E08;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+a:active {
+  color: #142524;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+ul li {
+  display: list-item;
+  list-style-type: disc;
+}
+
+pre {
+  margin-left: 2.5em;
+  margin-right: 6em;
+  padding: 1em;
+  background: #efecca;
+  border: 1px dotted #a7a37e;
+}
+
+code {
+  font-weight: bold;
+}
+
+pre code {
+  font-weight: normal;
+}
+</style>
+</head>
+
+<body>
+
+<h1>Kestrel journal format</h1>
+
+<p>A kestrel queue's journal is just a sequence of operations that have happened on the queue. The
+queue is assumed to be empty at the start of the journal, and doing each operation in order will
+re-create the current state of the queue. (This is why the journal can be erased and start over
+when the queue is empty.)</p>
+
+<p>Each operation is a byte opcode followed by some optional metadata (per opcode). The first two
+operations have existed since starling (in 2007), so kestrel still supports the reading of older
+journals as an upgrade path, and plans to indefinitely.</p>
+
+<p>Metadata ints are in little-endian format. An intro "size" field always refers to the size of the
+entire block after the opcode. So, for example, an ADD of a 1-byte item would have a size of 5 to
+cover the 4-byte expiration and the 1-byte data.</p>
+
+<h2>Opcodes</h2>
+
+<ul>
+<li><p>ADD (0)</p>
+
+<pre><code>i32 size
+i32 expiration time (absolute, epoch time, in seconds)
+binary data of (size - 4)
+</code></pre>
+
+<p>Add an item to the end of the queue.</p></li>
+<li><p>REMOVE (1)</p>
+
+<p>Remove an item from the head of the queue.</p></li>
+<li><p>ADDX (2)</p>
+
+<pre><code>i32 size
+i64 add time (absolute, epoch time, in milliseconds)
+i64 expiration time (absolute, epoch time, in milliseconds)
+binary data of (size - 16)
+</code></pre>
+
+<p>Add an item to the end of the queue.</p></li>
+<li><p>REMOVE_TENTATIVE (3)</p>
+
+<p>Reserve an item from the head of the queue. It should be removed from the queue,
+given the next available transaction ID (xid) and placed in a table of outstanding transactions.</p></li>
+<li><p>SAVE_XID (4)</p>
+
+<pre><code>i32 xid
+</code></pre>
+
+<p>Set the current (last-used) transaction ID. Usually this is at the very beginning of a journal,
+to provide starting state.</p></li>
+<li><p>UNREMOVE (5)</p>
+
+<pre><code>i32 xid
+</code></pre>
+
+<p>Take the identified open transaction and put it back on the head of the queue. The transaction
+was cancelled.</p></li>
+<li><p>CONFIRM_REMOVE (6)</p>
+
+<pre><code>i32 xid
+</code></pre>
+
+<p>Remove the identified open transaction and consider it finished.</p></li>
+<li><p>ADD_XID (7)</p>
+
+<pre><code>i32 xid
+i32 size
+i64 add time (absolute, epoch time, in milliseconds)
+i64 expiration time (absolute, epoch time, in milliseconds)
+binary data of (size - 16)
+</code></pre>
+
+<p>Add an item to the queue with a special, named, transaction ID. This is ususally used to
+represent transactions that were open when the journal was rewritten. (Each ADD_XID is usually
+followed by a REMOVE_TENTATIVE.)</p></li>
+<li><p>STATE_DUMP (8)</p>
+
+<pre><code>i32 xid
+i32 number of open transactions to follow as ADD_XID
+</code></pre>
+
+<p>Used by read-behind for state in rewriting the journal file. If not in read-behind,
+this really marks the end of this journal file and time to move to the next one.</p></li>
+</ul>
+
+<h2>Multiple journal files</h2>
+
+<p>The latest journal file for a queue is named simply <code>(name)</code> with no dots in it. For example,
+the latest journal file for queue "cars" is named <code>cars</code>.</p>
+
+<p>As the journal is rotated, the current timestamp is appended. A rotated journal for cars might be
+named <code>cars.904</code>. When recovering the journals on restart, kestrel replays all the rolled journal
+files in timestamp order (earliest first), and then the non-timestamped file last (if it exists).
+They are treated exactly the same as if they were chunks of a larger, contiguous file.</p>
+
+<p>Journals with <code>~~</code> in their filename are temporary. If found on restart, they can be ignored.</p>
+
+<p>If previous rolled journal files are packed together, the state will initially be written into a
+temporary file, and then renamed to end with <code>.(timestamp).pack</code>. The timestamp means that any
+rolled journal with timestamp less than or equal to the pack-file timestamp is now dead and
+should be deleted. For example, if <code>cars.950.pack</code> exists, then <code>cars.904</code> and <code>cars.950</code> should
+be ignored and deleted, but <code>cars.951</code> is still valid. Normally, if it doesn't crash,
+the packing process will delete these older files after creating the pack file. Then it will
+rename the pack file to remove the ".pack" extension.</p>
+
+
+</body>
+</html>

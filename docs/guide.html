@@ -1,0 +1,495 @@
+<html>
+<head>
+<style type="text/css">
+
+body {
+  padding: 1em 1em 1em 2em;
+  background: #ebeaff;
+  font-family: Geneva, Helvetica, sans-serif;
+  color: #142524;
+}
+
+h1 {
+  color: #42525B;
+  font-size: 150%;
+}
+
+h2 {
+  color: #42525B;
+  font-size: 125%;
+}
+
+h3 {
+  color: #42525B;
+  font-size: 100%;
+}
+
+p, dl {
+  margin-left: 2em;
+  margin-right: 2em;
+}
+
+ul, ol {
+  margin-left: 1em;
+  margin-right: 2em;
+}
+
+ul p, ol p {
+  margin-left: 0em;
+  margin-right: 0em;
+}
+
+a:link, a:visited {
+  color: #630E08;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+a:active {
+  color: #142524;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+ul li {
+  display: list-item;
+  list-style-type: disc;
+}
+
+pre {
+  margin-left: 2.5em;
+  margin-right: 6em;
+  padding: 1em;
+  background: #efecca;
+  border: 1px dotted #a7a37e;
+}
+
+code {
+  font-weight: bold;
+}
+
+pre code {
+  font-weight: normal;
+}
+</style>
+</head>
+
+<body>
+
+<h1>A working guide to kestrel</h1>
+
+<p>Kestrel is a very simple message queue that runs on the JVM and uses the
+memcache protocol (with some extensions) to talk to clients.</p>
+
+<p>A single kestrel server has a set of queues identified by a name, which is
+also the filename of that queue's journal file (usually in
+<code>/var/spool/kestrel</code>). Each queue is a strictly-ordered FIFO of "items" of
+binary data. Usually this data is in some serialized format like JSON or
+ruby's marshal format.</p>
+
+<p>Generally queue names should be limited to alphanumerics <code>[A-Za-z0-9]</code>, dash
+(<code>-</code>) and underline (<code>_</code>). In practice, kestrel doesn't enforce any
+restrictions other than the name can't contain slash (<code>/</code>) because that can't
+be used in filenames, squiggle (<code>~</code>) because it's used for temporary files,
+plus (<code>+</code>) because it's used for fanout queues, and dot (<code>.</code>) because it's
+reserved for future use. Queue names are case-sensitive, but if you're running
+kestrel on OS X or Windows, you will want to refrain from taking advantage of
+this, since the journal filenames on those two platforms are <em>not</em>
+case-sensitive.</p>
+
+<p>A cluster of kestrel servers is like a memcache cluster: the servers don't
+know about each other, and don't do any cross-communication, so you can add as
+many as you like. Clients have a list of all servers in the cluster, and pick
+one at random for each operation. In this way, each queue appears to be spread
+out across every server, with items in a loose ordering.</p>
+
+<p>When kestrel starts up, it scans the journal folder and creates queues based
+on any journal files it finds there, to restore state to the way it was when
+it last shutdown (or was killed or died). New queues are created by referring
+to them (for example, adding or trying to remove an item). A queue can be
+deleted with the "delete" command.</p>
+
+<h2>Configuration</h2>
+
+<p>The config files for kestrel are scala expressions loaded at runtime, usually
+from <code>production.scala</code>, although you can use <code>development.scala</code> by passing
+<code>-Dstage=development</code> to the java command line.</p>
+
+<p>The config file evaluates to a <code>KestrelConfig</code> object that's used to configure
+the server as a whole, a default queue, and any overrides for specific named
+queues. The fields on <code>KestrelConfig</code> are documented here with their default
+values:
+http://robey.github.com/kestrel/doc/main/api/net/lag/kestrel/config/KestrelConfig.html</p>
+
+<p>To confirm the current configuration of each queue, send "dump_config" to
+a server (which can be done over telnet).</p>
+
+<p>To reload the config file on a running server, send "reload" the same way.
+You should immediately see the changes in "dump_config", to confirm. Reloading
+will only affect queue configuration, not global server configuration. To
+change the server configuration, restart the server.</p>
+
+<p>Logging is configured according to <code>util-logging</code>. The logging configuration
+syntax is described here:
+https://github.com/twitter/util/blob/master/util-logging/README.markdown</p>
+
+<p>Per-queue configuration is documented here:
+http://robey.github.com/kestrel/doc/main/api/net/lag/kestrel/config/QueueBuilder.html</p>
+
+<h2>The journal file</h2>
+
+<p>The journal file is the only on-disk storage of a queue's contents, and it's
+just a sequential record of each add or remove operation that's happened on
+that queue. When kestrel starts up, it replays each queue's journal to build
+up the in-memory queue that it uses for client queries.</p>
+
+<p>The journal file is rotated in one of two conditions:</p>
+
+<ol>
+<li><p>the queue is empty and the journal is larger than <code>defaultJournalSize</code></p></li>
+<li><p>the journal is larger than <code>maxJournalSize</code></p></li>
+</ol>
+
+<p>For example, if <code>defaultJournalSize</code> is 16MB (the default), then if the queue
+is empty and the journal is larger than 16MB, it will be truncated into a new
+(empty) file. If the journal is larger than <code>maxJournalSize</code> (1GB by default),
+the journal will be rewritten periodically to contain just the live items.</p>
+
+<p>You can turn the journal off for a queue (<code>keepJournal</code> = false) and the queue
+will exist only in memory. If the server restarts, all enqueued items are
+lost. You can also force a queue's journal to be sync'd to disk periodically,
+or even after every write operation, at a performance cost, using
+<code>syncJournal</code>.</p>
+
+<p>If a queue grows past <code>maxMemorySize</code> bytes (128MB by default), only the
+first 128MB is kept in memory. The journal is used to track later items, and
+as items are removed, the journal is played forward to keep 128MB in memory.
+This is usually known as "read-behind" mode, but Twitter engineers sometimes
+refer to it as the "square snake" because of the diagram used to brainstorm
+the implementation. When a queue is in read-behind mode, removing an item will
+often cause 2 disk operations instead of one: one to record the remove, and
+one to read an item in from disk to keep 128MB in memory. This is the
+trade-off to avoid filling memory and crashing the JVM.</p>
+
+<h2>Item expiration</h2>
+
+<p>When they come from a client, expiration times are handled in the same way as
+memcache: if the number is small (less than one million), it's interpreted as
+a relative number of seconds from now. Otherwise it's interpreted as an
+absolute unix epoch time, in seconds since the beginning of 1 January 1970
+GMT.</p>
+
+<p>Expiration times are immediately translated into an absolute time, in
+<em>milliseconds</em>, and if it's further in the future than the queue's <code>maxAge</code>,
+the <code>max_Age</code> is used instead. An expiration of 0, which is usually the
+default, means an item never expires.</p>
+
+<p>Expired items are flushed from a queue whenever a new item is added or
+removed. An idle queue won't have any items expired, but you can trigger a
+check by doing a "peek" on it.</p>
+
+<p>The global config option <code>expirationTimerFrequency_seconds</code> can be used to
+start a background thread that periodically removes expired items from the
+head of each queue. See <code>README.md</code> file for more.</p>
+
+<h2>Fanout Queues</h2>
+
+<p>If a queue name has a <code>+</code> in it (like "<code>orders+audit</code>"), it's treated as a
+fanout queue, using the format <code>&lt;parent&gt;+&lt;child&gt;</code>. These queues belong to a
+parent queue -- in this example, the "orders" queue. Every item written into
+a parent queue will also be written into each of its children.</p>
+
+<p>Fanout queues each have their own journal file (if the parent queue has a
+journal file) and otherwise behave exactly like any other queue. You can get
+and peek and even add items directly to a child queue if you want. It uses the
+parent queue's configuration instead of having independent child queue
+configuration blocks.</p>
+
+<p>When a fanout queue is first referenced by a client, the journal file (if any)
+is created, and it will start receiving new items written to the parent queue.
+Existing items are not copied over. A fanout queue can be deleted to stop it
+from receiving new items.</p>
+
+<h2>Memcache commands</h2>
+
+<ul>
+<li><p><code>SET &lt;queue-name&gt; &lt;flags (ignored)&gt; &lt;expiration&gt; &lt;# bytes&gt;</code></p>
+
+<p>Add an item to a queue. It may fail if the queue has a size or item limit
+and it's full.</p></li>
+<li><p><code>GET &lt;queue-name&gt;[options]</code></p>
+
+<p>Remove an item from a queue. It will return an empty response immediately if
+the queue is empty. The queue name may be followed by options separated
+by <code>/</code>:</p>
+
+<ul><li><p><code>/t=&lt;milliseconds&gt;</code></p>
+
+<p>Wait up to a given time limit for a new item to arrive. If an item arrives
+on the queue within this timeout, it's returned as normal. Otherwise,
+after that timeout, an empty response is returned.</p></li>
+<li><p><code>/open</code></p>
+
+<p>Tentatively remove an item from the queue. The item is returned as usual
+but is also set aside in case the client disappears before sending a
+"close" request. (See "Reliable Reads" below.)</p></li>
+<li><p><code>/close</code></p>
+
+<p>Close any existing open read. (See "Reliable Reads" below.)</p></li>
+<li><p><code>/abort</code></p>
+
+<p>Cancel any existing open read, returing that item to the head of the
+queue. It will be the next item fetched. (See "Reliable Reads" below.)</p></li>
+<li><p><code>/peek</code></p>
+
+<p>Return the first available item from the queue, if there is one, but don't
+remove it. You can't combine this with any of the reliable read options.</p></li></ul>
+
+<p>For example, to open a new read, waiting up to 500msec for an item:</p>
+
+<pre><code>GET work/t=500/open
+</code></pre>
+
+<p>Or to close an existing read and open a new one:</p>
+
+<pre><code>GET work/close/open
+</code></pre></li>
+<li><p><code>DELETE &lt;queue-name&gt;</code></p>
+
+<p>Drop a queue, discarding any items in it, and deleting any associated
+journal files.</p></li>
+<li><p><code>FLUSH &lt;queue-name&gt;</code></p>
+
+<p>Discard all items remaining in this queue. The queue remains live and new
+items can be added. The time it takes to flush will be linear to the current
+queue size, and any other activity on this queue will block while it's being
+flushed.</p></li>
+<li><p><code>FLUSH_ALL</code></p>
+
+<p>Discard all items remaining in all queues. The queues are flushed one at a
+time, as if kestrel received a <code>FLUSH</code> command for each queue.</p></li>
+<li><p><code>VERSION</code></p>
+
+<p>Display the kestrel version in a way compatible with memcache.</p></li>
+<li><p><code>SHUTDOWN</code></p>
+
+<p>Cleanly shutdown the server and exit.</p></li>
+<li><p><code>RELOAD</code></p>
+
+<p>Reload the config file and reconfigure all queues. This should have no
+noticable effect on the server's responsiveness.</p></li>
+<li><p><code>DUMP_CONFIG</code></p>
+
+<p>Dump a list of each queue currently known to the server, and list the config
+values for each queue. The format is:</p>
+
+<pre><code>queue 'master' {
+  max_items=2147483647
+  max_size=9223372036854775807
+  max_age=0
+  max_journal_size=16277216
+  max_memory_size=134217728
+  max_journal_overflow=10
+  max_journal_size_absolute=9223372036854775807
+  discard_old_when_full=false
+  journal=true
+  sync_journal=false
+}
+</code></pre>
+
+<p>The last queue will be followed by <code>END</code> on a line by itself.</p></li>
+<li><p><code>STATS</code></p>
+
+<p>Display server stats in memcache style. They're described below.</p></li>
+<li><p><code>DUMP_STATS</code></p>
+
+<p>Display server stats in a more readable style, grouped by queue. They're
+described below.</p></li>
+<li><p><code>MONITOR &lt;queue-name&gt; &lt;seconds&gt;</code></p>
+
+<p>Monitor a queue for a time, fetching any new items that arrive. Clients
+are queued in a fair fashion, per-item, so many clients may monitor a
+queue at once. After the given timeout, a separate <code>END</code> response will
+signal the end of the monitor period. Any fetched items are open
+transactions (see "Reliable Reads" below), and should be closed with
+<code>CONFIRM</code>.</p></li>
+<li><p><code>CONFIRM &lt;queue-name&gt; &lt;count&gt;</code></p>
+
+<p>Confirm receipt of <code>count</code> items from a queue. Usually this is the response
+to a <code>MONITOR</code> command, to confirm the items that arrived during the monitor
+period.</p></li>
+</ul>
+
+<h2>Reliable reads</h2>
+
+<p>Normally when a client removes an item from the queue, kestrel immediately
+discards the item and assumes the client has taken ownership. This isn't
+always safe, because a client could crash or lose the network connection
+before it gets the item. So kestrel also supports a "reliable read" that
+happens in two stages, using the <code>/open</code> and <code>/close</code> options to <code>GET</code>.</p>
+
+<p>When <code>/open</code> is used, and an item is available, kestrel will remove it from
+the queue and send it to the client as usual. But it will also set the item
+aside. If a client disconnects while it has an open read, the item is put back
+into the queue, at the head, so it will be the next item fetched. Only one
+item can be "open" per client connection.</p>
+
+<p>A previous open request is closed with <code>/close</code>. The server will reject any
+attempt to open another read when one is already open, but it will ignore
+<code>/close</code> if there's no open request, so that you can add <code>/close</code> to every
+<code>GET</code> request for convenience.</p>
+
+<p>If for some reason you want to abort a read without disconnecting, you can use
+<code>/abort</code>. But because aborted items are placed back at the head of the queue,
+this isn't a good way to deal with client errors. Since the error-causing item
+will always be the next one available, you'll end up bouncing the same item
+around between clients instead of making progress.</p>
+
+<p>There's always a trade-off: either potentially lose items or potentially
+receive the same item multiple times. Reliable reads choose the latter option.
+To use this tactic successfully, work items should be idempotent, meaning the
+work could be done 2 or 3 times and have the same effect as if it had been
+done only once (except wasting some resources).</p>
+
+<p>Example:</p>
+
+<pre><code>GET dirty_jobs/close/open
+(receives job 1)
+GET dirty_jobs/close/open
+(closes job 1, receives job 2)
+...etc...
+</code></pre>
+
+<h2>Server stats</h2>
+
+<p>Global stats reported by kestrel are:</p>
+
+<ul>
+<li><code>uptime</code> - seconds the server has been online</li>
+<li><code>time</code> - current time in unix epoch</li>
+<li><code>version</code> - version string, like "1.2"</li>
+<li><code>curr_items</code> - total of items waiting in all queues</li>
+<li><code>total_itmes</code> - total of items that have ever been added in this server's
+lifetime</li>
+<li><code>bytes</code> - total byte size of items waiting in all queues</li>
+<li><code>curr_connections</code> - current open connections from clients</li>
+<li><code>total_connections</code> - total connections that have been opened in this
+server's lifetime</li>
+<li><code>cmd_get</code> - total <code>GET</code> requests</li>
+<li><code>cmd_set</code> - total <code>SET</code> requests</li>
+<li><code>cmd_peek</code> - total <code>GET/peek</code> requests</li>
+<li><code>get_hits</code> - total <code>GET</code> requests that received an item</li>
+<li><code>get_misses</code> - total <code>GET</code> requests on an empty queue</li>
+<li><code>bytes_read</code> - total bytes read from clients</li>
+<li><code>bytes_written</code> - total bytes written to clients</li>
+</ul>
+
+<p>For each queue, the following stats are also reported:</p>
+
+<ul>
+<li><code>items</code> - items waiting in this queue</li>
+<li><code>bytes</code> - total byte size of items waiting in this queue</li>
+<li><code>total_items</code> - total items that have been added to this queue in this
+server's lifetime</li>
+<li><code>logsize</code> - byte size of the queue's journal file</li>
+<li><code>expired_items</code> - total items that have been expired from this queue in this
+server's lifetime</li>
+<li><code>mem_items</code> - items in this queue that are currently in memory</li>
+<li><code>mem_bytes</code> - total byte size of items in this queue that are currently in
+memory (will always be less than or equal to <code>max_memory_size</code> config for
+the queue)</li>
+<li><code>age</code> - time, in milliseconds, that the last item to be fetched from this
+queue had been waiting; that is, the time between <code>SET</code> and <code>GET</code>; if the
+queue is empty, this will always be zero</li>
+<li><code>discarded</code> - number of items discarded because the queue was too full</li>
+<li><code>waiters</code> - number of clients waiting for an item from this queue (using
+<code>GET/t</code>)</li>
+<li><code>open_transactions</code> - items read with <code>/open</code> but not yet confirmed</li>
+</ul>
+
+<h2>Kestrel as a library</h2>
+
+<p>You can use kestrel as a library by just sticking the jar on your classpath.
+It's a cheap way to get a durable work queue for inter-process or inter-thread
+communication. Each queue is represented by a <code>PersistentQueue</code> object:</p>
+
+<pre><code>class PersistentQueue(val name: String, persistencePath: String,
+                      @volatile var config: QueueConfig, timer: Timer,
+                      queueLookup: Option[(String =&gt; Option[PersistentQueue])]) {
+</code></pre>
+
+<p>and must be initialized before using:</p>
+
+<pre><code>def setup(): Unit
+</code></pre>
+
+<p>specifying the path for the journal files (if the queue will be journaled),
+the name of the queue, a <code>QueueConfig</code> object (derived from <code>QueueBuilder</code>),
+a timer for handling timeout reads, and optionally a way to find other named
+queues (for <code>expireToQueue</code> support).</p>
+
+<p>To add an item to a queue:</p>
+
+<pre><code>def add(value: Array[Byte], expiry: Option[Time]): Boolean
+</code></pre>
+
+<p>It will return <code>false</code> if the item was rejected because the queue was full.</p>
+
+<p>Queue items are represented by a case class:</p>
+
+<pre><code>case class QItem(addTime: Time, expiry: Option[Time], data: Array[Byte], var xid: Int)
+</code></pre>
+
+<p>and several operations exist to remove or peek at the head item:</p>
+
+<pre><code>def peek(): Option[QItem]
+def remove(): Option[QItem]
+</code></pre>
+
+<p>To open a reliable read, set <code>transaction</code> true, and later confirm or unremove
+the item by its <code>xid</code>:</p>
+
+<pre><code>def remove(transaction: Boolean): Option[QItem]
+def unremove(xid: Int)
+def confirmRemove(xid: Int)
+</code></pre>
+
+<p>You can also asynchronously remove or peek at items using futures.</p>
+
+<pre><code>def waitRemove(deadline: Option[Time], transaction: Boolean): Future[Option[QItem]]
+def waitPeek(deadline: Option[Time]): Future[Option[QItem]]
+</code></pre>
+
+<p>When done, you should close the queue:</p>
+
+<pre><code>def close(): Unit
+def isClosed: Boolean
+</code></pre>
+
+<p>Here's a short example:</p>
+
+<pre><code>var queue = new PersistentQueue("work", "/var/spool/kestrel", config, timer, None)
+queue.setup()
+
+// add an item with no expiration:
+queue.add("hello".getBytes, 0)
+
+// start to remove it, then back out:
+val item = queue.remove(true)
+queue.unremove(item.xid)
+
+// remove an item with a 500msec timeout, and confirm it:
+queue.waitRemove(500.milliseconds.fromNow, true)() match {
+  case None =&gt;
+    println("nothing. :(")
+  case Some(item) =&gt;
+    println("got: " + new String(item.data))
+    queue.confirmRemove(item.xid)
+}
+
+queue.close()
+</code></pre>
+
+
+</body>
+</html>
