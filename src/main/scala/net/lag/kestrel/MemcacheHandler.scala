@@ -216,11 +216,11 @@ extends NettyHandler[MemcacheRequest](channelGroup, queueCollection, maxOpenTran
       dump += queues.stats(qName).map { case (k, v) => k + "=" + v }.mkString("  ", "\r\n  ", "")
       dump += "}"
     }
-    channel.write(new MemcacheResponse(dump.mkString("", "\r\n", "\r\nEND\r\n")))
+    channel.write(new MemcacheResponse(dump.mkString("", "\r\n", "\r\nEND")))
   }
 
   private def version() = {
-    channel.write(new MemcacheResponse("VERSION " + Kestrel.runtime.jarVersion + "\r\n"))
+    channel.write(new MemcacheResponse("VERSION " + Kestrel.runtime.jarVersion))
   }
 
   private def quit() = {
