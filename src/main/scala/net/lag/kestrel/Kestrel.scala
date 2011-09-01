@@ -33,7 +33,6 @@ import org.jboss.netty.channel.group.DefaultChannelGroup
 import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory
 import org.jboss.netty.util.{HashedWheelTimer, Timeout, Timer, TimerTask}
 import config._
-import main.java.net.lag.kestrel.ScheduledThreadPoolExecutorTimer
 
 
 // FIXME move me!
