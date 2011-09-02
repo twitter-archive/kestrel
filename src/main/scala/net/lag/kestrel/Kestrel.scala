@@ -24,7 +24,7 @@ import scala.collection.{immutable, mutable}
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.naggati.codec.MemcacheCodec
-import com.twitter.ostrich.admin.{RuntimeEnvironment, Service, ServiceTracker}
+import com.twitter.ostrich.admin.{PeriodicBackgroundProcess, RuntimeEnvironment, Service, ServiceTracker}
 import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{Duration, Eval, Time, Timer => TTimer, TimerTask => TTimerTask}
 import org.jboss.netty.bootstrap.ServerBootstrap
@@ -131,16 +131,14 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
     // optionally, start a periodic timer to clean out expired items.
     if (expirationTimerFrequency.isDefined) {
       log.info("Starting up background expiration task.")
-      val expirationTask = new TimerTask {
-        def run(timeout: Timeout) {
+      new PeriodicBackgroundProcess("background-expiration", expirationTimerFrequency.get) {
+        def periodic() {
           val expired = Kestrel.this.queueCollection.flushAllExpired()
           if (expired > 0) {
             log.info("Expired %d item(s) from queues automatically.", expired)
           }
-          timer.newTimeout(this, expirationTimerFrequency.get.inMilliseconds, TimeUnit.MILLISECONDS)
         }
-      }
-      expirationTask.run(null)
+      }.start()
     }
   }
 
@@ -163,7 +161,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
   override def reload() {
     try {
       log.info("Reloading %s ...", Kestrel.runtime.configFile)
-      Eval[KestrelConfig](Kestrel.runtime.configFile).reload(this)
+      new Eval().apply[KestrelConfig](Kestrel.runtime.configFile).reload(this)
     } catch {
       case e: Eval.CompilerException =>
         log.error(e, "Error in config: %s", e)
