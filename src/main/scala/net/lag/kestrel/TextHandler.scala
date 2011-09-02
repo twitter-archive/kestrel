@@ -89,6 +89,9 @@ case class ErrorResponse(message: String) extends TextResponse {
 case class CountResponse(count: Long) extends TextResponse {
   def toBuffer = ChannelBuffers.wrappedBuffer(("+" + count.toString + "\n").getBytes("ascii"))
 }
+case class StringResponse(message: String) extends TextResponse {
+  def toBuffer = ChannelBuffers.wrappedBuffer((":" + message + "\n").getBytes("ascii"))
+}
 
 /**
  * Simple text-line protocol handler for a kestrel connection.
@@ -199,6 +202,8 @@ extends NettyHandler[TextRequest](channelGroup, queueCollection, maxOpenTransact
       case "shutdown" =>
         shutdown()
         channel.write(CountResponse(0))
+      case "version" =>
+        channel.write(new StringResponse(Kestrel.runtime.jarVersion))
       case x =>
         channel.write(ErrorResponse("Unknown command: " + x))
     }
