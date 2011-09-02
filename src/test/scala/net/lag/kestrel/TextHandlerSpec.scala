@@ -78,6 +78,11 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
       val (codec, counter) = TestCodec(TextCodec.read, TextCodec.write)
       codec.send(ItemResponse(Some("hello".getBytes))) mustEqual List(":hello\n")
     }
+
+    "string response" in {
+        val (codec, counter) = TestCodec(TextCodec.read, TextCodec.write)
+        codec.send(StringResponse("hello")) mustEqual List("+hello\n")
+    }
   }
 
   "TextHandler" should {
