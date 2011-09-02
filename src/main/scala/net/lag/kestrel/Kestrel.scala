@@ -161,7 +161,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
   override def reload() {
     try {
       log.info("Reloading %s ...", Kestrel.runtime.configFile)
-      Eval[KestrelConfig](Kestrel.runtime.configFile).reload(this)
+      new Eval().apply[KestrelConfig](Kestrel.runtime.configFile).reload(this)
     } catch {
       case e: Eval.CompilerException =>
         log.error(e, "Error in config: %s", e)
