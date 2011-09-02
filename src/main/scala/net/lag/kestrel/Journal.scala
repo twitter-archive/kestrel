@@ -501,12 +501,12 @@ class Journal(queuePath: File, queueName: String, timer: Timer, syncJournal: Dur
 }
 
 object Journal {
-  def getQueueNamesFromFolder(path: File): Seq[String] = {
+  def getQueueNamesFromFolder(path: File): Set[String] = {
     path.list().filter { name =>
       !(name contains "~~")
     }.map { name =>
       name.split('.')(0)
-    }
+    }.toSet
   }
 
   /**
