@@ -468,7 +468,8 @@ class Journal(queuePath: File, queueName: String, timer: Timer, syncJournal: Dur
     }
     byteBuffer.flip
     val future = writer.write(byteBuffer)
-    if (allowSync) future()
+    //calling future() here causes a deadlock
+    //if (allowSync) future()
     byteBuffer.limit
   }
 
