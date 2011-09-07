@@ -210,7 +210,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
       expect {
         one(channel).getRemoteAddress() willReturn new InetSocketAddress(0)
         one(channelGroup).add(channel) willReturn true
-        one(channel).write(StringResponse("0.0"))
+        one(channel).write(a[StringResponse])
       }
 
       val textHandler = new TextHandler(channelGroup, queueCollection, 10, None)
