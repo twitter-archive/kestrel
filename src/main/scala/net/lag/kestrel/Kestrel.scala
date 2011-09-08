@@ -40,7 +40,7 @@ import com.twitter.finagle.util.{Timer => FinagleTimer}
 import com.twitter.util.Future
 import com.twitter.naggati.Codec
 import com.twitter.naggati.codec.{MemcacheResponse, MemcacheRequest, MemcacheCodec}
-import com.twitter.finagle.{ClientConnection, ServerCodec, Service => FinagleService}
+import com.twitter.finagle.{ClientConnection, Codec => FinagleCodec, Service => FinagleService}
 
 class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
               listenAddress: String, memcacheListenPort: Option[Int], textListenPort: Option[Int],
@@ -57,24 +57,24 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
   var textAcceptor: Option[Channel] = None
 
   private def finagledCodec[Req, Resp](codec: => Codec[Resp]) = {
-    new ServerCodec[Req, Resp] {
-      val pipelineFactory = codec.pipelineFactory
+    new FinagleCodec[Req, Resp] {
+      def pipelineFactory = codec.pipelineFactory
     }
   }
 
   def startFinagleServer[Req, Resp](
     name: String,
     port: Int,
-    serverCodec: ServerCodec[Req, Resp]
+    finagleCodec: FinagleCodec[Req, Resp]
   )(factory: ClientConnection => FinagleService[Req, Resp]): FinagleServer = {
     val address = new InetSocketAddress(listenAddress, port)
     val builder = ServerBuilder()
-      .codec(serverCodec)
+      .codec(finagleCodec)
       .name(name)
       .reportTo(new OstrichStatsReceiver)
       .bindTo(address)
     clientTimeout.foreach { timeout => builder.readTimeout(timeout) }
-    // calling build() is equivalent to calling start() in fingale.
+    // calling build() is equivalent to calling start() in finagle.
     builder.build(factory)
   }
 
