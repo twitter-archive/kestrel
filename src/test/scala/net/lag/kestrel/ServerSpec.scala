@@ -36,7 +36,7 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
   val runtime = RuntimeEnvironment(this, Array())
   Kestrel.runtime = runtime
 
-  def makeServer = {
+  def makeServer() {
     val defaultConfig = new QueueBuilder() {
       maxJournalSize = 16.kilobytes
     }.apply()
@@ -47,7 +47,7 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
       maxAge = 1800.seconds
     }
     kestrel = new Kestrel(defaultConfig, List(weatherUpdatesConfig), "localhost",
-                          Some(PORT), None, canonicalFolderName, Protocol.Ascii, None, None, 1)
+      Some(PORT), None, canonicalFolderName, Protocol.Ascii, None, None, 1)
     kestrel.start()
   }
 
@@ -60,7 +60,7 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
 
     "configure per-queue" in {
       withTempFolder {
-        makeServer
+        makeServer()
         val starship = kestrel.queueCollection("starship").get
         val weatherUpdates = kestrel.queueCollection("weather_updates").get
         starship.config.maxItems mustEqual Int.MaxValue
@@ -72,7 +72,7 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
 
     "reload" in {
       withTempFolder {
-        makeServer
+        makeServer()
         val starship = kestrel.queueCollection("starship").get
         val weatherUpdates = kestrel.queueCollection("weather_updates").get
         starship.config.maxItems mustEqual Int.MaxValue
@@ -91,7 +91,7 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
 
     "set and get one entry" in {
       withTempFolder {
-        makeServer
+        makeServer()
         val v = (Random.nextInt * 0x7fffffff).toInt
         val client = new TestClient("localhost", PORT)
         client.get("test_one_entry") mustEqual ""
@@ -104,7 +104,7 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
     "set with expiry" in {
       withTempFolder {
         Time.withCurrentTimeFrozen { time =>
-          makeServer
+          makeServer()
           val v = (Random.nextInt * 0x7fffffff).toInt
           val client = new TestClient("localhost", PORT)
           client.get("test_set_with_expiry") mustEqual ""
@@ -118,7 +118,7 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
 
     "set and get binary data" in {
       withTempFolder {
-        makeServer
+        makeServer()
         val client = new TestClient("localhost", PORT)
         for (encodedObject <- List(5, "scrooge mcduck", new _root_.java.util.Date())) {
           val buffer = new ByteArrayOutputStream()
@@ -133,7 +133,7 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
 
     "commit a transactional get" in {
       withTempFolder {
-        makeServer
+        makeServer()
         val v = (Random.nextInt * 0x7fffffff).toInt
         val client = new TestClient("localhost", PORT)
         client.set("commit", v.toString) mustEqual "STORED"
@@ -171,7 +171,7 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
 
     "abort a transactional get" in {
       withTempFolder {
-        makeServer
+        makeServer()
         val v = (Random.nextInt * 0x7fffffff).toInt
         val client = new TestClient("localhost", PORT)
         client.set("abort", v.toString) mustEqual "STORED"
@@ -202,7 +202,7 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
 
     "auto-rollback a transaction on disconnect" in {
       withTempFolder {
-        makeServer
+        makeServer()
         val v = (Random.nextInt * 0x7fffffff).toInt
         val client = new TestClient("localhost", PORT)
         client.set("auto-rollback", v.toString) mustEqual "STORED"
@@ -237,7 +237,7 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
 
     "auto-commit cycles of transactional gets" in {
       withTempFolder {
-        makeServer
+        makeServer()
         val v = (Random.nextInt * 0x7fffffff).toInt
         val client = new TestClient("localhost", PORT)
         client.set("auto-commit", v.toString) mustEqual "STORED"
@@ -264,7 +264,7 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
     "age" in {
       withTempFolder {
         Time.withCurrentTimeFrozen { time =>
-          makeServer
+          makeServer()
           val client = new TestClient("localhost", PORT)
           client.set("test_age", "nibbler") mustEqual "STORED"
           client.set("test_age", "nibbler2") mustEqual "STORED"
@@ -278,7 +278,7 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
 
     "peek" in {
       withTempFolder {
-        makeServer
+        makeServer()
         val client = new TestClient("localhost", PORT)
         client.set("testy", "nibbler") mustEqual "STORED"
         client.get("testy/peek/open") must throwA[ClientError]
@@ -294,7 +294,7 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
 
     "rotate logs" in {
       withTempFolder {
-        makeServer
+        makeServer()
         val v = new String(new Array[Byte](8192))
 
         val client = new TestClient("localhost", PORT)
@@ -318,7 +318,7 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
 
     "collect stats" in {
       withTempFolder {
-        makeServer
+        makeServer()
         val client = new TestClient("localhost", PORT)
         val stats = client.stats
         val basicStats = Array("bytes", "time", "cmd_get", "version",
@@ -331,14 +331,14 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
 
     "return a valid response for an unknown command" in {
       withTempFolder {
-        makeServer
+        makeServer()
         new TestClient("localhost", PORT).add("cheese", "swiss") mustEqual "CLIENT_ERROR"
       }
     }
 
     "disconnect and reconnect correctly" in {
       withTempFolder {
-        makeServer
+        makeServer()
         val v = (Random.nextInt * 0x7fffffff).toInt
         val client = new TestClient("localhost", PORT)
         client.set("disconnecting", v.toString)
@@ -351,7 +351,7 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
     "flush expired items" in {
       withTempFolder {
         Time.withCurrentTimeFrozen { time =>
-          makeServer
+          makeServer()
           val client = new TestClient("localhost", PORT)
           client.set("q1", "1", 1)
           client.set("q2", "2", 1)
