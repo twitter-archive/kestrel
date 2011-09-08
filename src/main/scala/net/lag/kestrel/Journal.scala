@@ -158,7 +158,7 @@ class Journal(queuePath: File, queueName: String, timer: Timer, syncJournal: Dur
     size = 0
     for (item <- reservedItems) {
       add(item)
-      removeTentative(item.xid, false)
+      removeTentative(item.xid)
     }
     for (item <- openItems) {
       add(item)
@@ -227,23 +227,21 @@ class Journal(queuePath: File, queueName: String, timer: Timer, syncJournal: Dur
     writer.write(blob)
   }
 
-  def remove() = {
-    size += write(true, CMD_REMOVE.toByte)
+  def remove() {
+    write(CMD_REMOVE.toByte)
     if (inReadBehind) removesSinceReadBehind += 1
   }
 
-  private def removeTentative(xid: Int ,allowSync: Boolean) {
-    size += write(allowSync, CMD_REMOVE_TENTATIVE_XID.toByte, xid)
+  def removeTentative(xid: Int) {
+    write(CMD_REMOVE_TENTATIVE_XID.toByte, xid)
   }
 
-  def removeTentative(xid: Int) { removeTentative(xid, true) }
-
-  def unremove(xid: Int) = {
-    size += write(true, CMD_UNREMOVE.toByte, xid)
+  def unremove(xid: Int) {
+    write(CMD_UNREMOVE.toByte, xid)
   }
 
-  def confirmRemove(xid: Int) = {
-    size += write(true, CMD_CONFIRM_REMOVE.toByte, xid)
+  def confirmRemove(xid: Int) {
+    write(CMD_CONFIRM_REMOVE.toByte, xid)
     if (inReadBehind) removesSinceReadBehind += 1
   }
 
@@ -460,7 +458,7 @@ class Journal(queuePath: File, queueName: String, timer: Timer, syncJournal: Dur
     byteBuffer.getInt
   }
 
-  private def write(allowSync: Boolean, items: Any*): Int = {
+  private def write(items: Any*): Future[Unit] = {
     byteBuffer.clear
     for (item <- items) item match {
       case b: Byte => byteBuffer.put(b)
@@ -468,8 +466,8 @@ class Journal(queuePath: File, queueName: String, timer: Timer, syncJournal: Dur
     }
     byteBuffer.flip
     val future = writer.write(byteBuffer)
-    if (allowSync) future()
-    byteBuffer.limit
+    size += byteBuffer.limit
+    future
   }
 
   val outstandingPackRequests = new AtomicInteger(0)
@@ -503,12 +501,12 @@ class Journal(queuePath: File, queueName: String, timer: Timer, syncJournal: Dur
 }
 
 object Journal {
-  def getQueueNamesFromFolder(path: File): Seq[String] = {
+  def getQueueNamesFromFolder(path: File): Set[String] = {
     path.list().filter { name =>
       !(name contains "~~")
     }.map { name =>
       name.split('.')(0)
-    }
+    }.toSet
   }
 
   /**

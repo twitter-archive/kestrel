@@ -93,6 +93,9 @@ case class CountResponse(count: Long) extends TextResponse {
 case object NoResponse extends TextResponse {
   def toBuffer = None
 }
+case class StringResponse(message: String) extends TextResponse {
+  def toBuffer = Some(ChannelBuffers.wrappedBuffer((":" + message + "\n").getBytes("ascii")))
+}
 
 /**
  * Simple text-line protocol handler for a kestrel connection.
@@ -222,6 +225,8 @@ class TextHandler(
       case "shutdown" =>
         handler.shutdown()
         Future(CountResponse(0))
+      case "version" =>
+        Future(StringResponse(Kestrel.runtime.jarVersion))
       case x =>
         Future(ErrorResponse("Unknown command: " + x))
     }

@@ -75,5 +75,4 @@ flush_all
 flush_expired
 flush_all_expired
 roll
-version
 reload

@@ -68,6 +68,8 @@ object Flood extends LoadTesting {
 
   var totalItems = 10000
   var kilobytes = 1
+  var queueName = "spam"
+  var prefillItems = 0
 
   def usage() {
     Console.println("usage: flood [options]")
@@ -78,6 +80,10 @@ object Flood extends LoadTesting {
     Console.println("        put ITEMS items into the queue (default: %d)".format(totalItems))
     Console.println("    -k KILOBYTES")
     Console.println("        put KILOBYTES per queue item (default: %d)".format(kilobytes))
+    Console.println("    -q NAME")
+    Console.println("        use queue NAME (default: %s)".format(queueName))
+    Console.println("    -p ITEMS")
+    Console.println("        prefill ITEMS items into the queue before the test (default: %d)".format(prefillItems))
   }
 
   def parseArgs(args: List[String]): Unit = args match {
@@ -91,6 +97,12 @@ object Flood extends LoadTesting {
     case "-k" :: x :: xs =>
       kilobytes = x.toInt
       parseArgs(xs)
+    case "-q" :: x :: xs =>
+      queueName = x
+      parseArgs(xs)
+    case "-p" :: x :: xs =>
+      prefillItems = x.toInt
+      parseArgs(xs)
     case _ =>
       usage()
       System.exit(1)
@@ -100,21 +112,26 @@ object Flood extends LoadTesting {
     parseArgs(args.toList)
     val data = DATA * kilobytes
 
-    println("flood: " + totalItems + " items of " + kilobytes + "kB")
+    if (prefillItems > 0) {
+      println("prefill: " + prefillItems + " items of " + kilobytes + "kB")
+      val socket = SocketChannel.open(new InetSocketAddress("localhost", 22133))
+      val qName = "spam"
+      put(socket, qName, prefillItems, data)
+    }
+
+    println("flood: " + totalItems + " items of " + kilobytes + "kB into " + queueName)
 
     val producerThread = new Thread {
       override def run = {
         val socket = SocketChannel.open(new InetSocketAddress("localhost", 22133))
-        val qName = "spam"
-        put(socket, qName, totalItems, data)
+        put(socket, queueName, totalItems, data)
       }
     }
     val consumerThread = new Thread {
       var misses = 0
       override def run = {
         val socket = SocketChannel.open(new InetSocketAddress("localhost", 22133))
-        val qName = "spam"
-        misses = get(socket, qName, totalItems, data)
+        misses = get(socket, queueName, totalItems, data)
       }
     }
 

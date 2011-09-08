@@ -227,10 +227,10 @@ class MemcacheHandler(
       dump += queueCollection.stats(qName).map { case (k, v) => k + "=" + v }.mkString("  ", "\r\n  ", "")
       dump += "}"
     }
-    new MemcacheResponse(dump.mkString("", "\r\n", "\r\nEND\r\n"))
+    new MemcacheResponse(dump.mkString("", "\r\n", "\r\nEND"))
   }
 
   private def version() = {
-    new MemcacheResponse("VERSION " + Kestrel.runtime.jarVersion + "\r\n")
+    new MemcacheResponse("VERSION " + Kestrel.runtime.jarVersion)
   }
 }

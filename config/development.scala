@@ -62,6 +62,9 @@ new KestrelConfig {
     maxMemorySize = 16.megabytes
     maxJournalSize = 128.megabytes
     discardOldWhenFull = true
+  } :: new QueueBuilder {
+    name = "slow"
+    syncJournal = 10.milliseconds
   }
 
   loggers = new LoggerConfig {
