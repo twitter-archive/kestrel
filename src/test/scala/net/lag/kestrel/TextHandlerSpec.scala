@@ -183,15 +183,8 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
       val runtime = RuntimeEnvironment(this, Array())
       Kestrel.runtime = runtime
 
-      expect {
-        one(channel).getRemoteAddress() willReturn new InetSocketAddress(0)
-        one(channelGroup).add(channel) willReturn true
-        one(channel).write(a[StringResponse])
-      }
-
-      val textHandler = new TextHandler(channelGroup, queueCollection, 10, None)
-      textHandler.handleUpstream(null, new UpstreamChannelStateEvent(channel, ChannelState.OPEN, true))
-      textHandler.handle(TextRequest("version", Nil, Nil))
+      val textHandler = new TextHandler(connection, queueCollection, 10)
+      textHandler(TextRequest("version", Nil, Nil))() must haveClass[StringResponse]
     }
 
     // FIXME: peek, monitor, confirm, flush, quit, shutdown, unknown
