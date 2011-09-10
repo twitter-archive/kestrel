@@ -36,11 +36,15 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
   val sessionId = Kestrel.sessionId.incrementAndGet()
 
   object pendingTransactions {
-    private val transactions = new mutable.HashMap[String, mutable.ListBuffer[Int]] {
-      override def default(key: String) = {
-        val rv = new mutable.ListBuffer[Int]
-        this(key) = rv
-        rv
+    private var transactions = createMap()
+
+    private def createMap() = {
+      new mutable.HashMap[String, mutable.ListBuffer[Int]] {
+        override def default(key: String) = {
+          val rv = new mutable.ListBuffer[Int]
+          this(key) = rv
+          rv
+        }
       }
     }
 
@@ -68,10 +72,11 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
 
     def cancelAll() {
       synchronized {
-        transactions.foreach { case (name, xids) =>
-          xids.foreach { xid => queues.unremove(name, xid) }
-        }
-        transactions.clear()
+        val currentTransactions = transactions;
+        transactions = createMap()
+        currentTransactions
+      }.foreach { case (name, xids) =>
+        xids.foreach { xid => queues.unremove(name, xid) }
       }
     }
 
