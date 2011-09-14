@@ -15,13 +15,14 @@ DAEMON="/usr/local/bin/daemon"
 
 JAR_NAME="$APP_NAME-$VERSION.jar"
 STAGE="production"
+FD_LIMIT="262144"
 
 HEAP_OPTS="-Xmx4096m -Xms4096m -XX:NewSize=768m"
 GC_OPTS="-XX:+UseConcMarkSweepGC -XX:+UseParNewGC"
-GC_LOG_OPTS="-XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution -XX:+PrintHeapAtGC"
+GC_TRACE="-XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution -XX:+PrintHeapAtGC"
 GC_LOG="-Xloggc:/var/log/$APP_NAME/gc.log"
 DEBUG_OPTS="-XX:ErrorFile=/var/log/$APP_NAME/java_error%p.log"
-JAVA_OPTS="-server -Dstage=$STAGE $GC_OPTS $GC_LOG_OPTS $GC_LOG $HEAP_OPTS $DEBUG_OPTS"
+JAVA_OPTS="-server -Dstage=$STAGE $GC_OPTS $GC_TRACE $GC_LOG $HEAP_OPTS $DEBUG_OPTS"
 
 pidfile="/var/run/$APP_NAME/$APP_NAME.pid"
 daemon_pidfile="/var/run/$APP_NAME/$APP_NAME-daemon.pid"
@@ -69,7 +70,7 @@ case "$1" in
       exit 0
     fi
 
-    ulimit -n 32768 || echo -n " (no ulimit)"
+    ulimit -n $FD_LIMIT || echo -n " (no ulimit)"
     ulimit -c unlimited || echo -n " (no coredump)"
     $DAEMON $daemon_args $daemon_start_args -- sh -c "echo "'$$'" > $pidfile; exec ${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar ${APP_HOME}/${JAR_NAME}"
     tries=0
