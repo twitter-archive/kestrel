@@ -8,24 +8,29 @@
 #   /var/run/$APP_NAME
 
 APP_NAME="kestrel"
+ADMIN_PORT="2223"
 VERSION="@VERSION@"
 APP_HOME="/usr/local/$APP_NAME/current"
 DAEMON="/usr/local/bin/daemon"
 
 JAR_NAME="$APP_NAME-$VERSION.jar"
 STAGE="production"
+FD_LIMIT="262144"
 
 HEAP_OPTS="-Xmx4096m -Xms4096m -XX:NewSize=768m"
-JMX_OPTS="-Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.port=22134 -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false"
-GC_OPTS="-verbosegc -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCDateStamps -XX:+UseConcMarkSweepGC -XX:+UseParNewGC"
+GC_OPTS="-XX:+UseConcMarkSweepGC -XX:+UseParNewGC"
+GC_TRACE="-XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution -XX:+PrintHeapAtGC"
 GC_LOG="-Xloggc:/var/log/$APP_NAME/gc.log"
 DEBUG_OPTS="-XX:ErrorFile=/var/log/$APP_NAME/java_error%p.log"
-JAVA_OPTS="-server -Dstage=$STAGE $GC_OPTS $GC_LOG $HEAP_OPTS $JMX_OPTS $DEBUG_OPTS"
+JAVA_OPTS="-server -Dstage=$STAGE $GC_OPTS $GC_TRACE $GC_LOG $HEAP_OPTS $DEBUG_OPTS"
 
 pidfile="/var/run/$APP_NAME/$APP_NAME.pid"
 daemon_pidfile="/var/run/$APP_NAME/$APP_NAME-daemon.pid"
 daemon_args="--name $APP_NAME --pidfile $daemon_pidfile --core --chdir /"
 daemon_start_args="--stdout=/var/log/$APP_NAME/stdout --stderr=/var/log/$APP_NAME/error"
+
+# allow a separate file to override settings.
+test -f /etc/sysconfig/kestrel && . /etc/sysconfig/kestrel
 
 function running() {
   $DAEMON $daemon_args --running
@@ -64,8 +69,8 @@ case "$1" in
       echo "already running."
       exit 0
     fi
-    
-    ulimit -n 32768 || echo -n " (no ulimit)"
+
+    ulimit -n $FD_LIMIT || echo -n " (no ulimit)"
     ulimit -c unlimited || echo -n " (no coredump)"
     $DAEMON $daemon_args $daemon_start_args -- sh -c "echo "'$$'" > $pidfile; exec ${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar ${APP_HOME}/${JAR_NAME}"
     tries=0
@@ -86,8 +91,8 @@ case "$1" in
       echo "wasn't running."
       exit 0
     fi
-    
-    (echo "shutdown"; sleep 2) | telnet localhost 22133 >/dev/null 2>&1
+
+    curl -m 5 -s http://localhost:${ADMIN_PORT}/shutdown.txt > /dev/null
     tries=0
     while running; do
       tries=$((tries + 1))
@@ -113,7 +118,7 @@ case "$1" in
     done
     echo "done."
   ;;
-  
+
   status)
     if running; then
       echo "$APP_NAME is running."

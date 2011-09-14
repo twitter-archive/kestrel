@@ -35,7 +35,7 @@ class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) wit
       </license>
     </licenses>
 
-  override def releaseBuild = true
+  override def releaseBuild = !(projectVersion.toString contains "SNAPSHOT")
 
   override def subversionRepository = Some("http://svn.local.twitter.com/maven-public")
 
