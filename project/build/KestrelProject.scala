@@ -1,28 +1,28 @@
 import sbt._
 import com.twitter.sbt._
 
-class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) with NoisyDependencies
+class KestrelProject(info: ProjectInfo)
+  extends StandardServiceProject(info)
+  with NoisyDependencies
   with SubversionPublisher
   with DefaultRepos
   with PublishSourcesAndJavadocs
   with PublishSite
+  with CompileThriftScrooge
 {
   val ostrich = "com.twitter" % "ostrich" % "4.9.1"
   val naggati = "com.twitter" % "naggati" % "2.2.0"
   val finagle = "com.twitter" % "finagle-core" % "1.9.0"
   val finagle_ostrich4 = "com.twitter" % "finagle-ostrich4" % "1.9.0"
+  val scrooge_runtime = "com.twitter" % "scrooge-runtime" % "1.0.1"
 
+  // for tests only:
   val specs = "org.scala-tools.testing" % "specs_2.8.1" % "1.6.7" % "test"
   val jmock = "org.jmock" % "jmock" % "2.4.0" % "test"
   val cglib = "cglib" % "cglib" % "2.1_3" % "test"
   val asm = "asm" % "asm" % "1.5.3" % "test"
   val objenesis = "org.objenesis" % "objenesis" % "1.1" % "test"
   val hamcrest = "org.hamcrest" % "hamcrest-all" % "1.1" % "test"
-
-
-  // workaround bug in sbt that hides scala-compiler.
-  override def filterScalaJars = false
-  val what = "org.scala-lang" % "scala-compiler" % "2.8.1"
 
   override def mainClass = Some("net.lag.kestrel.Kestrel")
 
