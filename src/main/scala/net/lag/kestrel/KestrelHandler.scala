@@ -171,7 +171,9 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
     } else {
       Stats.incr("cmd_get")
     }
+    val startTime = Time.now
     queues.remove(key, timeout, opening, peeking).map { itemOption =>
+      Stats.addMetric("get_latency_usec", (Time.now - startTime).inMicroseconds.toInt)
       itemOption.foreach { item =>
         log.debug("get <- %s", item)
         if (opening) pendingTransactions.add(key, item.xid)
@@ -187,7 +189,9 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
   def setItem(key: String, flags: Int, expiry: Option[Time], data: Array[Byte]) = {
     log.debug("set -> q=%s flags=%d expiry=%s size=%d", key, flags, expiry, data.length)
     Stats.incr("cmd_set")
-    queues.add(key, data, expiry)
+    Stats.timeMicros("set_latency") {
+      queues.add(key, data, expiry)
+    }
   }
 
   protected def flush(key: String) {
