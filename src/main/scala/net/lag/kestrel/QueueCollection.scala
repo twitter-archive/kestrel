@@ -162,12 +162,23 @@ class QueueCollection(queueFolder: String, timer: Timer,
     queue(key) map { q => q.flush() }
   }
 
+  def clearGauge(queueName: String, gaugeName: String) = Stats.clearGauge("q/" + queueName + "/" + gaugeName)
+
   def delete(name: String): Unit = synchronized {
     if (!shuttingDown) {
       queues.get(name) map { q =>
         q.close()
         q.destroyJournal()
         queues.remove(name)
+        log.error("Clearing gauges")
+		clearGauge(name, "items")
+		clearGauge(name, "bytes")
+        clearGauge(name, "journal_size")
+        clearGauge(name, "mem_items")
+        clearGauge(name, "mem_bytes")
+        clearGauge(name, "age_msec")
+        clearGauge(name, "waiters")
+        clearGauge(name, "open_transactions")
       }
       if (name contains '+') {
         val master = name.split('+')(0)
