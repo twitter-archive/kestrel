@@ -70,7 +70,7 @@ object Flood extends LoadTesting {
   var kilobytes = 1
   var queueName = "spam"
   var prefillItems = 0
-  var kestrelHost = "localhost"
+  var hostname = "localhost"
 
   def usage() {
     Console.println("usage: flood [options]")
@@ -86,7 +86,7 @@ object Flood extends LoadTesting {
     Console.println("    -p ITEMS")
     Console.println("        prefill ITEMS items into the queue before the test (default: %d)".format(prefillItems))
     Console.println("    -h HOSTNAME")
-    Console.println("        host to run test against (default: %s)".format(kestrelHost))
+    Console.println("        use kestrel on HOSTNAME (default: %s)".format(hostname))
   }
 
   def parseArgs(args: List[String]): Unit = args match {
@@ -107,7 +107,7 @@ object Flood extends LoadTesting {
       prefillItems = x.toInt
       parseArgs(xs)
     case "-h" :: x :: xs =>
-      kestrelHost = x
+      hostname = x
       parseArgs(xs)
     case _ =>
       usage()
@@ -120,7 +120,7 @@ object Flood extends LoadTesting {
 
     if (prefillItems > 0) {
       println("prefill: " + prefillItems + " items of " + kilobytes + "kB")
-      val socket = SocketChannel.open(new InetSocketAddress(kestrelHost, 22133))
+      val socket = SocketChannel.open(new InetSocketAddress(hostname, 22133))
       val qName = "spam"
       put(socket, qName, prefillItems, data)
     }
@@ -129,14 +129,14 @@ object Flood extends LoadTesting {
 
     val producerThread = new Thread {
       override def run = {
-        val socket = SocketChannel.open(new InetSocketAddress(kestrelHost, 22133))
+        val socket = SocketChannel.open(new InetSocketAddress(hostname, 22133))
         put(socket, queueName, totalItems, data)
       }
     }
     val consumerThread = new Thread {
       var misses = 0
       override def run = {
-        val socket = SocketChannel.open(new InetSocketAddress(kestrelHost, 22133))
+        val socket = SocketChannel.open(new InetSocketAddress(hostname, 22133))
         misses = get(socket, queueName, totalItems, data)
       }
     }
