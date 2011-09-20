@@ -81,7 +81,7 @@ object JournalPacking extends LoadTesting {
     if (doWrites) {
       producerThread = new Thread {
         override def run() = {
-          val socket = SocketChannel.open(new InetSocketAddress("localhost", 22133))
+          val socket = SocketChannel.open(new InetSocketAddress(kestrelHost, 22133))
           put(socket, qName, totalItems, data, writeCounter)
         }
       }
@@ -94,7 +94,7 @@ object JournalPacking extends LoadTesting {
     if (doReads) {
       consumerThread = new Thread {
         override def run() = {
-          val socket = SocketChannel.open(new InetSocketAddress("localhost", 22133))
+          val socket = SocketChannel.open(new InetSocketAddress(kestrelHost, 22133))
           misses = get(socket, qName, totalItems, data, readCounter)
         }
       }
@@ -122,6 +122,7 @@ object JournalPacking extends LoadTesting {
   var readCounter: Long = 0
   var writeCounter: Long = 0
   var useTransactions: Boolean = false
+  var kestrelHost = "localhost"
 
   def usage() {
     Console.println("usage: packing [options]")
@@ -141,6 +142,8 @@ object JournalPacking extends LoadTesting {
     Console.println("        do read/writes CYCLES times (default: %d)".format(cycles))
     Console.println("    -x")
     Console.println("        use transactions when fetching")
+    Console.println("    -h HOSTNAME")
+    Console.println("        host to run test against (default: %s)".format(kestrelHost))
   }
 
   @tailrec
@@ -166,6 +169,9 @@ object JournalPacking extends LoadTesting {
       parseArgs(xs)
     case "-x" :: xs =>
       useTransactions = true
+      parseArgs(xs)
+    case "-h" :: x :: xs =>
+      kestrelHost = x
       parseArgs(xs)
     case _ =>
       usage()

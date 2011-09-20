@@ -122,6 +122,7 @@ object ManyClients {
   var sleep = 100
   var count = 100
   var clientCount = 100
+  var kestrelHost = "localhost"
 
   def usage() {
     Console.println("usage: many-clients [options]")
@@ -135,6 +136,8 @@ object ManyClients {
     Console.println("        put ITEMS total items into the queue (default: %d)".format(count))
     Console.println("    -c CLIENTS")
     Console.println("        use CLIENTS consumers (default: %d)".format(clientCount))
+    Console.println("    -h KESTRELHOST")
+    Console.println("        host to run test against (default: %s)".format(kestrelHost))
   }
 
   def parseArgs(args: List[String]): Unit = args match {
@@ -151,6 +154,9 @@ object ManyClients {
     case "-c" :: x :: xs =>
       clientCount = x.toInt
       parseArgs(xs)
+    case "-h" :: x :: xs =>
+      kestrelHost = x
+      parseArgs(xs)
     case _ =>
       usage()
       System.exit(1)
@@ -165,7 +171,7 @@ object ManyClients {
     for (i <- 0 until clientCount) {
       val t = new Thread {
         override def run = {
-          val socket = SocketChannel.open(new InetSocketAddress("localhost", 22133))
+          val socket = SocketChannel.open(new InetSocketAddress(kestrelHost, 22133))
           getStuff(count, socket, "spam")
         }
       }
@@ -174,7 +180,7 @@ object ManyClients {
     }
     val t = new Thread {
       override def run = {
-        val socket = SocketChannel.open(new InetSocketAddress("localhost", 22133))
+        val socket = SocketChannel.open(new InetSocketAddress(kestrelHost, 22133))
         put(sleep, socket, "spam", count)
       }
     }
