@@ -162,6 +162,8 @@ class QueueCollection(queueFolder: String, timer: Timer,
     queue(key) map { q => q.flush() }
   }
 
+  def removeCounter(queueName: String, counterName: String) = Stats.removeCounter("q/" + queueName + "/" + counterName)
+  
   def clearGauge(queueName: String, gaugeName: String) = Stats.clearGauge("q/" + queueName + "/" + gaugeName)
 
   def delete(name: String): Unit = synchronized {
@@ -170,9 +172,13 @@ class QueueCollection(queueFolder: String, timer: Timer,
         q.close()
         q.destroyJournal()
         queues.remove(name)
-        log.error("Clearing gauges")
-		clearGauge(name, "items")
-		clearGauge(name, "bytes")
+
+        // Remove various stats related to the queue
+        removeCounter(name, "total_items")
+        removeCounter(name, "expired_items")
+        removeCounter(name, "discarded")
+        clearGauge(name, "items")
+        clearGauge(name, "bytes")
         clearGauge(name, "journal_size")
         clearGauge(name, "mem_items")
         clearGauge(name, "mem_bytes")
