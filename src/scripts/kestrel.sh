@@ -22,6 +22,10 @@ GC_OPTS="-XX:+UseConcMarkSweepGC -XX:+UseParNewGC"
 GC_TRACE="-XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution -XX:+PrintHeapAtGC"
 GC_LOG="-Xloggc:/var/log/$APP_NAME/gc.log"
 DEBUG_OPTS="-XX:ErrorFile=/var/log/$APP_NAME/java_error%p.log"
+
+# allow a separate file to override settings.
+test -f /etc/sysconfig/kestrel && . /etc/sysconfig/kestrel
+
 JAVA_OPTS="-server -Dstage=$STAGE $GC_OPTS $GC_TRACE $GC_LOG $HEAP_OPTS $DEBUG_OPTS"
 
 pidfile="/var/run/$APP_NAME/$APP_NAME.pid"
@@ -29,8 +33,6 @@ daemon_pidfile="/var/run/$APP_NAME/$APP_NAME-daemon.pid"
 daemon_args="--name $APP_NAME --pidfile $daemon_pidfile --core --chdir /"
 daemon_start_args="--stdout=/var/log/$APP_NAME/stdout --stderr=/var/log/$APP_NAME/error"
 
-# allow a separate file to override settings.
-test -f /etc/sysconfig/kestrel && . /etc/sysconfig/kestrel
 
 function running() {
   $DAEMON $daemon_args --running
