@@ -21,6 +21,7 @@ import java.net._
 import java.nio._
 import java.nio.channels._
 import java.util.concurrent.atomic._
+import scala.util.Random
 import com.twitter.conversions.string._
 
 /**
@@ -80,41 +81,74 @@ object ManyClients {
     }
   }
 
-  def getStuff(count: Int, socket: SocketChannel, queueName: String) = {
-    val req = ByteBuffer.wrap(("get " + queueName + "/t=1000\r\n").getBytes)
+  def getStuff(count: Int, hostname: String, port: Int, queueName: String, useTransactions: Boolean, killPercent: Int) = {
+    var socket: SocketChannel = null
+    val xact = if (useTransactions) "/close/open" else ""
+    val req = ByteBuffer.wrap(("get " + queueName + "/t=1000" + xact + "\r\n").getBytes)
     val expectEnd = ByteBuffer.wrap("END\r\n".getBytes)
     val expectLyric = ByteBuffer.wrap(("VALUE " + queueName + " 0 " + LYRIC.length + "\r\n" + LYRIC + "\r\nEND\r\n").getBytes)
     val buffer = ByteBuffer.allocate(expectLyric.capacity)
     expectLyric.rewind
 
     while (got.get < count) {
+      if (socket eq null) {
+        socket = SocketChannel.open(new InetSocketAddress(hostname, port))
+      }
       req.rewind
       while (req.position < req.limit) {
         socket.write(req)
+      }
+
+      if (Random.nextInt(100) < killPercent) {
+        try {
+          socket.close()
+        } catch {
+          case e: Exception =>
+        }
+        socket = null
+      } else {
+        buffer.rewind
+        while (buffer.position < expectEnd.limit) {
+          socket.read(buffer)
+        }
+        val oldpos = buffer.position
+        buffer.flip
+        expectEnd.rewind
+        if (buffer == expectEnd) {
+          // i am not the winner. poop. :(
+        } else {
+          buffer.position(oldpos)
+          buffer.limit(buffer.capacity)
+          while (buffer.position < expectLyric.limit) {
+            socket.read(buffer)
+          }
+          buffer.rewind
+          expectLyric.rewind
+          if (buffer != expectLyric) {
+            val bad = new Array[Byte](buffer.capacity)
+            buffer.get(bad)
+            throw new Exception("Unexpected response! thr=" + Thread.currentThread + " -> " + new String(bad))
+          }
+          got.incrementAndGet
+        }
+      }
+    }
+
+    if ((socket ne null) && useTransactions) {
+      val finish = ByteBuffer.wrap(("get " + queueName + "/close\r\n").getBytes)
+      while (finish.position < finish.limit) {
+        socket.write(finish)
       }
       buffer.rewind
       while (buffer.position < expectEnd.limit) {
         socket.read(buffer)
       }
-      val oldpos = buffer.position
-      buffer.flip
-      expectEnd.rewind
-      if (buffer == expectEnd) {
-        // i am not the winner. poop. :(
-      } else {
-        buffer.position(oldpos)
-        buffer.limit(buffer.capacity)
-        while (buffer.position < expectLyric.limit) {
-          socket.read(buffer)
-        }
-        buffer.rewind
-        expectLyric.rewind
-        if (buffer != expectLyric) {
-          val bad = new Array[Byte](buffer.capacity)
-          buffer.get(bad)
-          throw new Exception("Unexpected response! thr=" + Thread.currentThread + " -> " + new String(bad))
-        }
-        got.incrementAndGet
+      buffer.flip()
+      expectEnd.rewind()
+      if (buffer != expectEnd) {
+        val bad = new Array[Byte](buffer.capacity)
+        buffer.get(bad)
+        throw new Exception("Unexpected response to final close! thr=" + Thread.currentThread + " -> " + new String(bad))
       }
     }
   }
@@ -123,6 +157,9 @@ object ManyClients {
   var count = 100
   var clientCount = 100
   var hostname = "localhost"
+  var dropPercent = 0
+  var killPercent = 0
+  var useTransactions = false
 
   def usage() {
     Console.println("usage: many-clients [options]")
@@ -138,6 +175,10 @@ object ManyClients {
     Console.println("        use CLIENTS consumers (default: %d)".format(clientCount))
     Console.println("    -h HOSTNAME")
     Console.println("        use kestrel on HOSTNAME (default: %s)".format(hostname))
+    Console.println("    -k PERCENT")
+    Console.println("        kill PERCENT %% of clients before they can read the response (default: %d)".format(dropPercent))
+    Console.println("    -x")
+    Console.println("        use transactional gets")
   }
 
   def parseArgs(args: List[String]): Unit = args match {
@@ -157,6 +198,12 @@ object ManyClients {
     case "-h" :: x :: xs =>
       hostname = x
       parseArgs(xs)
+    case "-k" :: x :: xs =>
+      killPercent = x.toInt
+      parseArgs(xs)
+    case "-x" :: xs =>
+      useTransactions = true
+      parseArgs(xs)
     case _ =>
       usage()
       System.exit(1)
@@ -164,6 +211,8 @@ object ManyClients {
 
   def main(args: Array[String]) = {
     parseArgs(args.toList)
+    println("many-clients: %d items to %s using %d clients, kill rate %d%%, at %d msec/item".format(
+      count, hostname, clientCount, killPercent, sleep))
 
     var threadList: List[Thread] = Nil
     val startTime = System.currentTimeMillis
@@ -171,8 +220,12 @@ object ManyClients {
     for (i <- 0 until clientCount) {
       val t = new Thread {
         override def run = {
-          val socket = SocketChannel.open(new InetSocketAddress(hostname, 22133))
-          getStuff(count, socket, "spam")
+          try {
+            getStuff(count, hostname, 22133, "spam", useTransactions, killPercent)
+          } catch {
+            case e: Throwable =>
+              e.printStackTrace()
+          }
         }
       }
       threadList = t :: threadList
@@ -181,7 +234,12 @@ object ManyClients {
     val t = new Thread {
       override def run = {
         val socket = SocketChannel.open(new InetSocketAddress(hostname, 22133))
-        put(sleep, socket, "spam", count)
+        try {
+          put(sleep, socket, "spam", count)
+        } catch {
+          case e: Throwable =>
+            e.printStackTrace()
+        }
       }
     }
     threadList = t :: threadList
@@ -191,6 +249,6 @@ object ManyClients {
     }
 
     val duration = System.currentTimeMillis - startTime
-    Console.println("Finished in %d msec.".format(duration))
+    Console.println("Received %d items in %d msec.".format(got.get, duration))
   }
 }
