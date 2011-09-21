@@ -178,7 +178,8 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
     }
     val startTime = Time.now
     queues.remove(key, timeout, opening, peeking).map { itemOption =>
-      Stats.addMetric("get_latency_usec", (Time.now - startTime).inMicroseconds.toInt)
+      Stats.addMetric(if (itemOption.isDefined) "get_hit_latency_usec" else "get_miss_latency_usec",
+        (Time.now - startTime).inMicroseconds.toInt)
       itemOption.foreach { item =>
         log.debug("get <- %s", item)
         if (opening) pendingTransactions.add(key, item.xid)
