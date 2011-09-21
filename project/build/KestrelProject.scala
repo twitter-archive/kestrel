@@ -46,7 +46,7 @@ class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) wit
     packageTask(loadTestPaths, outputPath, loadTestJarFilename, packageOptions) && task {
       distPath.asFile.mkdirs()
       FileUtilities.copyFlat(List(outputPath / loadTestJarFilename), distPath, log).left.toOption
-    }.dependsOn(test)
+    }
   lazy val packageLoadTests = packageLoadTestsAction
   override def packageDistTask = packageLoadTestsAction && super.packageDistTask
 
