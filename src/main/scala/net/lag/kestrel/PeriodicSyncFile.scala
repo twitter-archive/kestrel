@@ -21,7 +21,7 @@ class PeriodicSyncFile(file: File, timer: Timer, period: Duration) {
 
   if (period > 0.seconds && period < Duration.MaxValue) {
     timer.schedule(Time.now, period) {
-      if (!closed) fsync()
+      if (!closed && !promises.isEmpty) fsync()
     }
   }
 
@@ -31,14 +31,16 @@ class PeriodicSyncFile(file: File, timer: Timer, period: Duration) {
       val completed = promises.size
       try {
         writer.force(false)
-        for (i <- 0 until completed) {
-          promises.poll().setValue(())
-        }
       } catch {
         case e: IOException =>
           for (i <- 0 until completed) {
             promises.poll().setException(e)
           }
+        return;
+      }
+
+      for (i <- 0 until completed) {
+        promises.poll().setValue(())
       }
     }
   }
