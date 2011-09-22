@@ -19,6 +19,7 @@ package net.lag.kestrel
 
 import java.nio.{ByteBuffer, ByteOrder}
 import com.twitter.util.Time
+import java.io.IOException
 
 case class QItem(addTime: Time, expiry: Option[Time], data: Array[Byte], var xid: Int) {
   final def pack(opcode: Byte): ByteBuffer = pack(opcode, 0)
@@ -43,20 +44,28 @@ case class QItem(addTime: Time, expiry: Option[Time], data: Array[Byte], var xid
 
 object QItem {
   def unpack(data: Array[Byte]): QItem = {
+    val dataLength = data.length
+    if (dataLength < 16) {
+      throw new IOException("Data unexpectedly short (< 16 bytes); length = " + dataLength)
+    }
     val buffer = ByteBuffer.wrap(data)
-    val bytes = new Array[Byte](data.length - 16)
     buffer.order(ByteOrder.LITTLE_ENDIAN)
     val addTime = Time.fromMilliseconds(buffer.getLong)
     val expiry = buffer.getLong
+    val bytes = new Array[Byte](dataLength - 16)
     buffer.get(bytes)
     QItem(addTime, if (expiry == 0) None else Some(Time.fromMilliseconds(expiry)), bytes, 0)
   }
 
   def unpackOldAdd(data: Array[Byte]): QItem = {
+    val dataLength = data.length
+    if (dataLength < 4) {
+      throw new IOException("Data unexpectedly short (< 4 bytes); length = " + dataLength)
+    }
     val buffer = ByteBuffer.wrap(data)
-    val bytes = new Array[Byte](data.length - 4)
     buffer.order(ByteOrder.LITTLE_ENDIAN)
     val expiry = buffer.getInt
+    val bytes = new Array[Byte](dataLength - 4)
     buffer.get(bytes)
     QItem(Time.now, if (expiry == 0) None else Some(Time.fromSeconds(expiry)), bytes, 0)
   }
