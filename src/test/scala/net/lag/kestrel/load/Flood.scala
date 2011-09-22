@@ -121,8 +121,7 @@ object Flood extends LoadTesting {
     if (prefillItems > 0) {
       println("prefill: " + prefillItems + " items of " + kilobytes + "kB")
       val socket = SocketChannel.open(new InetSocketAddress(hostname, 22133))
-      val qName = "spam"
-      put(socket, qName, prefillItems, data)
+      put(socket, queueName, prefillItems, data)
     }
 
     println("flood: " + totalItems + " items of " + kilobytes + "kB into " + queueName)
