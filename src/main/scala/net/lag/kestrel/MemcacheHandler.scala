@@ -82,7 +82,7 @@ extends NettyHandler[MemcacheRequest](channelGroup, queueCollection, maxOpenTran
         flushAllQueues()
         channel.write(new MemcacheResponse("Flushed all queues."))
       case "dump_stats" =>
-        dumpStats()
+        dumpStats(request.line.drop(1))
       case "delete" =>
         delete(request.line(1))
         channel.write(new MemcacheResponse("END"))
@@ -209,9 +209,10 @@ extends NettyHandler[MemcacheRequest](channelGroup, queueCollection, maxOpenTran
     channel.write(new MemcacheResponse(summary))
   }
 
-  private def dumpStats() = {
+  private def dumpStats(requestedQueueNames : List[String]) = {
+    val queueNames = if (!requestedQueueNames.isEmpty) { requestedQueueNames } else { queues.queueNames }
     val dump = new mutable.ListBuffer[String]
-    for (qName <- queues.queueNames) {
+    for (qName <- queueNames) {
       dump += "queue '" + qName + "' {"
       dump += queues.stats(qName).map { case (k, v) => k + "=" + v }.mkString("  ", "\r\n  ", "")
       dump += "}"
