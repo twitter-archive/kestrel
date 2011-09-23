@@ -32,9 +32,6 @@ import org.apache.thrift.protocol._
 import com.twitter.finagle.thrift._
 import net.lag.kestrel.thrift.Item 
 
-/**
- * Memcache protocol handler for a kestrel connection.
- */
 class ThriftFinagledService(val handler: ThriftHandler, override val protocolFactory: TProtocolFactory) 
     extends net.lag.kestrel.thrift.Kestrel.FinagledService(handler, protocolFactory) {
     
@@ -44,9 +41,6 @@ class ThriftFinagledService(val handler: ThriftHandler, override val protocolFac
     }
 }
 
-/**
- * Memcache protocol handler for a kestrel connection.
- */
 class ThriftHandler (
   connection: ClientConnection,
   queueCollection: QueueCollection,

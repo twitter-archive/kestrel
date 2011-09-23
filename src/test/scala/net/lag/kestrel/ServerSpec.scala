@@ -47,7 +47,7 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
       maxAge = 1800.seconds
     }
     kestrel = new Kestrel(defaultConfig, List(weatherUpdatesConfig), "localhost",
-      Some(PORT), None, canonicalFolderName, Protocol.Ascii, None, None, 1)
+      Some(PORT), None, None, canonicalFolderName, Protocol.Ascii, None, None, 1)
     kestrel.start()
   }
 
