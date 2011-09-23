@@ -44,7 +44,7 @@ class QueueCollection(queueFolder: String, timer: Timer,
 
   private val queues = new mutable.HashMap[String, PersistentQueue]
   private val fanout_queues = new mutable.HashMap[String, mutable.HashSet[String]]
-  private var shuttingDown = false
+  @volatile private var shuttingDown = false
 
   @volatile private var queueConfigMap = Map(queueBuilders.map { builder => (builder.name, builder()) }: _*)
 
@@ -167,6 +167,7 @@ class QueueCollection(queueFolder: String, timer: Timer,
       queues.get(name) map { q =>
         q.close()
         q.destroyJournal()
+        q.removeStats()
         queues.remove(name)
       }
       if (name contains '+') {
@@ -177,7 +178,7 @@ class QueueCollection(queueFolder: String, timer: Timer,
     }
   }
 
-  def flushExpired(name: String): Int = synchronized {
+  def flushExpired(name: String): Int = {
     if (shuttingDown) {
       0
     } else {
@@ -185,7 +186,7 @@ class QueueCollection(queueFolder: String, timer: Timer,
     }
   }
 
-  def flushAllExpired(): Int = synchronized {
+  def flushAllExpired(): Int = {
     queueNames.foldLeft(0) { (sum, qName) => sum + flushExpired(qName) }
   }
 

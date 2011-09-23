@@ -55,6 +55,8 @@ extends KestrelHandler(queueCollection, maxOpenTransactions) with ChannelUpstrea
         e.getCause() match {
           case _: ProtocolError =>
             handleProtocolError()
+          case e: java.nio.channels.ClosedChannelException =>
+            finish()
           case e: IOException =>
             log.debug("I/O Exception on session %d: %s", sessionId, e.toString)
           case e =>

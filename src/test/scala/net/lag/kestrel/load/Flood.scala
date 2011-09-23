@@ -20,6 +20,7 @@ package net.lag.kestrel.load
 import java.net._
 import java.nio._
 import java.nio.channels._
+import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable
 import com.twitter.conversions.string._
 
@@ -45,8 +46,8 @@ object Flood extends LoadTesting {
     }
   }
 
-  def get(socket: SocketChannel, queueName: String, n: Int, data: String): Int = {
-    val req = ByteBuffer.wrap(("get " + queueName + "\r\n").getBytes)
+  def get(socket: SocketChannel, queueName: String, n: Int, data: String, blockingReads: Boolean): Int = {
+    val req = ByteBuffer.wrap(("get " + queueName + (if (blockingReads) "/t=1000" else "") + "\r\n").getBytes)
     val expectEnd = ByteBuffer.wrap("END\r\n".getBytes)
     val expectData = ByteBuffer.wrap(("VALUE " + queueName + " 0 " + data.length + "\r\n" + data + "\r\nEND\r\n").getBytes)
     val expecting = new Expecting(expectEnd, expectData)
@@ -68,6 +69,11 @@ object Flood extends LoadTesting {
 
   var totalItems = 10000
   var kilobytes = 1
+  var queueName = "spam"
+  var prefillItems = 0
+  var hostname = "localhost"
+  var threads = 1
+  var blockingReads = false
 
   def usage() {
     Console.println("usage: flood [options]")
@@ -78,6 +84,16 @@ object Flood extends LoadTesting {
     Console.println("        put ITEMS items into the queue (default: %d)".format(totalItems))
     Console.println("    -k KILOBYTES")
     Console.println("        put KILOBYTES per queue item (default: %d)".format(kilobytes))
+    Console.println("    -q NAME")
+    Console.println("        use queue NAME (default: %s)".format(queueName))
+    Console.println("    -p ITEMS")
+    Console.println("        prefill ITEMS items into the queue before the test (default: %d)".format(prefillItems))
+    Console.println("    -h HOSTNAME")
+    Console.println("        use kestrel on HOSTNAME (default: %s)".format(hostname))
+    Console.println("    -t THREADS")
+    Console.println("        create THREADS producers and THREADS consumers (default: %d)".format(threads))
+    Console.println("    -B")
+    Console.println("        do blocking reads (reads with a timeout)")
   }
 
   def parseArgs(args: List[String]): Unit = args match {
@@ -91,6 +107,21 @@ object Flood extends LoadTesting {
     case "-k" :: x :: xs =>
       kilobytes = x.toInt
       parseArgs(xs)
+    case "-q" :: x :: xs =>
+      queueName = x
+      parseArgs(xs)
+    case "-p" :: x :: xs =>
+      prefillItems = x.toInt
+      parseArgs(xs)
+    case "-h" :: x :: xs =>
+      hostname = x
+      parseArgs(xs)
+    case "-t" :: x :: xs =>
+      threads = x.toInt
+      parseArgs(xs)
+    case "-B" :: xs =>
+      blockingReads = true
+      parseArgs(xs)
     case _ =>
       usage()
       System.exit(1)
@@ -100,31 +131,43 @@ object Flood extends LoadTesting {
     parseArgs(args.toList)
     val data = DATA * kilobytes
 
-    println("flood: " + totalItems + " items of " + kilobytes + "kB")
-
-    val producerThread = new Thread {
-      override def run = {
-        val socket = SocketChannel.open(new InetSocketAddress("localhost", 22133))
-        val qName = "spam"
-        put(socket, qName, totalItems, data)
-      }
+    if (prefillItems > 0) {
+      println("prefill: " + prefillItems + " items of " + kilobytes + "kB")
+      val socket = SocketChannel.open(new InetSocketAddress(hostname, 22133))
+      put(socket, queueName, prefillItems, data)
     }
-    val consumerThread = new Thread {
-      var misses = 0
-      override def run = {
-        val socket = SocketChannel.open(new InetSocketAddress("localhost", 22133))
-        val qName = "spam"
-        misses = get(socket, qName, totalItems, data)
+
+    println("flood: %d threads each sending %d items of %dkB through %s".format(
+      threads, totalItems, kilobytes, queueName))
+
+    var threadList: List[Thread] = Nil
+    val misses = new AtomicInteger
+
+    for (i <- 0 until threads) {
+      val producerThread = new Thread {
+        override def run = {
+          val socket = SocketChannel.open(new InetSocketAddress(hostname, 22133))
+          put(socket, queueName, totalItems, data)
+        }
       }
+
+      val consumerThread = new Thread {
+        override def run = {
+          val socket = SocketChannel.open(new InetSocketAddress(hostname, 22133))
+          val n = get(socket, queueName, totalItems, data, blockingReads)
+          misses.addAndGet(n)
+        }
+      }
+
+      threadList = producerThread :: consumerThread :: threadList
     }
 
     val startTime = System.currentTimeMillis
-    producerThread.start
-    consumerThread.start
-    producerThread.join
-    consumerThread.join
+    threadList.foreach { _.start() }
+    threadList.foreach { _.join() }
     val duration = System.currentTimeMillis - startTime
-    println("Finished in %d msec (%.1f usec/put throughput).".format(duration, duration * 1000.0 / totalItems))
-    println("Consumer spun %d times in misses.".format(consumerThread.misses))
+
+    println("Finished in %d msec (%.1f usec/put throughput).".format(duration, duration * 1000.0 / (totalItems * threads)))
+    println("Consumer(s) spun %d times in misses.".format(misses.get))
   }
 }

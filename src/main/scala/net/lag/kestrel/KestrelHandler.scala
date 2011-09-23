@@ -36,11 +36,15 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
   val sessionId = Kestrel.sessionId.incrementAndGet()
 
   object pendingTransactions {
-    private val transactions = new mutable.HashMap[String, mutable.ListBuffer[Int]] {
-      override def default(key: String) = {
-        val rv = new mutable.ListBuffer[Int]
-        this(key) = rv
-        rv
+    private var transactions = createMap()
+
+    private def createMap() = {
+      new mutable.HashMap[String, mutable.ListBuffer[Int]] {
+        override def default(key: String) = {
+          val rv = new mutable.ListBuffer[Int]
+          this(key) = rv
+          rv
+        }
       }
     }
 
@@ -68,10 +72,11 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
 
     def cancelAll() {
       synchronized {
-        transactions.foreach { case (name, xids) =>
-          xids.foreach { xid => queues.unremove(name, xid) }
-        }
-        transactions.clear()
+        val currentTransactions = transactions;
+        transactions = createMap()
+        currentTransactions
+      }.foreach { case (name, xids) =>
+        xids.foreach { xid => queues.unremove(name, xid) }
       }
     }
 
@@ -171,7 +176,10 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
     } else {
       Stats.incr("cmd_get")
     }
+    val startTime = Time.now
     queues.remove(key, timeout, opening, peeking).map { itemOption =>
+      Stats.addMetric(if (itemOption.isDefined) "get_hit_latency_usec" else "get_miss_latency_usec",
+        (Time.now - startTime).inMicroseconds.toInt)
       itemOption.foreach { item =>
         log.debug("get <- %s", item)
         if (opening) pendingTransactions.add(key, item.xid)
@@ -187,7 +195,9 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
   def setItem(key: String, flags: Int, expiry: Option[Time], data: Array[Byte]) = {
     log.debug("set -> q=%s flags=%d expiry=%s size=%d", key, flags, expiry, data.length)
     Stats.incr("cmd_set")
-    queues.add(key, data, expiry)
+    Stats.timeMicros("set_latency") {
+      queues.add(key, data, expiry)
+    }
   }
 
   protected def flush(key: String) {

@@ -44,16 +44,18 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   // age of the last item read from the queue:
   private var _currentAge: Duration = 0.milliseconds
 
+  def statNamed(statName: String) = "q/" + name + "/" + statName
+
   // # of items EVER added to the queue:
-  val totalItems = Stats.getCounter("q/" + name + "/total_items")
+  val totalItems = Stats.getCounter(statNamed("total_items"))
   totalItems.reset()
 
   // # of items that were expired by the time they were read:
-  val totalExpired = Stats.getCounter("q/" + name + "/expired_items")
+  val totalExpired = Stats.getCounter(statNamed("expired_items"))
   totalExpired.reset()
 
   // # of items thot were discarded because the queue was full:
-  val totalDiscarded = Stats.getCounter("q/" + name + "/discarded")
+  val totalDiscarded = Stats.getCounter(statNamed("discarded"))
   totalDiscarded.reset()
 
   // # of items in the queue (including those not in memory)
@@ -335,6 +337,21 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     synchronized {
       if (config.keepJournal) journal.erase()
     }
+  }
+
+  // Remove various stats related to the queue
+  def removeStats() {
+    Stats.removeCounter(statNamed("total_items"))
+    Stats.removeCounter(statNamed("expired_items"))
+    Stats.removeCounter(statNamed("discarded"))
+    Stats.clearGauge(statNamed("items"))
+    Stats.clearGauge(statNamed("bytes"))
+    Stats.clearGauge(statNamed("journal_size"))
+    Stats.clearGauge(statNamed("mem_items"))
+    Stats.clearGauge(statNamed("mem_bytes"))
+    Stats.clearGauge(statNamed("age_msec"))
+    Stats.clearGauge(statNamed("waiters"))
+    Stats.clearGauge(statNamed("open_transactions"))
   }
 
   private final def nextXid(): Int = {

@@ -20,6 +20,7 @@ package net.lag.kestrel.load
 import java.net._
 import java.nio._
 import java.nio.channels._
+import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable
 import com.twitter.conversions.string._
 
@@ -91,6 +92,8 @@ object PutMany {
   var clientCount = 100
   var totalItems = 10000
   var bytes = 1024
+  var queueName = "spam"
+  var queueCount = 1
   var hostname = "localhost"
   var port = 22133
 
@@ -105,6 +108,10 @@ object PutMany {
     Console.println("        put ITEMS items into the queue (default: %d)".format(totalItems))
     Console.println("    -b BYTES")
     Console.println("        put BYTES per queue item (default: %d)".format(bytes))
+    Console.println("    -q NAME")
+    Console.println("        use queue NAME as prefix (default: %s)".format(queueName))
+    Console.println("    -Q QUEUES")
+    Console.println("        use QUEUES different queues (default: %d)".format(queueCount))
     Console.println("    -h HOSTNAME")
     Console.println("        use kestrel on HOSTNAME (default: %s)".format(hostname))
     Console.println("    -p PORT")
@@ -125,6 +132,12 @@ object PutMany {
     case "-b" :: x :: xs =>
       bytes = x.toInt
       parseArgs(xs)
+    case "-q" :: x :: xs =>
+      queueName = x
+      parseArgs(xs)
+    case "-Q" :: x :: xs =>
+      queueCount = x.toInt
+      parseArgs(xs)
     case "-h" :: x :: xs =>
       hostname = x
       parseArgs(xs)
@@ -136,12 +149,24 @@ object PutMany {
       System.exit(1)
   }
 
+  val failedConnects = new AtomicInteger
+
+  def tryHard[A](f: => A): A = {
+    try {
+      f
+    } catch {
+      case e: java.io.IOException =>
+        failedConnects.incrementAndGet()
+        tryHard(f)
+    }
+  }
+
   def main(args: Array[String]) = {
     parseArgs(args.toList)
-    println("Put %d items of %d bytes to %s:%d using %d clients.".format(totalItems, bytes, hostname, port, clientCount))
+    println("Put %d items of %d bytes to %s:%d in %d queues named %s using %d clients.".format(
+      totalItems, bytes, hostname, port, queueCount, queueName, clientCount))
 
     val totalCount = totalItems / clientCount * clientCount
-    val totalQueues = System.getProperty("queues", "1").toInt
 
     val rawData = new StringBuilder
     while (rawData.size < bytes) {
@@ -160,8 +185,8 @@ object PutMany {
     for (i <- 0 until clientCount) {
       val t = new Thread {
         override def run = {
-          val socket = SocketChannel.open(new InetSocketAddress(hostname, port))
-          val qName = "spam" + (i % totalQueues)
+          val socket = tryHard { SocketChannel.open(new InetSocketAddress(hostname, port)) }
+          val qName = queueName + (if (queueCount > 1) (i % queueCount).toString else "")
           put(socket, qName, totalItems / clientCount, timings, rawData.toString)
         }
       }
@@ -174,7 +199,9 @@ object PutMany {
 
     val duration = System.currentTimeMillis - startTime
     Console.println("Finished in %d msec (%.1f usec/put throughput).".format(duration, duration * 1000.0 / totalCount))
-
+    if (failedConnects.get > 0) {
+      println("Had to retry %d times to make all connections.".format(failedConnects.get))
+    }
     val sortedTimings = timings.toList.sorted
     val average = sortedTimings.foldLeft(0L) { _ + _ } / sortedTimings.size.toDouble / 1000.0
     val min = sortedTimings(0) / 1000.0

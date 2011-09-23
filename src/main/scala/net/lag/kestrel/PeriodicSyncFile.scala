@@ -11,6 +11,9 @@ import java.io.{IOException, FileOutputStream, File}
  * after every write, or `Duration.MaxValue` to never fsync.
  */
 class PeriodicSyncFile(file: File, timer: Timer, period: Duration) {
+  // pre-completed future for writers who are behaving synchronously.
+  private final val DONE = Future(())
+
   val writer = new FileOutputStream(file, true).getChannel
   val promises = new ConcurrentLinkedQueue[Promise[Unit]]()
 
@@ -18,7 +21,7 @@ class PeriodicSyncFile(file: File, timer: Timer, period: Duration) {
 
   if (period > 0.seconds && period < Duration.MaxValue) {
     timer.schedule(Time.now, period) {
-      if (!closed) fsync()
+      if (!closed && !promises.isEmpty) fsync()
     }
   }
 
@@ -28,38 +31,40 @@ class PeriodicSyncFile(file: File, timer: Timer, period: Duration) {
       val completed = promises.size
       try {
         writer.force(false)
-        for (i <- 0 until completed) {
-          promises.poll().setValue(())
-        }
       } catch {
         case e: IOException =>
           for (i <- 0 until completed) {
             promises.poll().setException(e)
           }
+        return;
+      }
+
+      for (i <- 0 until completed) {
+        promises.poll().setValue(())
       }
     }
   }
 
   def write(buffer: ByteBuffer): Future[Unit] = {
-    val promise = new Promise[Unit]()
     do {
       writer.write(buffer)
     } while (buffer.position < buffer.limit)
     if (period == 0.seconds) {
       try {
         writer.force(false)
-        promise.setValue(())
+        DONE
       } catch {
         case e: IOException =>
-          promise.setException(e)
+          Future.exception(e)
       }
     } else if (period == Duration.MaxValue) {
       // not fsync'ing.
-      promise.setValue(())
+      DONE
     } else {
+      val promise = new Promise[Unit]()
       promises.add(promise)
+      promise
     }
-    promise
   }
 
   /**
