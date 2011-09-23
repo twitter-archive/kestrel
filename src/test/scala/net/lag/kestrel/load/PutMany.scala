@@ -91,6 +91,8 @@ object PutMany {
   var clientCount = 100
   var totalItems = 10000
   var bytes = 1024
+  var queueName = "spam"
+  var queueCount = 1
   var hostname = "localhost"
   var port = 22133
 
@@ -105,6 +107,10 @@ object PutMany {
     Console.println("        put ITEMS items into the queue (default: %d)".format(totalItems))
     Console.println("    -b BYTES")
     Console.println("        put BYTES per queue item (default: %d)".format(bytes))
+    Console.println("    -q NAME")
+    Console.println("        use queue NAME as prefix (default: %s)".format(queueName))
+    Console.println("    -Q QUEUES")
+    Console.println("        use QUEUES different queues (default: %d)".format(queueCount))
     Console.println("    -h HOSTNAME")
     Console.println("        use kestrel on HOSTNAME (default: %s)".format(hostname))
     Console.println("    -p PORT")
@@ -125,6 +131,12 @@ object PutMany {
     case "-b" :: x :: xs =>
       bytes = x.toInt
       parseArgs(xs)
+    case "-q" :: x :: xs =>
+      queueName = x
+      parseArgs(xs)
+    case "-Q" :: x :: xs =>
+      queueCount = x.toInt
+      parseArgs(xs)
     case "-h" :: x :: xs =>
       hostname = x
       parseArgs(xs)
@@ -138,10 +150,10 @@ object PutMany {
 
   def main(args: Array[String]) = {
     parseArgs(args.toList)
-    println("Put %d items of %d bytes to %s:%d using %d clients.".format(totalItems, bytes, hostname, port, clientCount))
+    println("Put %d items of %d bytes to %s:%d in %d queues named %s using %d clients.".format(
+      totalItems, bytes, hostname, port, queueCount, queueName, clientCount))
 
     val totalCount = totalItems / clientCount * clientCount
-    val totalQueues = System.getProperty("queues", "1").toInt
 
     val rawData = new StringBuilder
     while (rawData.size < bytes) {
@@ -161,7 +173,7 @@ object PutMany {
       val t = new Thread {
         override def run = {
           val socket = SocketChannel.open(new InetSocketAddress(hostname, port))
-          val qName = "spam" + (i % totalQueues)
+          val qName = queueName + (if (queueCount > 1) (i % queueCount).toString else "")
           put(socket, qName, totalItems / clientCount, timings, rawData.toString)
         }
       }
