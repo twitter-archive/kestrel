@@ -20,6 +20,7 @@ package net.lag.kestrel.load
 import java.net._
 import java.nio._
 import java.nio.channels._
+import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable
 import com.twitter.conversions.string._
 
@@ -148,6 +149,18 @@ object PutMany {
       System.exit(1)
   }
 
+  val failedConnects = new AtomicInteger
+
+  def tryHard[A](f: => A): A = {
+    try {
+      f
+    } catch {
+      case e: java.io.IOException =>
+        failedConnects.incrementAndGet()
+        tryHard(f)
+    }
+  }
+
   def main(args: Array[String]) = {
     parseArgs(args.toList)
     println("Put %d items of %d bytes to %s:%d in %d queues named %s using %d clients.".format(
@@ -172,7 +185,7 @@ object PutMany {
     for (i <- 0 until clientCount) {
       val t = new Thread {
         override def run = {
-          val socket = SocketChannel.open(new InetSocketAddress(hostname, port))
+          val socket = tryHard { SocketChannel.open(new InetSocketAddress(hostname, port)) }
           val qName = queueName + (if (queueCount > 1) (i % queueCount).toString else "")
           put(socket, qName, totalItems / clientCount, timings, rawData.toString)
         }
@@ -186,7 +199,9 @@ object PutMany {
 
     val duration = System.currentTimeMillis - startTime
     Console.println("Finished in %d msec (%.1f usec/put throughput).".format(duration, duration * 1000.0 / totalCount))
-
+    if (failedConnects.get > 0) {
+      println("Had to retry %d times to make all connections.".format(failedConnects.get))
+    }
     val sortedTimings = timings.toList.sorted
     val average = sortedTimings.foldLeft(0L) { _ + _ } / sortedTimings.size.toDouble / 1000.0
     val min = sortedTimings(0) / 1000.0
