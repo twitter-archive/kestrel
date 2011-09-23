@@ -162,12 +162,29 @@ class QueueCollection(queueFolder: String, timer: Timer,
     queue(key) map { q => q.flush() }
   }
 
+  def removeCounter(queueName: String, counterName: String) = Stats.removeCounter("q/" + queueName + "/" + counterName)
+  
+  def clearGauge(queueName: String, gaugeName: String) = Stats.clearGauge("q/" + queueName + "/" + gaugeName)
+
   def delete(name: String): Unit = synchronized {
     if (!shuttingDown) {
       queues.get(name) map { q =>
         q.close()
         q.destroyJournal()
         queues.remove(name)
+
+        // Remove various stats related to the queue
+        removeCounter(name, "total_items")
+        removeCounter(name, "expired_items")
+        removeCounter(name, "discarded")
+        clearGauge(name, "items")
+        clearGauge(name, "bytes")
+        clearGauge(name, "journal_size")
+        clearGauge(name, "mem_items")
+        clearGauge(name, "mem_bytes")
+        clearGauge(name, "age_msec")
+        clearGauge(name, "waiters")
+        clearGauge(name, "open_transactions")
       }
       if (name contains '+') {
         val master = name.split('+')(0)
