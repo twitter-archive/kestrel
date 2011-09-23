@@ -17,6 +17,7 @@
 
 package net.lag.kestrel
 
+import java.net.InetSocketAddress
 import scala.collection.mutable
 import scala.collection.Set
 import com.twitter.util._
@@ -47,41 +48,49 @@ class ThriftHandler (
   maxOpenTransactions: Int
 ) extends net.lag.kestrel.thrift.Kestrel.FutureIface {
 
-  private val log = Logger.get(getClass.getName)
+  val log = Logger.get(getClass.getName)
 
-  Kestrel.sessions.incrementAndGet()
-  //Stats.incr("total_connections")
-  println("new connection")
+  val sessionId = Kestrel.sessionId.incrementAndGet()
+  protected val handler = new KestrelHandler(queueCollection, maxOpenTransactions, clientDescription, sessionId)
+  log.debug("New session %d from %s", sessionId, clientDescription)
+
+  println("New Session")
 
   def release() {
-      println("session end")
+    println("Close Session")
+    handler.finish()
   }
 
-  def get(key: String, transaction: Boolean) = {
+  protected def clientDescription: String = {
+    val address = connection.remoteAddress.asInstanceOf[InetSocketAddress]
+    "%s:%d".format(address.getHostName, address.getPort)
+  }
+
+  def get(key: String, transaction: Boolean = false): Future[Item] = {
     Future(new Item(ByteBuffer.wrap("foo".getBytes), 0))
   }
-
-  def multiget(key: String, maxItems: Int, transaction: Boolean) = {
+  
+  def multiget(key: String, maxItems: Int = 1, transaction: Boolean = false): Future[Seq[Item]] = {
     Future(List())
   }
-
-  def put(key: String, item: ByteBuffer) = {
+  
+  def put(key: String, item: ByteBuffer): Future[Unit] = {
     Future(())
   }
-
-  def multiput(key: String, items: Seq[ByteBuffer]) = {
+  
+  def multiput(key: String, items: Seq[ByteBuffer]): Future[Unit] = {
     Future(())
   }
-
-  def ack(key: String, xids: Set[Int]) = {
+  
+  def ack(key: String, xids: Set[Int]): Future[Unit] = {
     Future(())
   }
-
-  def fail(key: String, xids: Set[Int]) = {
+  
+  def fail(key: String, xids: Set[Int]): Future[Unit] = {
     Future(())
   }
-
-  def flush(key: String) = {
+  
+  def flush(key: String): Future[Unit] = {
     Future(())
   }
 }
