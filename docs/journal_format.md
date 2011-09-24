@@ -14,6 +14,7 @@ Metadata ints are in little-endian format. An intro "size" field always refers t
 entire block after the opcode. So, for example, an ADD of a 1-byte item would have a size of 5 to
 cover the 4-byte expiration and the 1-byte data.
 
+
 ## Opcodes
 
 - ADD (0)
@@ -83,22 +84,45 @@ cover the 4-byte expiration and the 1-byte data.
   this really marks the end of this journal file and time to move to the next one.
 
 
+## Initial operations in the journal
+
+A journal file that has been rewritten or packed will usuall have a set of
+operations at the beginning to rebuild the state of the transaction ID
+("xid"), any open transactions, and the current queue contents:
+
+- `save_xid`
+- for each open transaction:
+  - `add_xid`
+  - `remove_tentative`
+- for each queue item:
+  - `addx`
+
+The rest of the journal will be operations as they happen. Since this initial
+set of operations can be treated just like any other queue operation, there's
+no special treatment when the journal is replayed at startup.
+
+
 ## Multiple journal files
 
-The latest journal file for a queue is named simply `(name)` with no dots in it. For example,
-the latest journal file for queue "cars" is named `cars`.
+The latest journal file for a queue is named simply `(name)` with no dots in
+it. For example, the latest journal file for queue "cars" is named `cars`.
 
-As the journal is rotated, the current timestamp is appended. A rotated journal for cars might be
-named `cars.904`. When recovering the journals on restart, kestrel replays all the rolled journal
-files in timestamp order (earliest first), and then the non-timestamped file last (if it exists).
-They are treated exactly the same as if they were chunks of a larger, contiguous file.
+As the journal is rotated, the current timestamp is appended. A rotated
+journal for cars might be named `cars.904`. When recovering the journals on
+restart, kestrel replays all the rotated journal files in timestamp order
+(earliest first), and then the non-timestamped file last (if it exists). They
+are treated exactly the same as if they were chunks of a larger, contiguous
+file.
 
-Journals with `~~` in their filename are temporary. If found on restart, they can be ignored.
+Journals with `~~` in their filename are temporary. If found on restart, they
+can be ignored.
 
-If previous rolled journal files are packed together, the state will initially be written into a
-temporary file, and then renamed to end with `.(timestamp).pack`. The timestamp means that any
-rolled journal with timestamp less than or equal to the pack-file timestamp is now dead and
-should be deleted. For example, if `cars.950.pack` exists, then `cars.904` and `cars.950` should
-be ignored and deleted, but `cars.951` is still valid. Normally, if it doesn't crash,
-the packing process will delete these older files after creating the pack file. Then it will
-rename the pack file to remove the ".pack" extension.
+If previous rolled journal files are packed together, the state will
+initially be written into a temporary file, and then renamed to end with
+`.(timestamp).pack`. The timestamp means that any rotated journal with
+timestamp less than or equal to the pack-file timestamp is now dead and
+should be deleted. For example, if `cars.950.pack` exists, then `cars.904`
+and `cars.950` should be ignored and deleted, but `cars.951` is still valid.
+Normally, if it doesn't crash, the packing process will delete these older
+files after creating the pack file. Then it will rename the pack file to
+remove the ".pack" extension.
