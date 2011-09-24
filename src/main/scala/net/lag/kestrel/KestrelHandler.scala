@@ -23,6 +23,7 @@ import com.twitter.logging.Logger
 import com.twitter.ostrich.admin.{BackgroundProcess, ServiceTracker}
 import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{Future, Duration, Time}
+import java.util.concurrent.atomic.AtomicBoolean
 
 class TooManyOpenTransactionsException extends Exception("Too many open transactions.")
 object TooManyOpenTransactionsException extends TooManyOpenTransactionsException
@@ -34,6 +35,7 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
   private val log = Logger.get(getClass.getName)
 
   val sessionId = Kestrel.sessionId.incrementAndGet()
+  val finished = new AtomicBoolean(false)
 
   object pendingTransactions {
     private var transactions = createMap()
@@ -96,9 +98,12 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
 
   // usually called when netty sends a disconnect signal.
   protected def finish() {
-    log.debug("End of session %d", sessionId)
     abortAnyTransaction()
-    Kestrel.sessions.decrementAndGet()
+
+    if(finished.getAndSet(true) == false) {
+      log.debug("End of session %d", sessionId)
+      Kestrel.sessions.decrementAndGet()
+    }
   }
 
   protected def flushAllQueues() {
