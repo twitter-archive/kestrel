@@ -20,7 +20,6 @@ package net.lag.kestrel
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.nio.channels.ClosedChannelException
-import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
@@ -44,7 +43,6 @@ extends KestrelHandler(queueCollection, maxOpenTransactions) with ChannelUpstrea
 
   private var remoteAddress: InetSocketAddress = null
   var channel: Channel = null
-  val finished = new AtomicBoolean(false)
 
   protected def clientDescription: String = {
     "%s:%d".format(remoteAddress.getHostName, remoteAddress.getPort)
@@ -59,7 +57,6 @@ extends KestrelHandler(queueCollection, maxOpenTransactions) with ChannelUpstrea
           case _: ProtocolError =>
             handleProtocolError()
           case e: ClosedChannelException =>
-            if (finished.getAndSet(true) == false) finish()
             finish()
           case e: IOException =>
             log.debug("I/O Exception on session %d: %s", sessionId, e.toString)
@@ -70,7 +67,7 @@ extends KestrelHandler(queueCollection, maxOpenTransactions) with ChannelUpstrea
         e.getChannel().close()
       case s: ChannelStateEvent =>
         if ((s.getState() == ChannelState.CONNECTED) && (s.getValue() eq null)) {
-          if (finished.getAndSet(true) == false) finish()
+          finish()
         } else if ((s.getState() == ChannelState.OPEN) && (s.getValue() == true)) {
           channel = s.getChannel()
           remoteAddress = channel.getRemoteAddress.asInstanceOf[InetSocketAddress]
