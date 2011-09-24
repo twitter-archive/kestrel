@@ -51,7 +51,7 @@ class ThriftHandler (
   val log = Logger.get(getClass.getName)
 
   val sessionId = Kestrel.sessionId.incrementAndGet()
-  protected val handler = new KestrelHandler(queueCollection, maxOpenTransactions, clientDescription, sessionId)
+  protected val handler = new KestrelHandler2(queueCollection, maxOpenTransactions, clientDescription, sessionId)
   log.debug("New session %d from %s", sessionId, clientDescription)
 
   println("New Session")
@@ -67,14 +67,27 @@ class ThriftHandler (
   }
 
   def get(key: String, transaction: Boolean = false): Future[Item] = {
-    Future(new Item(ByteBuffer.wrap("foo".getBytes), 0))
+    try {
+      handler.getItem(key, None, transaction).map { itemOption =>
+        itemOption match {
+          case None => null
+          case Some(item) => new Item(ByteBuffer.wrap(item.data), item.xid)
+        }
+      }
+    } catch {
+      case e: TooManyOpenTransactionsException => null
+    }
   }
   
   def multiget(key: String, maxItems: Int = 1, transaction: Boolean = false): Future[Seq[Item]] = {
-    Future(List())
+    val futureList = for(i <- 1 to maxItems) 
+      yield get(key, transaction)
+    val agg = Future.collect(futureList.toSeq)
+    agg.map(seq => seq.filter(_ != null))
   }
   
   def put(key: String, item: ByteBuffer): Future[Unit] = {
+    handler.setItem(key, 0, None, item.array)
     Future(())
   }
   
