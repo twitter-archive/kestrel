@@ -42,6 +42,8 @@ class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) wit
 
   override lazy val markdownTemplate = Source.fromFile("site/markdown.template").mkString
 
+  override def githubRemote = "github"
+
   // generate a jar that can be run for load tests.
   def loadTestJarFilename = "kestrel-tests-" + version.toString + ".jar"
   def loadTestPaths = ((testCompilePath ##) ***) +++ ((mainCompilePath ##) ***)
