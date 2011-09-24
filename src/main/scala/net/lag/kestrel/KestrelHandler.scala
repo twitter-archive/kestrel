@@ -74,7 +74,7 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
 
     def cancelAll() {
       synchronized {
-        val currentTransactions = transactions;
+        val currentTransactions = transactions
         transactions = createMap()
         currentTransactions
       }.foreach { case (name, xids) =>
@@ -100,7 +100,7 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
   protected def finish() {
     abortAnyTransaction()
 
-    if(finished.getAndSet(true) == false) {
+    if (finished.getAndSet(true) == false) {
       log.debug("End of session %d", sessionId)
       Kestrel.sessions.decrementAndGet()
     }
