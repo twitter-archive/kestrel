@@ -39,6 +39,8 @@ class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) wit
 
   override def subversionRepository = Some("http://svn.local.twitter.com/maven-public")
 
+  override def githubRemote = "github"
+
   // generate a jar that can be run for load tests.
   def loadTestJarFilename = "kestrel-tests-" + version.toString + ".jar"
   def loadTestPaths = ((testCompilePath ##) ***) +++ ((mainCompilePath ##) ***)
