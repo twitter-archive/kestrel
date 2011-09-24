@@ -31,7 +31,7 @@ import org.jboss.netty.util.{HashedWheelTimer, Timeout, Timer, TimerTask}
 import com.twitter.finagle.{ClientConnection, Service}
 import org.apache.thrift.protocol._
 import com.twitter.finagle.thrift._
-import net.lag.kestrel.thrift.Item 
+import net.lag.kestrel.thrift._
 
 class ThriftFinagledService(val handler: ThriftHandler, override val protocolFactory: TProtocolFactory) 
     extends net.lag.kestrel.thrift.Kestrel.FinagledService(handler, protocolFactory) {
@@ -75,7 +75,8 @@ class ThriftHandler (
         }
       }
     } catch {
-      case e: TooManyOpenTransactionsException => null
+      case e: TooManyOpenTransactionsException => 
+        throw new KestrelException("Too many open transactions.")
     }
   }
   
@@ -86,24 +87,32 @@ class ThriftHandler (
     agg.map(seq => seq.filter(_ != null))
   }
   
-  def put(key: String, item: ByteBuffer): Future[Unit] = {
-    handler.setItem(key, 0, None, item.array)
+  def put(key: String, item: ByteBuffer): Future[Boolean] = {
+    Future(handler.setItem(key, 0, None, item.array))
+  }
+  
+  def multiput(key: String, items: Seq[ByteBuffer]): Future[Int] = {
+    def putItemsUntilFirstFail(items: Seq[ByteBuffer], count: Int = 0): Int = {
+      if(items.isEmpty) count
+      else if(handler.setItem(key, 0, None, items.head.array)) 
+        putItemsUntilFirstFail(items.tail, count + 1)
+      else count
+    }
+    Future(putItemsUntilFirstFail(items))
+  }
+  
+  def confirm(key: String, xids: Set[Int]): Future[Unit] = {
+    for(xid <- xids) handler.confirmReliableRead(key, xid)
     Future(())
   }
   
-  def multiput(key: String, items: Seq[ByteBuffer]): Future[Unit] = {
-    Future(())
-  }
-  
-  def ack(key: String, xids: Set[Int]): Future[Unit] = {
-    Future(())
-  }
-  
-  def fail(key: String, xids: Set[Int]): Future[Unit] = {
+  def abort(key: String, xids: Set[Int]): Future[Unit] = { // TODO: abort
+    for(xid <- xids) handler.abortReliableRead(key, xid)
     Future(())
   }
   
   def flush(key: String): Future[Unit] = {
+    handler.flush(key)
     Future(())
   }
 }

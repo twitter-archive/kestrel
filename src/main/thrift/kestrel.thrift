@@ -1,6 +1,10 @@
 namespace java net.lag.kestrel.thrift
 namespace rb Kestrelthrift
 
+exception KestrelException {
+  1: string description
+}
+
 struct Item {
   /* the actual data */
   1: binary data
@@ -15,13 +19,13 @@ struct Item {
  * You should replace this with your actual service.
  */
 service Kestrel {
-  Item get(1: string queue_name, 2: bool transaction = 0)
-  list<Item> multiget(1: string queue_name, 2: i32 max_items = 1, 3: bool transaction = 0)
+  Item get(1: string queue_name, 2: bool reliable = 0)
+  list<Item> multiget(1: string queue_name, 2: i32 max_items = 1, 3: bool reliable = 0)
 
-  void put(1: string queue_name, 2: binary item)
-  void multiput(1: string queue_name, 2: list<binary> items)
+  bool put(1: string queue_name, 2: binary item)
+  i32 multiput(1: string queue_name, 2: list<binary> items)
 
-  void ack(1: string queue_name, 2: set<i32> xids)
-  void fail(1: string queue_name, 2: set<i32> xids)
+  void confirm(1: string queue_name, 2: set<i32> xids)
+  void abort(1: string queue_name, 2: set<i32> xids)
   void flush(1: string queue_name)
 }

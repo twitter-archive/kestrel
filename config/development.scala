@@ -8,8 +8,10 @@ new KestrelConfig {
   listenAddress = "0.0.0.0"
   memcacheListenPort = 22133
   textListenPort = 2222
+  thriftListenPort = 9999
 
-  queuePath = "/var/spool/kestrel"
+  //queuePath = "/var/spool/kestrel"
+  queuePath = "./data"
 
   clientTimeout = 30.seconds
 
@@ -67,6 +69,7 @@ new KestrelConfig {
     syncJournal = 10.milliseconds
   }
 
+/*
   loggers = new LoggerConfig {
     level = Level.INFO
     handlers = new FileHandlerConfig {
@@ -82,4 +85,5 @@ new KestrelConfig {
       roll = Policy.Never
     }
   }
+  */
 }

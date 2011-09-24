@@ -35,9 +35,9 @@ class KestrelHandler2(
 ) {
   private val log = Logger.get(getClass.getName)
 
-  object pendingRATransactions {  // pending Random Access Transactions.
+  object pendingReliableReads {  // pending Random Access Transactions.
                                   // used for syn, ack, fail
-    private val transactions = new mutable.HashMap[String, mutable.HashSet[Int]] {
+    private val reliableReadIds = new mutable.HashMap[String, mutable.HashSet[Int]] {
       override def default(key: String) = {
         val rv = new mutable.HashSet[Int]
         this(key) = rv
@@ -46,21 +46,21 @@ class KestrelHandler2(
     }
 
     def remove(name: String, xid: Int): Boolean = synchronized {
-      transactions(name).remove(xid)
+      reliableReadIds(name).remove(xid)
     }
 
     def add(name: String, xid: Int) = synchronized {
-      transactions(name) += xid
+      reliableReadIds(name) += xid
     }
 
-    def size(name: String): Int = synchronized { transactions(name).size }
+    def size(name: String): Int = synchronized { reliableReadIds(name).size }
 
     def cancelAll() {
       synchronized {
-        transactions.foreach { case (name, xids) =>
+        reliableReadIds.foreach { case (name, xids) =>
           xids.foreach { xid => queues.unremove(name, xid) }
         }
-        transactions.clear()
+        reliableReadIds.clear()
       }
     }
   }
@@ -79,53 +79,53 @@ class KestrelHandler2(
     queues.queueNames.foreach { qName => queues.flush(qName) }
   }
 
-  def failTransaction(key: String, xid: Int): Boolean = {
-    pendingRATransactions.remove(key, xid) match {
+  def abortReliableRead(key: String, xid: Int): Boolean = {
+    pendingReliableReads.remove(key, xid) match {
       case true =>
         log.debug("fail -> q=%s, xid=%d", key, xid)
         queues.unremove(key, xid)
         true
       case false =>
-        log.warning("Attempt to fail a non-existent transaction on '%s [xid=%d]' (sid %d, %s)",
+        log.warning("Attempt to fail a non-existent open on '%s [xid=%d]' (sid %d, %s)",
                     key, xid, sessionId, clientDescription)
         false
     }
   }
 
-  def ackTransaction(key: String, xid: Int): Boolean = {
-    pendingRATransactions.remove(key, xid) match {
+  def confirmReliableRead(key: String, xid: Int): Boolean = {
+    pendingReliableReads.remove(key, xid) match {
       case true =>
         log.debug("ack -> q=%s, xid=%d", key, xid)
         queues.confirmRemove(key, xid)
         true
       case false =>
-        log.warning("Attempt to ack a non-existent transaction on '%s [xid=%d]' (sid %d, %s)",
+        log.warning("Attempt to ack a non-existent open on '%s [xid=%d]' (sid %d, %s)",
                     key, xid, sessionId, clientDescription)
         false
     }
   }
 
-  def getItem(key: String, timeout: Option[Time], transaction: Boolean): Future[Option[QItem]] = {
-    if (pendingRATransactions.size(key) >= maxOpenTransactions) {
+  def getItem(key: String, timeout: Option[Time], open: Boolean): Future[Option[QItem]] = {
+    if (pendingReliableReads.size(key) >= maxOpenTransactions) {
       log.warning("Attempt to open too many transactions on '%s' (sid %d, %s)", key, sessionId,
                   clientDescription)
       throw TooManyOpenTransactionsException
     }
 
-    log.debug("get -> q=%s timeout=%s transaction?=%s", key, timeout, transaction)
+    log.debug("get -> q=%s timeout=%s open?=%s", key, timeout, open)
     Stats.incr("cmd_get")
 
-    queues.remove(key, timeout, transaction, false).map { itemOption =>
+    queues.remove(key, timeout, open, false).map { itemOption =>
       itemOption.foreach { item =>
         log.debug("get <- %s", item)
-        if (transaction) pendingRATransactions.add(key, item.xid)
+        if (open) pendingReliableReads.add(key, item.xid)
       }
       itemOption
     }
   }
 
   def abortAnyTransaction() {
-    pendingRATransactions.cancelAll()
+    pendingReliableReads.cancelAll()
   }
 
   def setItem(key: String, flags: Int, expiry: Option[Time], data: Array[Byte]) = {
