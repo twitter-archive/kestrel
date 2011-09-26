@@ -126,3 +126,38 @@ and `cars.950` should be ignored and deleted, but `cars.951` is still valid.
 Normally, if it doesn't crash, the packing process will delete these older
 files after creating the pack file. Then it will rename the pack file to
 remove the ".pack" extension.
+
+
+## Journal packing strategy
+
+To keep from using an infinite amount of disk space, kestrel has a few
+strategies for erasing or compressing old journal files.
+
+- If the queue is empty, then after `defaultJournalSize` (usually 16MB) of
+  journal is written, the file is erased and a new file is started. (This is
+  the normal "steady-state" operation mode.)
+
+- If the queue is not in read-behind (that is, all of the queue's contents
+  are in memory), and the journal files total more than `maxJournalSize`
+  (usually 1GB), then the journal is rewritten from scratch. We know that
+  will be no more than `maxMemorySize` (usually 128MB).
+
+- If the queue *is* in read-behind, a new journal file is started after each
+  `maxMemorySize` (usually 128MB). At the beginning of each new file, a
+  checkpoint is saved in memory with the current list of open transactions.
+
+  When the read-behind pointer reaches one of these checkpoints, the older
+  files are replaced with a much smaller file containing only:
+
+  - the list of open transactions (from the checkpoint)
+  - a list of newly opened transactions since the checkpoint
+  - a count of removed items since the checkpoint
+  - the items currently on the in-memory portion of the queue
+
+The cons to this strategy are:
+
+- Up to `maxMemorySize` (usually 128MB) will be rewritten during each
+  checkpoint.
+- If a kestrel has N live connections, up to N open transactions will be
+  written out during each checkpoint. For 50k connections, each holding a 1KB
+  transaction, that could be 50MB.
