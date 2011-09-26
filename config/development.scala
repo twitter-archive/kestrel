@@ -10,8 +10,7 @@ new KestrelConfig {
   textListenPort = 2222
   thriftListenPort = 9999
 
-  //queuePath = "/var/spool/kestrel"
-  queuePath = "./data"
+  queuePath = "/var/spool/kestrel"
 
   clientTimeout = 30.seconds
 

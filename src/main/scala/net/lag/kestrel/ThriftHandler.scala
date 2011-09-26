@@ -66,12 +66,13 @@ class ThriftHandler (
     "%s:%d".format(address.getHostName, address.getPort)
   }
 
-  def get(key: String, transaction: Boolean = false): Future[Item] = {
+  def get(key: String, reliable: Boolean = false): Future[Item] = {
     try {
-      handler.getItem(key, None, transaction).map { itemOption =>
+      handler.getItem(key, None, reliable).map { itemOption =>
         itemOption match {
           case None => null
-          case Some(item) => new Item(ByteBuffer.wrap(item.data), item.xid)
+          case Some(item) => new Item(ByteBuffer.wrap(item.data), 
+                                      if (reliable) Some(item.xid) else None)
         }
       }
     } catch {
@@ -80,9 +81,9 @@ class ThriftHandler (
     }
   }
   
-  def multiget(key: String, maxItems: Int = 1, transaction: Boolean = false): Future[Seq[Item]] = {
+  def multiget(key: String, maxItems: Int = 1, reliable: Boolean = false): Future[Seq[Item]] = {
     val futureList = for(i <- 1 to maxItems) 
-      yield get(key, transaction)
+      yield get(key, reliable)
     val agg = Future.collect(futureList.toSeq)
     agg.map(seq => seq.filter(_ != null))
   }

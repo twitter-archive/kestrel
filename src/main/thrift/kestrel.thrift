@@ -10,7 +10,7 @@ struct Item {
   1: binary data
 
   /* transaction ID, to be used in the `confirm` call */
-  2: i32 xid
+  2: optional i32 xid
 }
 
 

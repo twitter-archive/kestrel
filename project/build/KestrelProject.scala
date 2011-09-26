@@ -40,6 +40,9 @@ class KestrelProject(info: ProjectInfo)
   override def subversionRepository = Some("http://svn.local.twitter.com/maven-public")
 
 //  override def fork = forkRun(List("-Xmx1024m", "-verbosegc", "-XX:+PrintGCDetails"))
+  lazy val protocolTest = task { args =>
+    runTask(Some("net.lag.kestrel.load.ProtocolTest"), testClasspath, args).dependsOn(testCompile)
+  } describedAs "Run a load test on different protocols."
 
   lazy val putMany = task { args =>
     runTask(Some("net.lag.kestrel.load.PutMany"), testClasspath, args).dependsOn(testCompile)
