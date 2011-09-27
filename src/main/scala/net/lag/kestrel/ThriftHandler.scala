@@ -54,10 +54,8 @@ class ThriftHandler (
   protected val handler = new KestrelHandler2(queueCollection, maxOpenTransactions, clientDescription, sessionId)
   log.debug("New session %d from %s", sessionId, clientDescription)
 
-  println("New Session")
-
   def release() {
-    println("Close Session")
+    log.debug("Ending session %d from %s", sessionId, clientDescription)
     handler.finish()
   }
 
