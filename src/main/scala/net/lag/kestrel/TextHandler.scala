@@ -146,14 +146,14 @@ class TextHandler(
           val queueName = request.args(0)
           try {
             val timeout = request.args.drop(1).headOption.map { _.toInt.milliseconds.fromNow }
-            handler.closeAllTransactions(queueName)
+            handler.closeAllReads(queueName)
             handler.getItem(queueName, timeout, true, false).map { item =>
               ItemResponse(item.map { _.data })
             }
           } catch {
             case e: NumberFormatException =>
               Future(ErrorResponse("Error parsing timeout."))
-            case e: TooManyOpenTransactionsException =>
+            case e: TooManyOpenReadsException =>
               Future(ErrorResponse("Too many open transactions; limit=" + maxOpenTransactions))
           }
         }
@@ -165,7 +165,7 @@ class TextHandler(
           val queueName = request.args(0)
           try {
             val timeout = request.args.drop(1).headOption.map { _.toInt.milliseconds.fromNow }
-            handler.closeAllTransactions(queueName)
+            handler.closeAllReads(queueName)
             handler.getItem(queueName, timeout, false, true).map { item =>
               ItemResponse(item.map { _.data })
             }
@@ -181,7 +181,7 @@ class TextHandler(
         } else {
           val queueName = request.args(0)
           val timeout = request.args(1).toInt.milliseconds.fromNow
-          handler.closeAllTransactions(queueName)
+          handler.closeAllReads(queueName)
           val channel = new LatchedChannelSource[TextResponse]
           handler.monitorUntil(queueName, timeout) {
             case None =>
@@ -199,7 +199,7 @@ class TextHandler(
         } else {
           val queueName = request.args(0)
           val count = request.args(1).toInt
-          if (handler.closeTransactions(queueName, count)) {
+          if (handler.closeReads(queueName, count)) {
             Future(CountResponse(count))
           } else {
             Future(ErrorResponse("Not that many transactions open."))

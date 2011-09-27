@@ -29,6 +29,36 @@ import config._
 class FakeKestrelHandler(queues: QueueCollection, maxOpenTransactions: Int)
   extends KestrelHandler(queues, maxOpenTransactions, "none", 0)
 
+class ItemIdListSpec extends Specification with TestLogging {
+  "ItemIdList" should {
+    "add and pop" in {
+      val x = new ItemIdList()
+      x.add(Seq(5, 4))
+      x.size mustEqual 2
+      x.pop() mustEqual Some(5)
+      x.pop() mustEqual Some(4)
+      x.pop() mustEqual None
+    }
+
+    "remove from the middle" in {
+      val x = new ItemIdList()
+      x.add(Seq(7, 6, 5, 4, 3, 2))
+      x.pop() mustEqual Some(7)
+      x.remove(Set(5, 4, 2)) mustEqual 3
+      x.popAll() mustEqual Seq(6, 3)
+    }
+
+    "remove and pop combined" in {
+      val x = new ItemIdList()
+      x.add(Seq(7, 6, 5, 4, 3, 2))
+      x.remove(Set(6)) mustEqual 1
+      x.pop() mustEqual Some(7)
+      x.pop() mustEqual Some(5)
+      x.popAll() mustEqual Seq(4, 3, 2)
+    }
+  }
+}
+
 class KestrelHandlerSpec extends Specification with TempFolder with TestLogging {
   val config = new QueueBuilder().apply()
 
@@ -87,21 +117,21 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
       }
     }
 
-    "abort and confirm a transaction" in {
+    "abort and confirm a read" in {
       withTempFolder {
         queues = new QueueCollection(folderName, timer, config, Nil)
         val handler = new FakeKestrelHandler(queues, 10)
         handler.setItem("test", 0, None, "one".getBytes)
         handler.getItem("test", None, true, false)() must beString("one")
         handler.getItem("test", None, true, false)() mustEqual None
-        handler.abortTransaction("test") mustEqual true
+        handler.abortRead("test") mustEqual true
         handler.getItem("test", None, true, false)() must beString("one")
-        handler.closeTransaction("test") mustEqual true
+        handler.closeRead("test") mustEqual true
         handler.getItem("test", None, true, false)() mustEqual None
       }
     }
 
-    "open several transactions" in {
+    "open several read" in {
       "on one queue" in {
         withTempFolder {
           queues = new QueueCollection(folderName, timer, config, Nil)
@@ -111,11 +141,11 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
           handler.setItem("test", 0, None, "three".getBytes)
           handler.getItem("test", None, true, false)() must beString("one")
           handler.getItem("test", None, true, false)() must beString("two")
-          handler.abortTransaction("test") mustEqual true
+          handler.abortRead("test") mustEqual true
           handler.getItem("test", None, true, false)() must beString("one")
-          handler.closeTransaction("test") mustEqual true
+          handler.closeRead("test") mustEqual true
           handler.getItem("test", None, true, false)() must beString("three")
-          handler.abortTransaction("test") mustEqual true
+          handler.abortRead("test") mustEqual true
           handler.getItem("test", None, true, false)() must beString("one")
         }
       }
@@ -134,33 +164,33 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
           handler.getItem("red", None, true, false)() must beString("red1")
           handler.getItem("green", None, true, false)() must beString("green1")
           handler.getItem("blue", None, true, false)() must beString("blue1")
-          handler.abortTransaction("green") mustEqual true
+          handler.abortRead("green") mustEqual true
 
           handler.getItem("red", None, true, false)() must beString("red2")
-          handler.closeTransaction("red") mustEqual true
-          handler.closeTransaction("red") mustEqual true
+          handler.closeRead("red") mustEqual true
+          handler.closeRead("red") mustEqual true
           handler.getItem("red", None, true, false)() mustEqual None
 
           handler.getItem("green", None, true, false)() must beString("green1")
-          handler.closeTransaction("blue") mustEqual true
-          handler.abortTransaction("green") mustEqual true
+          handler.closeRead("blue") mustEqual true
+          handler.abortRead("green") mustEqual true
           handler.getItem("blue", None, true, false)() must beString("blue2")
           handler.getItem("green", None, true, false)() must beString("green1")
         }
       }
 
-      "but not if transactions are limited" in {
+      "but not if open reads are limited" in {
         withTempFolder {
           queues = new QueueCollection(folderName, timer, config, Nil)
           val handler = new FakeKestrelHandler(queues, 1)
           handler.setItem("red", 0, None, "red1".getBytes)
           handler.setItem("red", 0, None, "red2".getBytes)
           handler.getItem("red", None, true, false)() must beString("red1")
-          handler.getItem("red", None, true, false)() must throwA[TooManyOpenTransactionsException]
+          handler.getItem("red", None, true, false)() must throwA[TooManyOpenReadsException]
         }
       }
 
-      "close all transactions" in {
+      "close all reads" in {
         withTempFolder {
           queues = new QueueCollection(folderName, timer, config, Nil)
           val handler = new FakeKestrelHandler(queues, 2)
@@ -168,9 +198,9 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
           handler.setItem("red", 0, None, "red2".getBytes)
           handler.getItem("red", None, true, false)() must beString("red1")
           handler.getItem("red", None, true, false)() must beString("red2")
-          handler.closeAllTransactions("red") mustEqual 2
-          handler.abortTransaction("red") mustEqual false
-          handler.pendingTransactions.size("red") mustEqual 0
+          handler.closeAllReads("red") mustEqual 2
+          handler.abortRead("red") mustEqual false
+          handler.pendingReads.size("red") mustEqual 0
         }
       }
     }

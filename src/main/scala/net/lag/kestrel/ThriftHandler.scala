@@ -74,7 +74,7 @@ class ThriftHandler (
         }
       }
     } catch {
-      case e: TooManyOpenTransactionsException => 
+      case e: TooManyOpenReadsException => 
         throw new KestrelException("Too many open transactions.")
     }
   }

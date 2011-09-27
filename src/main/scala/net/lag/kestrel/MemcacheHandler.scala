@@ -63,7 +63,7 @@ class MemcacheHandler(
       case "monitor" =>
         Future(monitor(request.line(1), request.line(2).toInt))
       case "confirm" =>
-        if (handler.closeTransactions(request.line(1), request.line(2).toInt)) {
+        if (handler.closeReads(request.line(1), request.line(2).toInt)) {
           Future(new MemcacheResponse("END"))
         } else {
           Future(new MemcacheResponse("ERROR"))
@@ -149,14 +149,14 @@ class MemcacheHandler(
     }
 
     if (aborting) {
-      handler.abortTransaction(key)
+      handler.abortRead(key)
       Future(new MemcacheResponse("END"))
     } else {
       if (closing) {
-        handler.closeTransaction(key)
+        handler.closeRead(key)
       }
       if (opening || !closing) {
-        if (handler.pendingTransactions.size(key) > 0 && !peeking && !opening) {
+        if (handler.pendingReads.size(key) > 0 && !peeking && !opening) {
           log.warning("Attempt to perform a non-transactional fetch with an open transaction on " +
                       " '%s' (sid %d, %s)", key, sessionId, clientDescription)
           return Future(new MemcacheResponse("ERROR") then Codec.Disconnect)
@@ -171,7 +171,7 @@ class MemcacheHandler(
             }
           }
         } catch {
-          case e: TooManyOpenTransactionsException =>
+          case e: TooManyOpenReadsException =>
             Future(new MemcacheResponse("ERROR") then Codec.Disconnect)
         }
       } else {

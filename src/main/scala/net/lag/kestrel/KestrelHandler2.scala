@@ -109,7 +109,7 @@ class KestrelHandler2(
     if (pendingReliableReads.size(key) >= maxOpenTransactions) {
       log.warning("Attempt to open too many transactions on '%s' (sid %d, %s)", key, sessionId,
                   clientDescription)
-      throw TooManyOpenTransactionsException
+      throw TooManyOpenReadsException
     }
 
     log.debug("get -> q=%s timeout=%s open?=%s", key, timeout, open)
