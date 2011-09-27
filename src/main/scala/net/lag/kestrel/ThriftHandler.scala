@@ -66,7 +66,7 @@ class ThriftHandler (
     "%s:%d".format(address.getHostName, address.getPort)
   }
 
-  def get(key: String, reliable: Boolean = false): Future[Item] = {
+  private def internalGet(key: String, reliable: Boolean = false): Future[Item] = {
     try {
       handler.getItem(key, None, reliable).map { itemOption =>
         itemOption match {
@@ -81,18 +81,14 @@ class ThriftHandler (
     }
   }
   
-  def multiget(key: String, maxItems: Int = 1, reliable: Boolean = false): Future[Seq[Item]] = {
+  def get(key: String, maxItems: Int = 1, reliable: Boolean = false): Future[Seq[Item]] = {
     val futureList = for(i <- 1 to maxItems) 
-      yield get(key, reliable)
+      yield internalGet(key, reliable)
     val agg = Future.collect(futureList.toSeq)
     agg.map(seq => seq.filter(_ != null))
   }
   
-  def put(key: String, item: ByteBuffer): Future[Boolean] = {
-    Future(handler.setItem(key, 0, None, item.array))
-  }
-  
-  def multiput(key: String, items: Seq[ByteBuffer]): Future[Int] = {
+  def put(key: String, items: Seq[ByteBuffer]): Future[Int] = {
     def putItemsUntilFirstFail(items: Seq[ByteBuffer], count: Int = 0): Int = {
       if(items.isEmpty) count
       else if(handler.setItem(key, 0, None, items.head.array)) 

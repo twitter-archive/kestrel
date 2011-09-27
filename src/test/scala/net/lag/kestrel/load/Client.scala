@@ -38,18 +38,20 @@ object Client {
 
 trait Client {
     def put(queueName: String, n: Int, data: String)
+    def flush(queueName: String)
+    def release() {}
 }
 
 class MemcacheClient(hostname: String, port: Int) extends Client {
 
-    private val EXPECT = ByteBuffer.wrap("STORED\r\n".getBytes)
+    private val STORED = ByteBuffer.wrap("STORED\r\n".getBytes)
+    private val END = ByteBuffer.wrap("END\r\n".getBytes)
     private val socket = SocketChannel.open(new InetSocketAddress(hostname, port))
 
     def put(queueName: String, n: Int, data: String) {
       val spam = ByteBuffer.wrap(("set " + queueName + " 0 0 " + data.length + "\r\n" + data + "\r\n").getBytes)
       val buffer = ByteBuffer.allocate(8)
       for (i <- 0 until n) {
-        val startTime = System.nanoTime
         spam.rewind
         while (spam.position < spam.limit) {
           socket.write(spam)
@@ -59,12 +61,35 @@ class MemcacheClient(hostname: String, port: Int) extends Client {
           socket.read(buffer)
         }
         buffer.rewind
-        EXPECT.rewind
-        if (buffer != EXPECT) {
+        STORED.rewind
+        if (buffer != STORED) {
           // the "!" is important.
           throw new Exception("Unexpected response at " + i + "!")
         }
       }
+    }
+
+    def flush(queueName: String) {
+      val spam = ByteBuffer.wrap(("FLUSH " + queueName + "\r\n").getBytes)
+      val buffer = ByteBuffer.allocate(5)
+
+      spam.rewind
+      while (spam.position < spam.limit) {
+        socket.write(spam)
+      }
+      buffer.rewind
+      while (buffer.position < buffer.limit) {
+        socket.read(buffer)
+      }
+      buffer.rewind
+      END.rewind
+      if (buffer != END) {
+        throw new Exception("Unexpected response.")
+      }
+    }
+
+    override def release() {
+      socket.close()
     }
 }
 
@@ -73,16 +98,34 @@ class ThriftClient(hostname: String, port: Int) extends Client {
     val address = new InetSocketAddress(hostname, port)
 
     val service: Service[ThriftClientRequest, Array[Byte]] = ClientBuilder()
-      .hosts(address).codec(ThriftClientFramedCodec()).hostConnectionLimit(1).build()
+      .hosts(address).codec(ThriftClientFramedCodec()).hostConnectionLimit(100).build()
 
     val client = new net.lag.kestrel.thrift.Kestrel.FinagledClient(service, new TBinaryProtocol.Factory())
 
+    val batchSize = 1000
+
     def put(queueName: String, n: Int, data: String) {
-      for (i <- 0 until n) {
-        if(!client.put("work3", ByteBuffer.wrap(data.getBytes))()) {
-            throw new Exception("Unexpected Response")
+      val rawData = ByteBuffer.wrap(data.getBytes)
+
+      val batchRawData = List.range(0,batchSize).map((x) => rawData)
+      
+      val putfn = (n: Int) => {
+        val count : Int = client.put(queueName, batchRawData.take(n))()
+        if(count != n) {
+            throw new Exception("Failed to put " + (n - count) + " items on the queue.")
         }
       }
+
+      for (i <- 1 to n/batchSize) putfn(batchSize)
+      putfn(n%batchSize)
+    }
+
+    def flush(queueName: String) {
+      client.flush(queueName)
+    }
+
+    override def release() {
+      service.release()
     }
 }
 // vim: set ts=4 sw=4 et:

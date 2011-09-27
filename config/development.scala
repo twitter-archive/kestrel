@@ -68,7 +68,6 @@ new KestrelConfig {
     syncJournal = 10.milliseconds
   }
 
-/*
   loggers = new LoggerConfig {
     level = Level.INFO
     handlers = new FileHandlerConfig {
@@ -84,5 +83,4 @@ new KestrelConfig {
       roll = Policy.Never
     }
   }
-  */
 }

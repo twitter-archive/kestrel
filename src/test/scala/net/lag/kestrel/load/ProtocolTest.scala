@@ -123,15 +123,20 @@ object ProtocolTest {
       }
     }
 
+    val protocolIf2 = Client.create(protocol, hostname, port)
+    protocolIf2.flush("spam")
+    protocolIf2.release()
+
     var threadList: List[Thread] = Nil
     val startTime = System.currentTimeMillis
 
     for (i <- 0 until clientCount) {
       val t = new Thread {
         override def run = {
-          val qName = "spam" + (i % totalQueues)
+          val qName = "spam" // + (i % totalQueues)
           val protocolIf = Client.create(protocol, hostname, port)
           protocolIf.put(qName, totalItems / clientCount, rawData.toString)
+          protocolIf.release()
         }
       }
       threadList = t :: threadList
