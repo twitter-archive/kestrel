@@ -103,10 +103,10 @@ case class StringResponse(message: String) extends TextResponse {
 class TextHandler(
   connection: ClientConnection,
   queueCollection: QueueCollection,
-  maxOpenTransactions: Int
+  maxOpenReads: Int
 ) extends Service[TextRequest, TextResponse] {
   val sessionId = Kestrel.sessionId.incrementAndGet()
-  val handler = new KestrelHandler(queueCollection, maxOpenTransactions, clientDescription, sessionId)
+  val handler = new KestrelHandler(queueCollection, maxOpenReads, clientDescription, sessionId)
 
   protected def clientDescription: String = {
     val address = connection.remoteAddress.asInstanceOf[InetSocketAddress]
@@ -154,7 +154,7 @@ class TextHandler(
             case e: NumberFormatException =>
               Future(ErrorResponse("Error parsing timeout."))
             case e: TooManyOpenReadsException =>
-              Future(ErrorResponse("Too many open transactions; limit=" + maxOpenTransactions))
+              Future(ErrorResponse("Too many open transactions; limit=" + maxOpenReads))
           }
         }
       case "peek" =>
@@ -183,7 +183,7 @@ class TextHandler(
           val timeout = request.args(1).toInt.milliseconds.fromNow
           handler.closeAllReads(queueName)
           val channel = new LatchedChannelSource[TextResponse]
-          handler.monitorUntil(queueName, timeout) {
+          handler.monitorUntil(queueName, Some(timeout), maxOpenReads, true) {
             case None =>
               channel.send(ItemResponse(None))
               channel.close()

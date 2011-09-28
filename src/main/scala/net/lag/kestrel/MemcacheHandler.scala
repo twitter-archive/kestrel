@@ -34,12 +34,12 @@ import com.twitter.util.{Future, Duration, Time}
 class MemcacheHandler(
   connection: ClientConnection,
   queueCollection: QueueCollection,
-  maxOpenTransactions: Int
+  maxOpenReads: Int
 ) extends Service[MemcacheRequest, MemcacheResponse] {
   val log = Logger.get(getClass.getName)
 
   val sessionId = Kestrel.sessionId.incrementAndGet()
-  protected val handler = new KestrelHandler(queueCollection, maxOpenTransactions, clientDescription, sessionId)
+  protected val handler = new KestrelHandler(queueCollection, maxOpenReads, clientDescription, sessionId)
   log.debug("New session %d from %s", sessionId, clientDescription)
 
   override def release() {
@@ -182,7 +182,7 @@ class MemcacheHandler(
 
   private def monitor(key: String, timeout: Int): MemcacheResponse = {
     val channel = new LatchedChannelSource[MemcacheResponse]
-    handler.monitorUntil(key, Time.now + timeout.seconds) {
+    handler.monitorUntil(key, Some(Time.now + timeout.seconds), maxOpenReads, true) {
       case None =>
         channel.send(new MemcacheResponse("END"))
         channel.close()

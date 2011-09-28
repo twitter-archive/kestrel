@@ -17,97 +17,104 @@
 
 package net.lag.kestrel
 
+import com.twitter.conversions.time._
+import com.twitter.finagle.{ClientConnection}
+import com.twitter.logging.Logger
+import com.twitter.util.{Future, Promise}
 import java.net.InetSocketAddress
+import java.nio.ByteBuffer
+import org.apache.thrift.protocol.TProtocolFactory
 import scala.collection.mutable
 import scala.collection.Set
-import com.twitter.util._
-import config._
-import net.lag.kestrel._
-import net.lag.kestrel.config._
-import java.nio.ByteBuffer
-import com.twitter.logging.Logger
-import java.util.concurrent.{TimeUnit}
-import org.jboss.netty.util.{HashedWheelTimer, Timeout, Timer, TimerTask}
-import com.twitter.finagle.{ClientConnection, Service}
-import org.apache.thrift.protocol._
-import com.twitter.finagle.thrift._
-import net.lag.kestrel.thrift._
 
-class ThriftFinagledService(val handler: ThriftHandler, override val protocolFactory: TProtocolFactory) 
-    extends net.lag.kestrel.thrift.Kestrel.FinagledService(handler, protocolFactory) {
-    
-    override def release() {
-        handler.release()
-        super.release()
-    }
+class ThriftFinagledService(val handler: ThriftHandler, override val protocolFactory: TProtocolFactory)
+  extends thrift.Kestrel.FinagledService(handler, protocolFactory) {
+
+  override def release() {
+    handler.release()
+    super.release()
+  }
 }
 
 class ThriftHandler (
   connection: ClientConnection,
   queueCollection: QueueCollection,
-  maxOpenTransactions: Int
-) extends net.lag.kestrel.thrift.Kestrel.FutureIface {
-
+  maxOpenReads: Int
+) extends thrift.Kestrel.FutureIface {
   val log = Logger.get(getClass.getName)
 
   val sessionId = Kestrel.sessionId.incrementAndGet()
-  protected val handler = new KestrelHandler2(queueCollection, maxOpenTransactions, clientDescription, sessionId)
+  protected val handler = new KestrelHandler(queueCollection, maxOpenReads, clientDescription, sessionId)
   log.debug("New session %d from %s", sessionId, clientDescription)
-
-  def release() {
-    log.debug("Ending session %d from %s", sessionId, clientDescription)
-    handler.finish()
-  }
 
   protected def clientDescription: String = {
     val address = connection.remoteAddress.asInstanceOf[InetSocketAddress]
     "%s:%d".format(address.getHostName, address.getPort)
   }
 
-  private def internalGet(key: String, reliable: Boolean = false): Future[Item] = {
-    try {
-      handler.getItem(key, None, reliable).map { itemOption =>
-        itemOption match {
-          case None => null
-          case Some(item) => new Item(ByteBuffer.wrap(item.data), 
-                                      if (reliable) Some(item.xid) else None)
+  def put(queueName: String, items: Seq[ByteBuffer], expirationMsec: Int): Future[Int] = {
+    var count = 0
+    var expiry = if (expirationMsec == 0) None else Some(expirationMsec.milliseconds.fromNow)
+    items.foreach { item =>
+      val data = new Array[Byte](item.remaining)
+      item.get(data)
+      if (!handler.setItem(queueName, 0, expiry, data)) return Future(count)
+      count += 1
+    }
+    Future(count)
+  }
+
+  def get(queueName: String, maxItems: Int, timeoutMsec: Int, autoConfirm: Boolean): Future[Seq[thrift.Item]] = {
+    val expiry = if (timeoutMsec == 0) None else Some(timeoutMsec.milliseconds.fromNow)
+    val future = new Promise[Seq[thrift.Item]]()
+    val rv = new mutable.ListBuffer[thrift.Item]()
+    handler.monitorUntil(queueName, expiry, maxItems, !autoConfirm) { itemOption =>
+      itemOption match {
+        case None => {
+          future.setValue(rv.toList)
+        }
+        case Some(item) => {
+          rv += new thrift.Item(ByteBuffer.wrap(item.data), item.xid)
         }
       }
-    } catch {
-      case e: TooManyOpenReadsException => 
-        throw new KestrelException("Too many open transactions.")
     }
+    future
   }
-  
-  def get(key: String, maxItems: Int = 1, reliable: Boolean = false): Future[Seq[Item]] = {
-    val futureList = for(i <- 1 to maxItems) 
-      yield internalGet(key, reliable)
-    val agg = Future.collect(futureList.toSeq)
-    agg.map(seq => seq.filter(_ != null))
+
+  def confirm(queueName: String, xids: Set[Int]): Future[Int] = {
+    Future(handler.closeReads(queueName, xids))
   }
-  
-  def put(key: String, items: Seq[ByteBuffer]): Future[Int] = {
-    def putItemsUntilFirstFail(items: Seq[ByteBuffer], count: Int = 0): Int = {
-      if(items.isEmpty) count
-      else if(handler.setItem(key, 0, None, items.head.array)) 
-        putItemsUntilFirstFail(items.tail, count + 1)
-      else count
-    }
-    Future(putItemsUntilFirstFail(items))
+
+  def abort(queueName: String, xids: Set[Int]): Future[Int] = {
+    Future(handler.abortReads(queueName, xids))
   }
-  
-  def confirm(key: String, xids: Set[Int]): Future[Unit] = {
-    for(xid <- xids) handler.confirmReliableRead(key, xid)
-    Future(())
+
+  // FIXME
+  def peek(queueName: String): Future[thrift.QueueInfo] = null
+
+  def flush(queueName: String): Future[Unit] = {
+    handler.flush(queueName)
+    Future.Unit
   }
-  
-  def abort(key: String, xids: Set[Int]): Future[Unit] = { // TODO: abort
-    for(xid <- xids) handler.abortReliableRead(key, xid)
-    Future(())
+
+  def deleteQueue(queueName: String): Future[Unit] = {
+    handler.delete(queueName)
+    Future.Unit
   }
-  
-  def flush(key: String): Future[Unit] = {
-    handler.flush(key)
-    Future(())
+
+  def getVersion(): Future[String] = Future(Kestrel.runtime.jarVersion)
+
+  def flushAll(): Future[Unit] = {
+    handler.flushAllQueues()
+    Future.Unit
+  }
+
+  def flushAllExpired(): Future[Int] = {
+    Future(queueCollection.flushAllExpired())
+  }
+
+  def release() {
+    log.debug("Ending session %d from %s", sessionId, clientDescription)
+    handler.finish()
   }
 }

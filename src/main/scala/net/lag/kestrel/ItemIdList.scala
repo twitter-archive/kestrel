@@ -1,6 +1,8 @@
 package net.lag.kestrel
 
 import scala.annotation.tailrec
+import scala.collection.mutable
+import scala.collection.Set
 
 /**
  * Set of ids that maintains insert order.
@@ -55,18 +57,18 @@ class ItemIdList {
     rv
   }
 
-  def remove(xids: Set[Int]): Int = {
+  def remove(xids: Set[Int]): Set[Int] = {
     var n = head
-    var count = 0
+    val removed = new mutable.HashSet[Int]
     while (n < tail) {
       if (xids contains ids(n)) {
+        removed += ids(n)
         ids(n) = 0
-        count += 1
       }
       n += 1
     }
     compact()
-    count
+    removed.toSet
   }
 
   // for tests:

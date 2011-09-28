@@ -17,12 +17,13 @@
 
 package net.lag.kestrel
 
-import scala.collection.mutable
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.ostrich.admin.{BackgroundProcess, ServiceTracker}
 import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{Future, Duration, Time}
+import scala.collection.mutable
+import scala.collection.Set
 
 class TooManyOpenReadsException extends Exception("Too many open reads.")
 object TooManyOpenReadsException extends TooManyOpenReadsException
@@ -53,7 +54,7 @@ class KestrelHandler(
     def size(name: String): Int = synchronized { reads(name).size }
     def popAll(name: String): Seq[Int] = synchronized { reads(name).popAll() }
     def peek(name: String): Seq[Int] = synchronized { reads(name).peek() }
-    def remove(name: String, ids: Set[Int]): Int = synchronized { reads(name).remove(ids) }
+    def remove(name: String, ids: Set[Int]): Set[Int] = synchronized { reads(name).remove(ids) }
 
     def cancelAll() {
       synchronized {
@@ -111,6 +112,18 @@ class KestrelHandler(
     xids.size > 0
   }
 
+  def closeReads(key: String, xids: Set[Int]): Int = {
+    val real = pendingReads.remove(key, xids)
+    real.foreach { xid => queues.confirmRemove(key, xid) }
+    real.size
+  }
+
+  def abortReads(key: String, xids: Set[Int]): Int = {
+    val real = pendingReads.remove(key, xids)
+    real.foreach { xid => queues.unremove(key, xid) }
+    real.size
+  }
+
   def closeAllReads(key: String): Int = {
     val xids = pendingReads.popAll(key)
     xids.foreach { xid => queues.confirmRemove(key, xid) }
@@ -118,17 +131,17 @@ class KestrelHandler(
   }
 
   // will do a continuous fetch on a queue until time runs out or read buffer is full.
-  final def monitorUntil(key: String, timeLimit: Time)(f: Option[QItem] => Unit) {
-    if (timeLimit <= Time.now || pendingReads.size(key) >= maxOpenReads) {
+  final def monitorUntil(key: String, timeLimit: Option[Time], maxItems: Int, opening: Boolean)(f: Option[QItem] => Unit) {
+    if (maxItems == 0 || (timeLimit.isDefined && timeLimit.get <= Time.now) || pendingReads.size(key) >= maxOpenReads) {
       f(None)
     } else {
-      queues.remove(key, Some(timeLimit), true, false).onSuccess {
+      queues.remove(key, timeLimit, opening, false).onSuccess {
         case None =>
           f(None)
         case x @ Some(item) =>
           pendingReads.add(key, item.xid)
           f(x)
-          monitorUntil(key, timeLimit)(f)
+          monitorUntil(key, timeLimit, maxItems - 1, opening)(f)
       }
     }
   }

@@ -18,6 +18,7 @@
 package net.lag.kestrel
 
 import java.io.{File, FileInputStream}
+import scala.collection.mutable
 import scala.util.Sorting
 import com.twitter.conversions.time._
 import com.twitter.ostrich.stats.Stats
@@ -44,14 +45,14 @@ class ItemIdListSpec extends Specification with TestLogging {
       val x = new ItemIdList()
       x.add(Seq(7, 6, 5, 4, 3, 2))
       x.pop() mustEqual Some(7)
-      x.remove(Set(5, 4, 2)) mustEqual 3
+      x.remove(Set(5, 4, 2)) mustEqual Set(5, 4, 2)
       x.popAll() mustEqual Seq(6, 3)
     }
 
     "remove and pop combined" in {
       val x = new ItemIdList()
       x.add(Seq(7, 6, 5, 4, 3, 2))
-      x.remove(Set(6)) mustEqual 1
+      x.remove(Set(6)) mustEqual Set(6)
       x.pop() mustEqual Some(7)
       x.pop() mustEqual Some(5)
       x.popAll() mustEqual Seq(4, 3, 2)
@@ -131,7 +132,7 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
       }
     }
 
-    "open several read" in {
+    "open several reads" in {
       "on one queue" in {
         withTempFolder {
           queues = new QueueCollection(folderName, timer, config, Nil)
@@ -187,6 +188,21 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
           handler.setItem("red", 0, None, "red2".getBytes)
           handler.getItem("red", None, true, false)() must beString("red1")
           handler.getItem("red", None, true, false)() must throwA[TooManyOpenReadsException]
+        }
+      }
+
+      "obey maxItems" in {
+        withTempFolder {
+          queues = new QueueCollection(folderName, timer, config, Nil)
+          val handler = new FakeKestrelHandler(queues, 5)
+          val got = new mutable.ListBuffer[QItem]()
+          handler.setItem("red", 0, None, "red1".getBytes)
+          handler.setItem("red", 0, None, "red2".getBytes)
+          handler.setItem("red", 0, None, "red3".getBytes)
+          handler.monitorUntil("red", Some(1.hour.fromNow), 2, true) { itemOption =>
+            itemOption.foreach { got += _ }
+          }
+          got.toList.map { x => new String(x.data) } mustEqual List("red1", "red2")
         }
       }
 
