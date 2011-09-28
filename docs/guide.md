@@ -110,14 +110,14 @@ GMT.
 
 Expiration times are immediately translated into an absolute time, in
 *milliseconds*, and if it's further in the future than the queue's `maxAge`,
-the `max_Age` is used instead. An expiration of 0, which is usually the
+the `maxAge` is used instead. An expiration of 0, which is usually the
 default, means an item never expires.
 
 Expired items are flushed from a queue whenever a new item is added or
 removed. An idle queue won't have any items expired, but you can trigger a
 check by doing a "peek" on it.
 
-The global config option `expirationTimerFrequency_seconds` can be used to
+The global config option `expirationTimerFrequency` can be used to
 start a background thread that periodically removes expired items from the
 head of each queue. See `README.md` file for more.
 

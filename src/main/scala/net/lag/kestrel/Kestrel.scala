@@ -172,12 +172,18 @@ object Kestrel {
   val sessionId = new AtomicInteger()
 
   def main(args: Array[String]): Unit = {
-    runtime = RuntimeEnvironment(this, args)
-    kestrel = runtime.loadRuntimeConfig[Kestrel]()
+    try {
+      runtime = RuntimeEnvironment(this, args)
+      kestrel = runtime.loadRuntimeConfig[Kestrel]()
 
-    Stats.addGauge("connections") { sessions.get().toDouble }
+      Stats.addGauge("connections") { sessions.get().toDouble }
 
-    kestrel.start()
+      kestrel.start()
+    } catch {
+      case e =>
+        log.error(e, "Exception during startup; exiting!")
+        System.exit(1)
+    }
     log.info("Kestrel %s started.", runtime.jarVersion)
   }
 

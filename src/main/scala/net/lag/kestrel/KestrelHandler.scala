@@ -23,6 +23,7 @@ import com.twitter.logging.Logger
 import com.twitter.ostrich.admin.{BackgroundProcess, ServiceTracker}
 import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{Future, Duration, Time}
+import java.util.concurrent.atomic.AtomicBoolean
 
 class TooManyOpenTransactionsException extends Exception("Too many open transactions.")
 object TooManyOpenTransactionsException extends TooManyOpenTransactionsException
@@ -38,12 +39,18 @@ class KestrelHandler(
 ) {
   private val log = Logger.get(getClass.getName)
 
+  val finished = new AtomicBoolean(false)
+
   object pendingTransactions {
-    private val transactions = new mutable.HashMap[String, mutable.ListBuffer[Int]] {
-      override def default(key: String) = {
-        val rv = new mutable.ListBuffer[Int]
-        this(key) = rv
-        rv
+    private var transactions = createMap()
+
+    private def createMap() = {
+      new mutable.HashMap[String, mutable.ListBuffer[Int]] {
+        override def default(key: String) = {
+          val rv = new mutable.ListBuffer[Int]
+          this(key) = rv
+          rv
+        }
       }
     }
 
@@ -71,10 +78,11 @@ class KestrelHandler(
 
     def cancelAll() {
       synchronized {
-        transactions.foreach { case (name, xids) =>
-          xids.foreach { xid => queues.unremove(name, xid) }
-        }
-        transactions.clear()
+        val currentTransactions = transactions
+        transactions = createMap()
+        currentTransactions
+      }.foreach { case (name, xids) =>
+        xids.foreach { xid => queues.unremove(name, xid) }
       }
     }
 
@@ -92,9 +100,12 @@ class KestrelHandler(
 
   // usually called when netty sends a disconnect signal.
   def finish() {
-    log.debug("End of session %d", sessionId)
     abortAnyTransaction()
-    Kestrel.sessions.decrementAndGet()
+
+    if (finished.getAndSet(true) == false) {
+      log.debug("End of session %d", sessionId)
+      Kestrel.sessions.decrementAndGet()
+    }
   }
 
   def flushAllQueues() {
@@ -172,7 +183,10 @@ class KestrelHandler(
     } else {
       Stats.incr("cmd_get")
     }
+    val startTime = Time.now
     queues.remove(key, timeout, opening, peeking).map { itemOption =>
+      Stats.addMetric(if (itemOption.isDefined) "get_hit_latency_usec" else "get_miss_latency_usec",
+        (Time.now - startTime).inMicroseconds.toInt)
       itemOption.foreach { item =>
         log.debug("get <- %s", item)
         if (opening) pendingTransactions.add(key, item.xid)
@@ -188,7 +202,9 @@ class KestrelHandler(
   def setItem(key: String, flags: Int, expiry: Option[Time], data: Array[Byte]) = {
     log.debug("set -> q=%s flags=%d expiry=%s size=%d", key, flags, expiry, data.length)
     Stats.incr("cmd_set")
-    queues.add(key, data, expiry)
+    Stats.timeMicros("set_latency") {
+      queues.add(key, data, expiry)
+    }
   }
 
   def flush(key: String) {
