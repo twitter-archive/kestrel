@@ -159,7 +159,22 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
     }
 
     "peek" in {
+      val qitem1 = QItem(Time.now, None, item1, 0)
 
+      expect {
+        one(queueCollection).remove("test", None, false, true) willReturn Future(Some(qitem1))
+        one(queueCollection).stats("test") willReturn List(
+          ("items", "10"),
+          ("bytes", "10240"),
+          ("logsize", "29999"),
+          ("age", "500"),
+          ("waiters", "2"),
+          ("open_transactions", "1")
+        ).toArray
+      }
+
+      val qinfo = new thrift.QueueInfo(Some(ByteBuffer.wrap(item1)), 10, 10240, 29999, 500, 2, 1)
+      thriftHandler.peek("test")() mustEqual qinfo
     }
 
     "flush" in {

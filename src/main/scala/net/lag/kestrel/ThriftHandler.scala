@@ -89,8 +89,15 @@ class ThriftHandler (
     Future(handler.abortReads(queueName, xids))
   }
 
-  // FIXME
-  def peek(queueName: String): Future[thrift.QueueInfo] = null
+  def peek(queueName: String): Future[thrift.QueueInfo] = {
+    handler.getItem(queueName, None, false, true).map { itemOption =>
+      val data = itemOption.map { item => ByteBuffer.wrap(item.data) }
+      val stats = queueCollection.stats(queueName).toMap
+      new thrift.QueueInfo(data, stats("items").toLong, stats("bytes").toLong,
+        stats("logsize").toLong, stats("age").toLong, stats("waiters").toInt,
+        stats("open_transactions").toInt)
+    }
+  }
 
   def flush(queueName: String): Future[Unit] = {
     handler.flush(queueName)
