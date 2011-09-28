@@ -44,7 +44,7 @@ class ThriftHandler (
   val log = Logger.get(getClass.getName)
 
   val sessionId = Kestrel.sessionId.incrementAndGet()
-  protected val handler = new KestrelHandler(queueCollection, maxOpenReads, clientDescription, sessionId)
+  val handler = new KestrelHandler(queueCollection, maxOpenReads, clientDescription, sessionId)
   log.debug("New session %d from %s", sessionId, clientDescription)
 
   protected def clientDescription: String = {

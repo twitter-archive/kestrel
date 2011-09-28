@@ -90,7 +90,7 @@ service Kestrel {
    * Delete a queue, removing any journal. All unfetched items are lost.
    * ("delete" is a reserved word in some thrift variants.)
    */
-  void deleteQueue(1: string queue_name)
+  void delete_queue(1: string queue_name)
 
   /*
    * Return a string form of the version of this kestrel server.
