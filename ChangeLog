@@ -1,0 +1,20 @@
+
+2.1.1
+-----
+release: 23 September 2011
+
+- Remove the extra linefeed from memcache "version" and "dump_stats"
+  repsonses. [prcm]
+- Reduce the number of Promise objects created when a client isn't waiting
+  for one.
+- Use a separate background thread for expiring queue items.
+- Several improvements to the load tests. [Eric Lindvall, Jonathan Reichhold]
+- Add "version" support to the text protocol. [Cory G Watson]
+- Report latency of gets (hits vs misses) and sets.
+- Fix a deadlock with transactions that abort and hand off the aborted item
+  to a waiting client that has also disconnected. [Jeff Clites]
+- Don't fsync if nothing has been written to the journal since last time.
+  [Jeff Clites]
+- Be more careful about recovering from corrupt/truncated journals, and exit
+  cleanly if something goes awry during startup. [Jeff Clites]
+- Delete counters & gauges for queues that have been deleted. [Cory G Watson]

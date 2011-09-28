@@ -167,6 +167,7 @@ class QueueCollection(queueFolder: String, timer: Timer,
       queues.get(name) map { q =>
         q.close()
         q.destroyJournal()
+        q.removeStats()
         queues.remove(name)
       }
       if (name contains '+') {

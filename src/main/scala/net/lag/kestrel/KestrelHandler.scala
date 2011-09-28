@@ -22,6 +22,7 @@ import com.twitter.logging.Logger
 import com.twitter.ostrich.admin.{BackgroundProcess, ServiceTracker}
 import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{Future, Duration, Time}
+import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable
 import scala.collection.Set
 
@@ -38,6 +39,8 @@ class KestrelHandler(
   sessionId: Int
 ) {
   private val log = Logger.get(getClass.getName)
+
+  val finished = new AtomicBoolean(false)
 
   object pendingReads {
     private val reads = new mutable.HashMap[String, ItemIdList] {
@@ -58,10 +61,11 @@ class KestrelHandler(
 
     def cancelAll() {
       synchronized {
-        reads.foreach { case (name, xids) =>
-          xids.popAll().foreach { xid => queues.unremove(name, xid) }
-        }
+        val current = reads.clone()
         reads.clear()
+        current
+      }.foreach { case (name, xids) =>
+        xids.popAll().foreach { xid => queues.unremove(name, xid) }
       }
     }
   }
@@ -70,10 +74,13 @@ class KestrelHandler(
   Stats.incr("total_connections")
 
   // usually called when netty sends a disconnect signal.
-  def finish() {
-    log.debug("End of session %d", sessionId)
+  protected def finish() {
     abortAnyOpenRead()
-    Kestrel.sessions.decrementAndGet()
+
+    if (finished.getAndSet(true) == false) {
+      log.debug("End of session %d", sessionId)
+      Kestrel.sessions.decrementAndGet()
+    }
   }
 
   def flushAllQueues() {
@@ -159,7 +166,10 @@ class KestrelHandler(
     } else {
       Stats.incr("cmd_get")
     }
+    val startTime = Time.now
     queues.remove(key, timeout, opening, peeking).map { itemOption =>
+      Stats.addMetric(if (itemOption.isDefined) "get_hit_latency_usec" else "get_miss_latency_usec",
+        (Time.now - startTime).inMicroseconds.toInt)
       itemOption.foreach { item =>
         log.debug("get <- %s", item)
         if (opening) pendingReads.add(key, item.xid)
@@ -175,7 +185,9 @@ class KestrelHandler(
   def setItem(key: String, flags: Int, expiry: Option[Time], data: Array[Byte]) = {
     log.debug("set -> q=%s flags=%d expiry=%s size=%d", key, flags, expiry, data.length)
     Stats.incr("cmd_set")
-    queues.add(key, data, expiry)
+    Stats.timeMicros("set_latency") {
+      queues.add(key, data, expiry)
+    }
   }
 
   def flush(key: String) {

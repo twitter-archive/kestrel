@@ -103,7 +103,7 @@ class MemcacheHandler(
         handler.flushAllQueues()
         Future(new MemcacheResponse("Flushed all queues."))
       case "dump_stats" =>
-        Future(dumpStats())
+        Future(dumpStats(request.line.drop(1)))
       case "delete" =>
         handler.delete(request.line(1))
         Future(new MemcacheResponse("END"))
@@ -220,9 +220,10 @@ class MemcacheHandler(
     new MemcacheResponse(summary)
   }
 
-  private def dumpStats() = {
+  private def dumpStats(requestedQueueNames : List[String]) = {
+    val queueNames = if (!requestedQueueNames.isEmpty) { requestedQueueNames } else { queues.queueNames }
     val dump = new mutable.ListBuffer[String]
-    for (qName <- queueCollection.queueNames) {
+    for (qName <- queueNames) {
       dump += "queue '" + qName + "' {"
       dump += queueCollection.stats(qName).map { case (k, v) => k + "=" + v }.mkString("  ", "\r\n  ", "")
       dump += "}"

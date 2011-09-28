@@ -38,9 +38,22 @@ class KestrelProject(info: ProjectInfo)
       </license>
     </licenses>
 
-  override def releaseBuild = true
+  override def releaseBuild = !(projectVersion.toString contains "SNAPSHOT")
 
   override def subversionRepository = Some("http://svn.local.twitter.com/maven-public")
+
+  override def githubRemote = "github"
+
+  // generate a jar that can be run for load tests.
+  def loadTestJarFilename = "kestrel-tests-" + version.toString + ".jar"
+  def loadTestPaths = ((testCompilePath ##) ***) +++ ((mainCompilePath ##) ***)
+  def packageLoadTestsAction =
+    packageTask(loadTestPaths, outputPath, loadTestJarFilename, packageOptions) && task {
+      distPath.asFile.mkdirs()
+      FileUtilities.copyFlat(List(outputPath / loadTestJarFilename), distPath, log).left.toOption
+    }
+  lazy val packageLoadTests = packageLoadTestsAction
+  override def packageDistTask = packageLoadTestsAction && super.packageDistTask
 
 //  override def fork = forkRun(List("-Xmx1024m", "-verbosegc", "-XX:+PrintGCDetails"))
   lazy val protocolTest = task { args =>

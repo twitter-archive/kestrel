@@ -27,10 +27,7 @@ new KestrelConfig {
   admin.httpPort = 2223
 
   admin.statsNodes = new StatsConfig {
-    reporters = new JsonStatsLoggerConfig {
-      loggerName = "stats"
-      serviceName = "kestrel"
-    } :: new TimeSeriesCollectorConfig
+    reporters = new TimeSeriesCollectorConfig
   }
 
   queues = new QueueBuilder {
@@ -51,16 +48,6 @@ new KestrelConfig {
     handlers = new FileHandlerConfig {
       filename = "/var/log/kestrel/kestrel.log"
       roll = Policy.SigHup
-    }
-  } :: new LoggerConfig {
-    node = "stats"
-    level = Level.INFO
-    useParents = false
-    handlers = new ScribeHandlerConfig {
-      hostname = "localhost"
-      category = "cuckoo_json"
-      maxMessagesPerTransaction = 100
-      formatter = BareFormatterConfig
     }
   }
 }

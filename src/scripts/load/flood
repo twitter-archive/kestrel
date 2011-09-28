@@ -1,0 +1,4 @@
+#!/bin/bash
+DIST_HOME="$(dirname $(readlink $0 || echo $0))/../.."
+TEST_JAR=$DIST_HOME/kestrel-tests-@VERSION@.jar
+java -server -classpath @DIST_CLASSPATH@:$TEST_JAR net.lag.kestrel.load.Flood "$@"
