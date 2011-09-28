@@ -220,8 +220,8 @@ class MemcacheHandler(
     new MemcacheResponse(summary)
   }
 
-  private def dumpStats(requestedQueueNames : List[String]) = {
-    val queueNames = if (!requestedQueueNames.isEmpty) { requestedQueueNames } else { queues.queueNames }
+  private def dumpStats(requestedQueueNames: List[String]) = {
+    val queueNames = if (!requestedQueueNames.isEmpty) { requestedQueueNames } else { queueCollection.queueNames }
     val dump = new mutable.ListBuffer[String]
     for (qName <- queueNames) {
       dump += "queue '" + qName + "' {"

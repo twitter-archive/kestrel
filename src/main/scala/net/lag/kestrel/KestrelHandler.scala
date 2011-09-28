@@ -74,7 +74,7 @@ class KestrelHandler(
   Stats.incr("total_connections")
 
   // usually called when netty sends a disconnect signal.
-  protected def finish() {
+  def finish() {
     abortAnyOpenRead()
 
     if (finished.getAndSet(true) == false) {
