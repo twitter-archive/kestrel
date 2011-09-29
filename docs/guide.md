@@ -249,7 +249,7 @@ Memcache commands
   Display server stats in a more readable style, grouped by queue. They're
   described below.
 
-- `MONITOR <queue-name> <seconds>`
+- `MONITOR <queue-name> <seconds> [max-items]`
 
   Monitor a queue for a time, fetching any new items that arrive. Clients
   are queued in a fair fashion, per-item, so many clients may monitor a

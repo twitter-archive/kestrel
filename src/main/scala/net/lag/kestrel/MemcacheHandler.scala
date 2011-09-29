@@ -61,7 +61,8 @@ class MemcacheHandler(
       case "get" =>
         get(request.line(1))
       case "monitor" =>
-        Future(monitor(request.line(1), request.line(2).toInt))
+        val maxItems = if (request.line.size > 3) request.line(3).toInt else maxOpenReads
+        Future(monitor(request.line(1), request.line(2).toInt, maxItems))
       case "confirm" =>
         if (handler.closeReads(request.line(1), request.line(2).toInt)) {
           Future(new MemcacheResponse("END"))
@@ -180,9 +181,9 @@ class MemcacheHandler(
     }
   }
 
-  private def monitor(key: String, timeout: Int): MemcacheResponse = {
+  private def monitor(key: String, timeout: Int, maxItems: Int): MemcacheResponse = {
     val channel = new LatchedChannelSource[MemcacheResponse]
-    handler.monitorUntil(key, Some(Time.now + timeout.seconds), maxOpenReads, true) {
+    handler.monitorUntil(key, Some(Time.now + timeout.seconds), maxItems, true) {
       case None =>
         channel.send(new MemcacheResponse("END"))
         channel.close()

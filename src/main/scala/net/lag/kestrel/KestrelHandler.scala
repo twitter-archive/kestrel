@@ -139,6 +139,7 @@ class KestrelHandler(
 
   // will do a continuous fetch on a queue until time runs out or read buffer is full.
   final def monitorUntil(key: String, timeLimit: Option[Time], maxItems: Int, opening: Boolean)(f: Option[QItem] => Unit) {
+    log.debug("monitor -> q=%s t=%s max=%d open=%s", key, timeLimit, maxItems, opening)
     if (maxItems == 0 || (timeLimit.isDefined && timeLimit.get <= Time.now) || pendingReads.size(key) >= maxOpenReads) {
       f(None)
     } else {
