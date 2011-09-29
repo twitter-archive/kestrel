@@ -55,23 +55,28 @@ object PutMany extends LoadTesting {
 "we're survivors, here til the end\n"
 
   def put(socket: SocketChannel, client: Client, queueName: String, n: Int, globalTimings: mutable.ListBuffer[Long], data: String) = {
-    val spam = client.put(queueName, data)
-    val expect = client.putSuccess()
+    val spam = if (rollup == 1) client.put(queueName, data) else client.putN(queueName, (0 until rollup).map { _ => data })
+    val expect = if (rollup == 1) client.putSuccess() else client.putNSuccess(rollup)
 
     val buffer = ByteBuffer.allocate(expect.capacity)
     val timings = new Array[Long](n min 100000)
-    for (i <- 0 until n) {
+
+    var timingCounter = 0
+    var i = 0
+    while (i < n) {
       val startTime = System.nanoTime
       send(socket, spam)
       receive(socket, buffer)
       if (i < 100000) {
-        timings(i) = System.nanoTime - startTime
+        timings(timingCounter) = System.nanoTime - startTime
       }
       expect.rewind()
       if (buffer != expect) {
         // the "!" is important.
         throw new Exception("Unexpected response at " + i + "!")
       }
+      i += rollup
+      timingCounter += 1
     }
 
     // coalesce timings
@@ -85,6 +90,7 @@ object PutMany extends LoadTesting {
   var clientCount = 100
   var totalItems = 10000
   var bytes = 1024
+  var rollup = 1
   var queueName = "spam"
   var queueCount = 1
   var hostname = "localhost"
@@ -103,6 +109,8 @@ object PutMany extends LoadTesting {
     Console.println("        put ITEMS items into the queue (default: %d)".format(totalItems))
     Console.println("    -b BYTES")
     Console.println("        put BYTES per queue item (default: %d)".format(bytes))
+    Console.println("    -r ITEMS")
+    Console.println("        roll up ITEMS items into a single multi-put request (default: %d)".format(rollup))
     Console.println("    -q NAME")
     Console.println("        use queue NAME as prefix (default: %s)".format(queueName))
     Console.println("    -Q QUEUES")
@@ -130,6 +138,9 @@ object PutMany extends LoadTesting {
       parseArgs(xs)
     case "-b" :: x :: xs =>
       bytes = x.toInt
+      parseArgs(xs)
+    case "-r" :: x :: xs =>
+      rollup = x.toInt
       parseArgs(xs)
     case "-q" :: x :: xs =>
       queueName = x
@@ -198,8 +209,8 @@ object PutMany extends LoadTesting {
       socket.close()
     }
 
-    println("Put %d items of %d bytes to %s:%d in %d queues named %s using %d clients.".format(
-      totalItems, bytes, hostname, port, queueCount, queueName, clientCount))
+    println("Put %d items of %d bytes in bursts of %d to %s:%d in %d queues named %s using %d clients.".format(
+      totalItems, bytes, rollup, hostname, port, queueCount, queueName, clientCount))
 
     for (i <- 0 until clientCount) {
       val t = new Thread {

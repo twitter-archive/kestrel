@@ -29,6 +29,9 @@ trait Client {
   def put(queueName: String, data: String): ByteBuffer
   def putSuccess(): ByteBuffer
 
+  def putN(queueName: String, data: Seq[String]): ByteBuffer
+  def putNSuccess(count: Int): ByteBuffer
+
   def flush(queueName: String): ByteBuffer
   def flushSuccess(): ByteBuffer
 }
@@ -40,6 +43,16 @@ object MemcacheClient extends Client {
 
   def putSuccess() = {
     ByteBuffer.wrap("STORED\r\n".getBytes)
+  }
+
+  def putN(queueName: String, data: Seq[String]) = {
+    ByteBuffer.wrap(data.map { item =>
+      "set " + queueName + " 0 0 " + item.length + "\r\n" + item + "\r\n"
+    }.mkString.getBytes)
+  }
+
+  def putNSuccess(count: Int) = {
+    ByteBuffer.wrap((0 until count).map { _ => "STORED\r\n" }.mkString.getBytes)
   }
 
   def flush(queueName: String) = {
@@ -66,18 +79,22 @@ object ThriftClient extends Client {
     ByteBuffer.wrap(Arrays.copyOfRange(buffer.getArray, 0, buffer.length))
   }
 
-  def put(queueName: String, data: String) = {
+  def put(queueName: String, data: String) = putN(queueName, Seq(data))
+
+  def putSuccess() = putNSuccess(1)
+
+  def putN(queueName: String, data: Seq[String]): ByteBuffer = {
     withProtocol { p =>
       p.writeMessageBegin(new TMessage("put", TMessageType.CALL, 0))
-      val item = ByteBuffer.wrap(data.getBytes)
-      (new thrift.Kestrel.put_args(queueName, Seq(item), 0)).write(p)
+      val item = data.map { item => ByteBuffer.wrap(item.getBytes) }
+      (new thrift.Kestrel.put_args(queueName, item, 0)).write(p)
     }
   }
 
-  def putSuccess() = {
+  def putNSuccess(count: Int): ByteBuffer = {
     withProtocol { p =>
       p.writeMessageBegin(new TMessage("put", TMessageType.REPLY, 0))
-      (new thrift.Kestrel.put_result(success = Some(1))).write(p)
+      (new thrift.Kestrel.put_result(success = Some(count))).write(p)
     }
   }
 
