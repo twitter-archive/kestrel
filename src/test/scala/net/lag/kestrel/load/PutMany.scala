@@ -28,7 +28,7 @@ import com.twitter.conversions.string._
  * Spam a kestrel server with 1M copies of a pop song lyric, to see how
  * quickly it can absorb them.
  */
-object PutMany {
+object PutMany extends LoadTesting {
   private val LYRIC =
 "crossed off, but never forgotten\n" +
 "misplaced, but never losing hold\n" +
@@ -54,28 +54,21 @@ object PutMany {
 "run down, with no one to find you\n" +
 "we're survivors, here til the end\n"
 
-  private val EXPECT = ByteBuffer.wrap("STORED\r\n".getBytes)
+  def put(socket: SocketChannel, client: Client, queueName: String, n: Int, globalTimings: mutable.ListBuffer[Long], data: String) = {
+    val spam = client.put(queueName, data)
+    val expect = client.putSuccess()
 
-  def put(socket: SocketChannel, queueName: String, n: Int, globalTimings: mutable.ListBuffer[Long], data: String) = {
-    val spam = ByteBuffer.wrap(("set " + queueName + " 0 0 " + data.length + "\r\n" + data + "\r\n").getBytes)
-    val buffer = ByteBuffer.allocate(8)
+    val buffer = ByteBuffer.allocate(expect.capacity)
     val timings = new Array[Long](n min 100000)
     for (i <- 0 until n) {
       val startTime = System.nanoTime
-      spam.rewind
-      while (spam.position < spam.limit) {
-        socket.write(spam)
-      }
-      buffer.rewind
-      while (buffer.position < buffer.limit) {
-        socket.read(buffer)
-      }
-      buffer.rewind
-      EXPECT.rewind
+      send(socket, spam)
+      receive(socket, buffer)
       if (i < 100000) {
         timings(i) = System.nanoTime - startTime
       }
-      if (buffer != EXPECT) {
+      expect.rewind()
+      if (buffer != expect) {
         // the "!" is important.
         throw new Exception("Unexpected response at " + i + "!")
       }
@@ -96,6 +89,8 @@ object PutMany {
   var queueCount = 1
   var hostname = "localhost"
   var port = 22133
+  var client: Client = MemcacheClient
+  var flushFirst = true
 
   def usage() {
     Console.println("usage: put-many [options]")
@@ -116,6 +111,10 @@ object PutMany {
     Console.println("        use kestrel on HOSTNAME (default: %s)".format(hostname))
     Console.println("    -p PORT")
     Console.println("        use kestrel on PORT (default: %d)".format(port))
+    Console.println("    --thrift")
+    Console.println("        use thrift RPC")
+    Console.println("    -F")
+    Console.println("        don't flush queue(s) before the test")
   }
 
   def parseArgs(args: List[String]): Unit = args match {
@@ -144,6 +143,13 @@ object PutMany {
     case "-p" :: x :: xs =>
       port = x.toInt
       parseArgs(xs)
+    case "--thrift" :: xs =>
+      client = ThriftClient
+      port = 2229
+      parseArgs(xs)
+    case "-F" :: xs =>
+      flushFirst = false
+      parseArgs(xs)
     case _ =>
       usage()
       System.exit(1)
@@ -163,8 +169,6 @@ object PutMany {
 
   def main(args: Array[String]) = {
     parseArgs(args.toList)
-    println("Put %d items of %d bytes to %s:%d in %d queues named %s using %d clients.".format(
-      totalItems, bytes, hostname, port, queueCount, queueName, clientCount))
 
     val totalCount = totalItems / clientCount * clientCount
 
@@ -182,12 +186,27 @@ object PutMany {
     val startTime = System.currentTimeMillis
     val timings = new mutable.ListBuffer[Long]
 
+    // flush queues first
+    if (flushFirst) {
+      println("Flushing queues first.")
+      val socket = tryHard { SocketChannel.open(new InetSocketAddress(hostname, port)) }
+      for (i <- 0 until queueCount) {
+        val name = queueName + (if (queueCount > 1) (i % queueCount).toString else "")
+        send(socket, client.flush(name))
+        expect(socket, client.flushSuccess())
+      }
+      socket.close()
+    }
+
+    println("Put %d items of %d bytes to %s:%d in %d queues named %s using %d clients.".format(
+      totalItems, bytes, hostname, port, queueCount, queueName, clientCount))
+
     for (i <- 0 until clientCount) {
       val t = new Thread {
         override def run = {
           val socket = tryHard { SocketChannel.open(new InetSocketAddress(hostname, port)) }
           val qName = queueName + (if (queueCount > 1) (i % queueCount).toString else "")
-          put(socket, qName, totalItems / clientCount, timings, rawData.toString)
+          put(socket, client, qName, totalItems / clientCount, timings, rawData.toString)
         }
       }
       threadList = t :: threadList

@@ -82,4 +82,13 @@ trait LoadTesting {
     data.rewind()
     data
   }
+
+  final def expect(socket: SocketChannel, data: ByteBuffer) {
+    val buffer = ByteBuffer.allocate(data.capacity)
+    receive(socket, buffer)
+    data.rewind()
+    if (buffer != data) {
+      throw new Exception("Unexpected response!")
+    }
+  }
 }

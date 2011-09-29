@@ -45,7 +45,7 @@ class ThriftHandler (
 
   val sessionId = Kestrel.sessionId.incrementAndGet()
   val handler = new KestrelHandler(queueCollection, maxOpenReads, clientDescription, sessionId)
-  log.debug("New session %d from %s", sessionId, clientDescription)
+  log.debug("New thrift session %d from %s", sessionId, clientDescription)
 
   protected def clientDescription: String = {
     val address = connection.remoteAddress.asInstanceOf[InetSocketAddress]
