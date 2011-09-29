@@ -32,35 +32,72 @@ object Flood extends LoadTesting {
   private val DATA = "x" * 1024
 
   def put(socket: SocketChannel, queueName: String, n: Int, data: String) = {
-    val spam = client.put(queueName, data)
-    val expect = client.putSuccess()
+    val spam = if (rollup == 1) {
+      client.put(queueName, data)
+    } else {
+      client.putN(queueName, (0 until rollup).map { _ => data })
+    }
+    val expect = if (rollup == 1) client.putSuccess() else client.putNSuccess(rollup)
     val buffer = ByteBuffer.allocate(expect.limit)
 
-    for (i <- 0 until n) {
+    var i = 0
+    while (i < n) {
       send(socket, spam)
       if (receive(socket, buffer) != expect) {
         // the "!" is important.
         throw new Exception("Unexpected response at " + i + "!")
       }
+      i += rollup
     }
   }
 
   def get(socket: SocketChannel, queueName: String, n: Int, data: String): Int = {
-    val req = client.get(queueName, if (blockingReads) Some(1000) else None)
+    val req = if (rollup == 1) {
+      client.get(queueName, if (blockingReads) Some(1000) else None)
+    } else {
+      client.monitor(queueName, 1000, rollup)
+    }
     val expectNoData = client.getEmpty(queueName)
     val expectData = client.getSuccess(queueName, data)
     val expecting = new Expecting(expectNoData, expectData)
+    val monitorSuccess = client.monitorSuccess(queueName, (0 until rollup).map { _ => data })
+    val buffer = ByteBuffer.allocate(monitorSuccess.limit)
+    val confirm = client.confirmMonitor(queueName, rollup)
+    val confirmSuccess = client.confirmMonitorSuccess(queueName, rollup)
+    val confirmSuccessBuffer = ByteBuffer.allocate(confirmSuccess.limit)
 
     var count = 0
     var misses = 0
+    var leftInCycle = 0
     while (count < n) {
-      send(socket, req)
-      val got = expecting(socket)
-      if (got == expectNoData) {
-        // nothing yet. poop. :(
-        misses += 1
+      if (leftInCycle == 0) {
+        send(socket, req)
+        leftInCycle = rollup
+      }
+      if (rollup == 1 || client.monitorHasMultipleResponses) {
+        val got = expecting(socket)
+        if (got == expectNoData) {
+          // nothing yet. poop. :(
+          misses += 1
+        } else {
+          count += 1
+          leftInCycle -= 1
+          if (leftInCycle == 0 && rollup > 1) {
+            if (expecting(socket) != expectNoData) {
+              throw new Exception("Unexpected monitor response at " + count + "!")
+            }
+            send(socket, confirm)
+            if (receive(socket, confirmSuccessBuffer) != confirmSuccess) {
+              throw new Exception("Unexpected confirm response at " + count + "!")
+            }
+          }
+        }
       } else {
-        count += 1
+        if (receive(socket, buffer) != monitorSuccess) {
+          throw new Exception("Unexpected response at " + count + "!")
+        }
+        count += rollup
+        leftInCycle -= rollup
       }
     }
     misses
@@ -70,6 +107,7 @@ object Flood extends LoadTesting {
   var kilobytes = 1
   var queueName = "spam"
   var prefillItems = 0
+  var rollup = 1
   var hostname = "localhost"
   var port = 22133
   var threads = 1
@@ -92,6 +130,8 @@ object Flood extends LoadTesting {
     Console.println("        prefill ITEMS items into the queue before the test (default: %d)".format(prefillItems))
     Console.println("    -t THREADS")
     Console.println("        create THREADS producers and THREADS consumers (default: %d)".format(threads))
+    Console.println("    -r ITEMS")
+    Console.println("        roll up ITEMS items into a single multi-put request (default: %d)".format(rollup))
     Console.println("    -h HOSTNAME")
     Console.println("        use kestrel on HOSTNAME (default: %s)".format(hostname))
     Console.println("    -p PORT")
@@ -123,6 +163,9 @@ object Flood extends LoadTesting {
       parseArgs(xs)
     case "-t" :: x :: xs =>
       threads = x.toInt
+      parseArgs(xs)
+    case "-r" :: x :: xs =>
+      rollup = x.toInt
       parseArgs(xs)
     case "-h" :: x :: xs =>
       hostname = x

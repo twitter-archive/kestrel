@@ -38,6 +38,14 @@ trait Client {
   def get(queueName: String, timeoutMsec: Option[Int]): ByteBuffer
   def getEmpty(queueName: String): ByteBuffer
   def getSuccess(queueName: String, data: String): ByteBuffer
+
+  // "monitor" can return either a single response (monitorSuccess) or a stream of single "get"
+  // responses followed by a "getEmpty".
+  def monitorHasMultipleResponses: Boolean
+  def monitor(queueName: String, timeoutMsec: Int, maxItems: Int): ByteBuffer
+  def monitorSuccess(queueName: String, data: Seq[String]): ByteBuffer
+  def confirmMonitor(queueName: String, items: Int): ByteBuffer
+  def confirmMonitorSuccess(queueName: String, items: Int): ByteBuffer
 }
 
 object MemcacheClient extends Client {
@@ -77,6 +85,25 @@ object MemcacheClient extends Client {
 
   def getSuccess(queueName: String, data: String) = {
     ByteBuffer.wrap(("VALUE " + queueName + " 0 " + data.length + "\r\n" + data + "\r\nEND\r\n").getBytes)
+  }
+
+  def monitorHasMultipleResponses = true
+
+  def monitor(queueName: String, timeoutMsec: Int, maxItems: Int) = {
+    ByteBuffer.wrap(("monitor " + queueName + " " + (timeoutMsec / 1000) + " " + maxItems + "\r\n").getBytes)
+  }
+
+  def monitorSuccess(queueName: String, data: Seq[String]) = {
+    // memcache doesn't support monitorSuccess.
+    ByteBuffer.wrap("ERROR".getBytes)
+  }
+
+  def confirmMonitor(queueName: String, items: Int) = {
+    ByteBuffer.wrap(("confirm " + queueName + " " + items + "\r\n").getBytes)
+  }
+
+  def confirmMonitorSuccess(queueName: String, items: Int) = {
+    ByteBuffer.wrap("END\r\n".getBytes)
   }
 }
 
@@ -148,5 +175,32 @@ object ThriftClient extends Client {
       val item = new thrift.Item(ByteBuffer.wrap(data.getBytes), 0)
       (new thrift.Kestrel.get_result(success = Some(Seq(item)))).write(p)
     }
+  }
+
+  def monitorHasMultipleResponses = false
+
+  def monitor(queueName: String, timeoutMsec: Int, maxItems: Int) = {
+    withProtocol { p =>
+      p.writeMessageBegin(new TMessage("get", TMessageType.CALL, 0))
+      (new thrift.Kestrel.get_args(queueName, maxItems, timeoutMsec, true)).write(p)
+    }
+  }
+
+  def monitorSuccess(queueName: String, data: Seq[String]) = {
+    withProtocol { p =>
+      p.writeMessageBegin(new TMessage("get", TMessageType.REPLY, 0))
+      val items = data.map { item => new thrift.Item(ByteBuffer.wrap(item.getBytes), 0) }
+      (new thrift.Kestrel.get_result(success = Some(items))).write(p)
+    }
+  }
+
+  def confirmMonitor(queueName: String, items: Int): ByteBuffer = {
+    // meaningless here
+    ByteBuffer.wrap("".getBytes)
+  }
+
+  def confirmMonitorSuccess(queueName: String, items: Int): ByteBuffer = {
+    // meaningless here
+    ByteBuffer.wrap("".getBytes)
   }
 }
