@@ -34,6 +34,10 @@ trait Client {
 
   def flush(queueName: String): ByteBuffer
   def flushSuccess(): ByteBuffer
+
+  def get(queueName: String, timeoutMsec: Option[Int]): ByteBuffer
+  def getEmpty(queueName: String): ByteBuffer
+  def getSuccess(queueName: String, data: String): ByteBuffer
 }
 
 object MemcacheClient extends Client {
@@ -62,6 +66,18 @@ object MemcacheClient extends Client {
   def flushSuccess() = {
     ByteBuffer.wrap("END\r\n".getBytes)
   }
+
+  def get(queueName: String, timeoutMsec: Option[Int]) = {
+    ByteBuffer.wrap(("get " + queueName + timeoutMsec.map { "/t=" + _ }.getOrElse("") + "\r\n").getBytes)
+  }
+
+  def getEmpty(queueName: String) = {
+    ByteBuffer.wrap("END\r\n".getBytes)
+  }
+
+  def getSuccess(queueName: String, data: String) = {
+    ByteBuffer.wrap(("VALUE " + queueName + " 0 " + data.length + "\r\n" + data + "\r\nEND\r\n").getBytes)
+  }
 }
 
 object ThriftClient extends Client {
@@ -70,7 +86,7 @@ object ThriftClient extends Client {
   import org.apache.thrift.protocol.{TBinaryProtocol, TMessage, TMessageType, TProtocol}
   import org.apache.thrift.transport.{TFramedTransport, TIOStreamTransport, TMemoryBuffer}
 
-  def withProtocol(f: TProtocol => Unit) = {
+  private def withProtocol(f: TProtocol => Unit) = {
     val buffer = new TMemoryBuffer(512)
     val protocol = new TBinaryProtocol(new TFramedTransport(buffer))
     f(protocol)
@@ -83,7 +99,7 @@ object ThriftClient extends Client {
 
   def putSuccess() = putNSuccess(1)
 
-  def putN(queueName: String, data: Seq[String]): ByteBuffer = {
+  def putN(queueName: String, data: Seq[String]) = {
     withProtocol { p =>
       p.writeMessageBegin(new TMessage("put", TMessageType.CALL, 0))
       val item = data.map { item => ByteBuffer.wrap(item.getBytes) }
@@ -91,7 +107,7 @@ object ThriftClient extends Client {
     }
   }
 
-  def putNSuccess(count: Int): ByteBuffer = {
+  def putNSuccess(count: Int) = {
     withProtocol { p =>
       p.writeMessageBegin(new TMessage("put", TMessageType.REPLY, 0))
       (new thrift.Kestrel.put_result(success = Some(count))).write(p)
@@ -109,6 +125,28 @@ object ThriftClient extends Client {
     withProtocol { p =>
       p.writeMessageBegin(new TMessage("flush", TMessageType.REPLY, 0))
       (new thrift.Kestrel.flush_result()).write(p)
+    }
+  }
+
+  def get(queueName: String, timeoutMsec: Option[Int]) = {
+    withProtocol { p =>
+      p.writeMessageBegin(new TMessage("get", TMessageType.CALL, 0))
+      (new thrift.Kestrel.get_args(queueName, 1, timeoutMsec.getOrElse(0), true)).write(p)
+    }
+  }
+
+  def getEmpty(queueName: String) = {
+    withProtocol { p =>
+      p.writeMessageBegin(new TMessage("get", TMessageType.REPLY, 0))
+      (new thrift.Kestrel.get_result(success = Some(Nil))).write(p)
+    }
+  }
+
+  def getSuccess(queueName: String, data: String) = {
+    withProtocol { p =>
+      p.writeMessageBegin(new TMessage("get", TMessageType.REPLY, 0))
+      val item = new thrift.Item(ByteBuffer.wrap(data.getBytes), 0)
+      (new thrift.Kestrel.get_result(success = Some(Seq(item)))).write(p)
     }
   }
 }

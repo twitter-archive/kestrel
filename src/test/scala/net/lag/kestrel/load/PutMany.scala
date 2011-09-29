@@ -20,7 +20,6 @@ package net.lag.kestrel.load
 import java.net._
 import java.nio._
 import java.nio.channels._
-import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable
 import com.twitter.conversions.string._
 
@@ -54,7 +53,7 @@ object PutMany extends LoadTesting {
 "run down, with no one to find you\n" +
 "we're survivors, here til the end\n"
 
-  def put(socket: SocketChannel, client: Client, queueName: String, n: Int, globalTimings: mutable.ListBuffer[Long], data: String) = {
+  def put(socket: SocketChannel, queueName: String, n: Int, globalTimings: mutable.ListBuffer[Long], data: String) = {
     val spam = if (rollup == 1) client.put(queueName, data) else client.putN(queueName, (0 until rollup).map { _ => data })
     val expect = if (rollup == 1) client.putSuccess() else client.putNSuccess(rollup)
 
@@ -166,18 +165,6 @@ object PutMany extends LoadTesting {
       System.exit(1)
   }
 
-  val failedConnects = new AtomicInteger
-
-  def tryHard[A](f: => A): A = {
-    try {
-      f
-    } catch {
-      case e: java.io.IOException =>
-        failedConnects.incrementAndGet()
-        tryHard(f)
-    }
-  }
-
   def main(args: Array[String]) = {
     parseArgs(args.toList)
 
@@ -217,7 +204,7 @@ object PutMany extends LoadTesting {
         override def run = {
           val socket = tryHard { SocketChannel.open(new InetSocketAddress(hostname, port)) }
           val qName = queueName + (if (queueCount > 1) (i % queueCount).toString else "")
-          put(socket, client, qName, totalItems / clientCount, timings, rawData.toString)
+          put(socket, qName, totalItems / clientCount, timings, rawData.toString)
         }
       }
       threadList = t :: threadList

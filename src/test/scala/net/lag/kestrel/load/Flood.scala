@@ -31,33 +31,32 @@ import com.twitter.conversions.string._
 object Flood extends LoadTesting {
   private val DATA = "x" * 1024
 
-  private val EXPECT = ByteBuffer.wrap("STORED\r\n".getBytes)
-
   def put(socket: SocketChannel, queueName: String, n: Int, data: String) = {
-    val spam = ByteBuffer.wrap(("set " + queueName + " 0 0 " + data.length + "\r\n" + data + "\r\n").getBytes)
-    val buffer = ByteBuffer.allocate(EXPECT.limit)
+    val spam = client.put(queueName, data)
+    val expect = client.putSuccess()
+    val buffer = ByteBuffer.allocate(expect.limit)
 
     for (i <- 0 until n) {
       send(socket, spam)
-      if (receive(socket, buffer) != EXPECT) {
+      if (receive(socket, buffer) != expect) {
         // the "!" is important.
         throw new Exception("Unexpected response at " + i + "!")
       }
     }
   }
 
-  def get(socket: SocketChannel, queueName: String, n: Int, data: String, blockingReads: Boolean): Int = {
-    val req = ByteBuffer.wrap(("get " + queueName + (if (blockingReads) "/t=1000" else "") + "\r\n").getBytes)
-    val expectEnd = ByteBuffer.wrap("END\r\n".getBytes)
-    val expectData = ByteBuffer.wrap(("VALUE " + queueName + " 0 " + data.length + "\r\n" + data + "\r\nEND\r\n").getBytes)
-    val expecting = new Expecting(expectEnd, expectData)
+  def get(socket: SocketChannel, queueName: String, n: Int, data: String): Int = {
+    val req = client.get(queueName, if (blockingReads) Some(1000) else None)
+    val expectNoData = client.getEmpty(queueName)
+    val expectData = client.getSuccess(queueName, data)
+    val expecting = new Expecting(expectNoData, expectData)
 
     var count = 0
     var misses = 0
     while (count < n) {
       send(socket, req)
       val got = expecting(socket)
-      if (got == expectEnd) {
+      if (got == expectNoData) {
         // nothing yet. poop. :(
         misses += 1
       } else {
@@ -72,8 +71,11 @@ object Flood extends LoadTesting {
   var queueName = "spam"
   var prefillItems = 0
   var hostname = "localhost"
+  var port = 22133
   var threads = 1
   var blockingReads = false
+  var client: Client = MemcacheClient
+  var flushFirst = true
 
   def usage() {
     Console.println("usage: flood [options]")
@@ -86,14 +88,20 @@ object Flood extends LoadTesting {
     Console.println("        put KILOBYTES per queue item (default: %d)".format(kilobytes))
     Console.println("    -q NAME")
     Console.println("        use queue NAME (default: %s)".format(queueName))
-    Console.println("    -p ITEMS")
+    Console.println("    -P ITEMS")
     Console.println("        prefill ITEMS items into the queue before the test (default: %d)".format(prefillItems))
-    Console.println("    -h HOSTNAME")
-    Console.println("        use kestrel on HOSTNAME (default: %s)".format(hostname))
     Console.println("    -t THREADS")
     Console.println("        create THREADS producers and THREADS consumers (default: %d)".format(threads))
+    Console.println("    -h HOSTNAME")
+    Console.println("        use kestrel on HOSTNAME (default: %s)".format(hostname))
+    Console.println("    -p PORT")
+    Console.println("        use kestrel on PORT (default: %d)".format(port))
     Console.println("    -B")
     Console.println("        do blocking reads (reads with a timeout)")
+    Console.println("    --thrift")
+    Console.println("        use thrift RPC")
+    Console.println("    -F")
+    Console.println("        don't flush queue(s) before the test")
   }
 
   def parseArgs(args: List[String]): Unit = args match {
@@ -110,17 +118,27 @@ object Flood extends LoadTesting {
     case "-q" :: x :: xs =>
       queueName = x
       parseArgs(xs)
-    case "-p" :: x :: xs =>
+    case "-P" :: x :: xs =>
       prefillItems = x.toInt
-      parseArgs(xs)
-    case "-h" :: x :: xs =>
-      hostname = x
       parseArgs(xs)
     case "-t" :: x :: xs =>
       threads = x.toInt
       parseArgs(xs)
+    case "-h" :: x :: xs =>
+      hostname = x
+      parseArgs(xs)
+    case "-p" :: x :: xs =>
+      port = x.toInt
+      parseArgs(xs)
     case "-B" :: xs =>
       blockingReads = true
+      parseArgs(xs)
+    case "--thrift" :: xs =>
+      client = ThriftClient
+      port = 2229
+      parseArgs(xs)
+    case "-F" :: xs =>
+      flushFirst = false
       parseArgs(xs)
     case _ =>
       usage()
@@ -131,9 +149,18 @@ object Flood extends LoadTesting {
     parseArgs(args.toList)
     val data = DATA * kilobytes
 
+    // flush queues first
+    if (flushFirst) {
+      println("Flushing queues first.")
+      val socket = tryHard { SocketChannel.open(new InetSocketAddress(hostname, port)) }
+      send(socket, client.flush(queueName))
+      expect(socket, client.flushSuccess())
+      socket.close()
+    }
+
     if (prefillItems > 0) {
       println("prefill: " + prefillItems + " items of " + kilobytes + "kB")
-      val socket = SocketChannel.open(new InetSocketAddress(hostname, 22133))
+      val socket = tryHard { SocketChannel.open(new InetSocketAddress(hostname, port)) }
       put(socket, queueName, prefillItems, data)
     }
 
@@ -146,15 +173,15 @@ object Flood extends LoadTesting {
     for (i <- 0 until threads) {
       val producerThread = new Thread {
         override def run = {
-          val socket = SocketChannel.open(new InetSocketAddress(hostname, 22133))
+          val socket = tryHard { SocketChannel.open(new InetSocketAddress(hostname, port)) }
           put(socket, queueName, totalItems, data)
         }
       }
 
       val consumerThread = new Thread {
         override def run = {
-          val socket = SocketChannel.open(new InetSocketAddress(hostname, 22133))
-          val n = get(socket, queueName, totalItems, data, blockingReads)
+          val socket = tryHard { SocketChannel.open(new InetSocketAddress(hostname, port)) }
+          val n = get(socket, queueName, totalItems, data)
           misses.addAndGet(n)
         }
       }
