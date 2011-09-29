@@ -146,7 +146,7 @@ class KestrelHandler(
         case None =>
           f(None)
         case x @ Some(item) =>
-          pendingReads.add(key, item.xid)
+          if (opening) pendingReads.add(key, item.xid)
           f(x)
           monitorUntil(key, timeLimit, maxItems - 1, opening)(f)
       }
