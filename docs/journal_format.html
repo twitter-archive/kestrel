@@ -160,25 +160,85 @@ i32 number of open transactions to follow as ADD_XID
 this really marks the end of this journal file and time to move to the next one.</p></li>
 </ul>
 
+<h2>Initial operations in the journal</h2>
+
+<p>A journal file that has been rewritten or packed will usuall have a set of
+operations at the beginning to rebuild the state of the transaction ID
+("xid"), any open transactions, and the current queue contents:</p>
+
+<ul>
+<li><code>save_xid</code></li>
+<li>for each open transaction:
+<ul><li><code>add_xid</code></li>
+<li><code>remove_tentative</code></li></ul></li>
+<li>for each queue item:
+<ul><li><code>addx</code></li></ul></li>
+</ul>
+
+<p>The rest of the journal will be operations as they happen. Since this initial
+set of operations can be treated just like any other queue operation, there's
+no special treatment when the journal is replayed at startup.</p>
+
 <h2>Multiple journal files</h2>
 
-<p>The latest journal file for a queue is named simply <code>(name)</code> with no dots in it. For example,
-the latest journal file for queue "cars" is named <code>cars</code>.</p>
+<p>The latest journal file for a queue is named simply <code>(name)</code> with no dots in
+it. For example, the latest journal file for queue "cars" is named <code>cars</code>.</p>
 
-<p>As the journal is rotated, the current timestamp is appended. A rotated journal for cars might be
-named <code>cars.904</code>. When recovering the journals on restart, kestrel replays all the rolled journal
-files in timestamp order (earliest first), and then the non-timestamped file last (if it exists).
-They are treated exactly the same as if they were chunks of a larger, contiguous file.</p>
+<p>As the journal is rotated, the current timestamp is appended. A rotated
+journal for cars might be named <code>cars.904</code>. When recovering the journals on
+restart, kestrel replays all the rotated journal files in timestamp order
+(earliest first), and then the non-timestamped file last (if it exists). They
+are treated exactly the same as if they were chunks of a larger, contiguous
+file.</p>
 
-<p>Journals with <code>~~</code> in their filename are temporary. If found on restart, they can be ignored.</p>
+<p>Journals with <code>~~</code> in their filename are temporary. If found on restart, they
+can be ignored.</p>
 
-<p>If previous rolled journal files are packed together, the state will initially be written into a
-temporary file, and then renamed to end with <code>.(timestamp).pack</code>. The timestamp means that any
-rolled journal with timestamp less than or equal to the pack-file timestamp is now dead and
-should be deleted. For example, if <code>cars.950.pack</code> exists, then <code>cars.904</code> and <code>cars.950</code> should
-be ignored and deleted, but <code>cars.951</code> is still valid. Normally, if it doesn't crash,
-the packing process will delete these older files after creating the pack file. Then it will
-rename the pack file to remove the ".pack" extension.</p>
+<p>If previous rolled journal files are packed together, the state will
+initially be written into a temporary file, and then renamed to end with
+<code>.(timestamp).pack</code>. The timestamp means that any rotated journal with
+timestamp less than or equal to the pack-file timestamp is now dead and
+should be deleted. For example, if <code>cars.950.pack</code> exists, then <code>cars.904</code>
+and <code>cars.950</code> should be ignored and deleted, but <code>cars.951</code> is still valid.
+Normally, if it doesn't crash, the packing process will delete these older
+files after creating the pack file. Then it will rename the pack file to
+remove the ".pack" extension.</p>
+
+<h2>Journal packing strategy</h2>
+
+<p>To keep from using an infinite amount of disk space, kestrel has a few
+strategies for erasing or compressing old journal files.</p>
+
+<ul>
+<li><p>If the queue is empty, then after <code>defaultJournalSize</code> (usually 16MB) of
+journal is written, the file is erased and a new file is started. (This is
+the normal "steady-state" operation mode.)</p></li>
+<li><p>If the queue is not in read-behind (that is, all of the queue's contents
+are in memory), and the journal files total more than <code>maxJournalSize</code>
+(usually 1GB), then the journal is rewritten from scratch. We know that
+will be no more than <code>maxMemorySize</code> (usually 128MB).</p></li>
+<li><p>If the queue <em>is</em> in read-behind, a new journal file is started after each
+<code>maxMemorySize</code> (usually 128MB). At the beginning of each new file, a
+checkpoint is saved in memory with the current list of open transactions.</p>
+
+<p>When the read-behind pointer reaches one of these checkpoints, the older
+files are replaced with a much smaller file containing only:</p>
+
+<ul><li>the list of open transactions (from the checkpoint)</li>
+<li>a list of newly opened transactions since the checkpoint</li>
+<li>a count of removed items since the checkpoint</li>
+<li>the items currently on the in-memory portion of the queue</li></ul></li>
+</ul>
+
+<p>The cons to this strategy are:</p>
+
+<ul>
+<li>Up to <code>maxMemorySize</code> (usually 128MB) will be rewritten during each
+checkpoint.</li>
+<li>If a kestrel has N live connections, up to N open transactions will be
+written out during each checkpoint. For 50k connections, each holding a 1KB
+transaction, that could be 50MB.</li>
+</ul>
 
 
 </body>
