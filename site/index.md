@@ -42,7 +42,7 @@ Further Reading
 Downloads
 ---------
 
-- [kestrel 2.1.1](download/kestrel-2.1.2.zip)
+- [kestrel 2.1.2](download/kestrel-2.1.2.zip)
 
 - [kestrel 2.1.1](download/kestrel-2.1.1.zip)
 
