@@ -281,6 +281,7 @@ class Journal(queuePath: File, queueName: String, timer: Timer, syncJournal: Dur
           case (JournalItem.EndOfFile, _) =>
             // move to next file and try again.
             val oldFilename = readerFilename.get
+            rj.close()
             readerFilename = Journal.journalAfter(queuePath, queueName, readerFilename.get)
             reader = Some(new FileInputStream(new File(queuePath, readerFilename.get)).getChannel)
             log.info("Read-behind on '%s' moving from file %s to %s", queueName, oldFilename, readerFilename.get)
