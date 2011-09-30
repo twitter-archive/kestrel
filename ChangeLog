@@ -1,4 +1,12 @@
 
+2.1.2
+-----
+release: 29 September 2011
+
+- Fix bug 71: connection counts could go negative. [Jeff Clites]
+- Allow a queue name parameter to "dump_stats". [Jeff Clites]
+- Fix potential file descriptor leak when rotating journals. [Ross Cohen]
+
 2.1.1
 -----
 release: 23 September 2011
