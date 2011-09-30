@@ -181,7 +181,6 @@ object PutMany extends LoadTesting {
     }
 
     var threadList: List[Thread] = Nil
-    val startTime = System.currentTimeMillis
     val timings = new mutable.ListBuffer[Long]
 
     // flush queues first
@@ -198,6 +197,8 @@ object PutMany extends LoadTesting {
 
     println("Put %d items of %d bytes in bursts of %d to %s:%d in %d queues named %s using %d clients.".format(
       totalItems, bytes, rollup, hostname, port, queueCount, queueName, clientCount))
+
+    val startTime = System.currentTimeMillis
 
     for (i <- 0 until clientCount) {
       val t = new Thread {
