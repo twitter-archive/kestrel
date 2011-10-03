@@ -4,12 +4,12 @@
 ## Goals
 
 - data duplication for disaster recovery
+- simplest thing that could possibly work
 
 ## Non-goals
 
 - speed
 - automated replica distribution
-- 
 
 ## Motivation
 
@@ -39,6 +39,14 @@ they will have the following penalties, per replicated queue:
 - 2x network bandwidth
 - if clients wait for the server ack, PUTs will be slower by the amount of a
   network roundtrip
+
+## Dependencies
+
+This should be built on top of kestrel 3.0 (the current development build).
+
+It will probably require the fanout-queue improvements that are on the
+current 3.0 roadmap. If we decide not to do the fanout improvements, the
+implementation will need some added complexity.
 
 ## Implementation
 
