@@ -110,7 +110,7 @@ class TextHandler(
 
   protected def clientDescription: String = {
     val address = connection.remoteAddress.asInstanceOf[InetSocketAddress]
-    "%s:%d".format(address.getHostName, address.getPort)
+    "%s:%d".format(address.getAddress.getHostAddress, address.getPort)
   }
 
   override def release() {
