@@ -105,8 +105,11 @@ class TextHandler(
   queueCollection: QueueCollection,
   maxOpenTransactions: Int
 ) extends Service[TextRequest, TextResponse] {
+  val log = Logger.get(getClass)
+
   val sessionId = Kestrel.sessionId.incrementAndGet()
   val handler = new KestrelHandler(queueCollection, maxOpenTransactions, clientDescription, sessionId)
+  log.debug("New text session %d from %s", sessionId, clientDescription)
 
   protected def clientDescription: String = {
     val address = connection.remoteAddress.asInstanceOf[InetSocketAddress]
