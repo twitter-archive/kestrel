@@ -26,7 +26,7 @@ import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.ostrich.stats.Stats
-import com.twitter.util.{Duration, Future, Promise, Time, Timer, TimerTask, Try}
+import com.twitter.util._
 import config._
 
 class PersistentQueue(val name: String, persistencePath: String, @volatile var config: QueueConfig,
@@ -250,17 +250,31 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
    */
   def remove(): Option[QItem] = remove(false)
 
-  private def waitOperation(op: => Option[QItem], deadline: Option[Time], future: Promise[Option[QItem]]) {
+  private def waitOperation(op: => Option[QItem], deadline: Option[Time], promise: Promise[Option[QItem]]) {
     val item = op
     if (synchronized {
       if (!item.isDefined && !closed && !paused && deadline.isDefined && deadline.get > Time.now) {
-        // if we get woken up, try again with the same deadline.
-        waiters.add(deadline.get, { () => waitOperation(op, deadline, future) }, { () => future.setValue(None) })
+        waiters.add(
+          deadline.get,
+          { () =>
+            // checking future.isCancelled is a race, but only means that an item may be removed &
+            // then un-removed at a higher level if the connection is closed. it's an optimization
+            // to let un-acked items get returned before this timeout.
+            if (promise.isCancelled) {
+              promise.setValue(None)
+              waiters.trigger()
+            } else {
+              // if we get woken up, try again with the same deadline.
+              waitOperation(op, deadline, promise)
+            }
+          },
+          { () => promise.setValue(None) }
+        )
         false
       } else {
         true
       }
-    }) future.setValue(item)
+    }) promise.setValue(item)
   }
 
   final def waitRemove(deadline: Option[Time], transaction: Boolean): Future[Option[QItem]] = {

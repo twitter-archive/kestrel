@@ -22,7 +22,7 @@ import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.ostrich.admin.{BackgroundProcess, ServiceTracker}
 import com.twitter.ostrich.stats.Stats
-import com.twitter.util.{Future, Duration, Time}
+import com.twitter.util._
 import java.util.concurrent.atomic.AtomicBoolean
 
 class TooManyOpenTransactionsException extends Exception("Too many open transactions.")
@@ -38,8 +38,6 @@ class KestrelHandler(
   sessionId: Int
 ) {
   private val log = Logger.get(getClass.getName)
-
-  val finished = new AtomicBoolean(false)
 
   object pendingTransactions {
     private var transactions = createMap()
@@ -98,14 +96,11 @@ class KestrelHandler(
   Kestrel.sessions.incrementAndGet()
   Stats.incr("total_connections")
 
-  // usually called when netty sends a disconnect signal.
+  // called exactly once by finagle when the session ends.
   def finish() {
     abortAnyTransaction()
-
-    if (finished.getAndSet(true) == false) {
-      log.debug("End of session %d", sessionId)
-      Kestrel.sessions.decrementAndGet()
-    }
+    log.debug("End of session %d", sessionId)
+    Kestrel.sessions.decrementAndGet()
   }
 
   def flushAllQueues() {
@@ -184,7 +179,7 @@ class KestrelHandler(
       Stats.incr("cmd_get")
     }
     val startTime = Time.now
-    queues.remove(key, timeout, opening, peeking).map { itemOption =>
+    val future = queues.remove(key, timeout, opening, peeking).map { itemOption =>
       Stats.addMetric(if (itemOption.isDefined) "get_hit_latency_usec" else "get_miss_latency_usec",
         (Time.now - startTime).inMicroseconds.toInt)
       itemOption.foreach { item =>
@@ -193,6 +188,11 @@ class KestrelHandler(
       }
       itemOption
     }
+    future.onCancellation {
+      // if the connection is closed, pre-emptively return un-acked items.
+      abortAnyTransaction()
+    }
+    future
   }
 
   def abortAnyTransaction() {
