@@ -47,7 +47,7 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
       maxAge = 1800.seconds
     }
     kestrel = new Kestrel(defaultConfig, List(weatherUpdatesConfig), "localhost",
-      Some(PORT), None, canonicalFolderName, Protocol.Ascii, None, None, 1)
+      Some(PORT), None, canonicalFolderName, Protocol.Ascii, None, None, 10)
     kestrel.start()
   }
 
@@ -259,6 +259,27 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
 
         // after failing to deliver to the disconnected client, should show up on #2:
         getClient2.finishGet() mustEqual "here i am JH"
+      }
+    }
+
+    // open a transaction, do a long blocking read, disconnect, and make sure the item is available immediately.
+    "handoff an item immediately after disconnecting" in {
+      withTempFolder {
+        makeServer()
+
+        val putClient = new TestClient("localhost", PORT)
+        // do an initial poll to initialize the queue.
+        putClient.set("slow", "item") mustEqual "STORED"
+        putClient.get("slower") mustEqual ""
+
+        val getClient1 = new TestClient("localhost", PORT)
+        getClient1.get("slow/open") mustEqual "item"
+        getClient1.startGet("slower/open/t=1000")
+        getClient1.disconnect()
+        Thread.sleep(10)
+
+        val getClient2 = new TestClient("localhost", PORT)
+        getClient2.get("slow/open") mustEqual "item"
       }
     }
 
