@@ -16,17 +16,16 @@
 
 package net.lag.kestrel
 
-import java.net.InetSocketAddress
 import com.twitter.conversions.time._
+import com.twitter.finagle.ClientConnection
 import com.twitter.naggati.test.TestCodec
 import com.twitter.ostrich.admin.RuntimeEnvironment
 import com.twitter.util.{Future, Promise, Time}
+import java.net.InetSocketAddress
 import org.jboss.netty.buffer.ChannelBuffers
-import org.jboss.netty.channel._
-import org.jboss.netty.channel.group.ChannelGroup
+//import org.jboss.netty.channel._
 import org.specs.Specification
 import org.specs.mock.{ClassMocker, JMocker}
-import com.twitter.finagle.ClientConnection
 
 class TextHandlerSpec extends Specification with JMocker with ClassMocker {
   def wrap(s: String) = ChannelBuffers.wrappedBuffer(s.getBytes)
@@ -88,6 +87,10 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
     val qitem = QItem(Time.now, None, "state shirt".getBytes, 23)
 
     "get request" in {
+      expect {
+        one(connection).remoteAddress willReturn new InetSocketAddress("", 0)
+      }
+
       val textHandler = new TextHandler(connection, queueCollection, 10)
 
       "closes transactions" in {
@@ -163,6 +166,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
 
     "put request" in {
       expect {
+        one(connection).remoteAddress willReturn new InetSocketAddress("", 0)
         one(queueCollection).add("test", "hello".getBytes, None) willReturn true
       }
 
@@ -172,6 +176,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
 
     "delete request" in {
       expect {
+        one(connection).remoteAddress willReturn new InetSocketAddress("", 0)
         one(queueCollection).delete("test")
       }
 
@@ -180,6 +185,10 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
     }
 
     "version request" in {
+      expect {
+        one(connection).remoteAddress willReturn new InetSocketAddress("", 0)
+      }
+
       val runtime = RuntimeEnvironment(this, Array())
       Kestrel.runtime = runtime
 
