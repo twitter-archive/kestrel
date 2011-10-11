@@ -36,6 +36,7 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
 
   val sessionId = Kestrel.sessionId.incrementAndGet()
   val finished = new AtomicBoolean(false)
+  @volatile var waitingFor: Option[Future[Option[QItem]]] = None
 
   object pendingTransactions {
     private var transactions = createMap()
@@ -99,6 +100,7 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
   // usually called when netty sends a disconnect signal.
   protected def finish() {
     abortAnyTransaction()
+    waitingFor.foreach { _.cancel() }
 
     if (finished.getAndSet(true) == false) {
       log.debug("End of session %d", sessionId)
@@ -182,7 +184,10 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
       Stats.incr("cmd_get")
     }
     val startTime = Time.now
-    queues.remove(key, timeout, opening, peeking).map { itemOption =>
+    val future = queues.remove(key, timeout, opening, peeking)
+    waitingFor = Some(future)
+    future.map { itemOption =>
+      waitingFor = None
       if (!timeout.isDefined) {
         Stats.addMetric(if (itemOption.isDefined) "get_hit_latency_usec" else "get_miss_latency_usec",
           (Time.now - startTime).inMicroseconds.toInt)
