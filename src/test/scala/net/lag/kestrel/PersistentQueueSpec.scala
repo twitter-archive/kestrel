@@ -36,6 +36,10 @@ class PersistentQueueSpec extends Specification
   "PersistentQueue" should {
     val timer = new FakeTimer()
 
+    doBefore {
+      timer.timerTask.cancelled = false
+    }
+
     "add and remove one item" in {
       withTempFolder {
         val q = new PersistentQueue("work", folderName, new QueueBuilder().apply(), timer)
@@ -307,26 +311,46 @@ class PersistentQueueSpec extends Specification
         }
       }
 
-      "really long timeout" in {
-        withTempFolder {
-          val q = new PersistentQueue("things", folderName, new QueueBuilder().apply(), timer)
-          q.setup
+      "really long timeout is cancelled" in {
+        val deadline = 7.days.fromNow
 
-          new Thread() {
-            override def run() {
-              Thread.sleep(50)
-              q.add("hi".getBytes)
+        "when an item arrives" in {
+          withTempFolder {
+            val q = new PersistentQueue("things", folderName, new QueueBuilder().apply(), timer)
+            q.setup()
+
+            var rv: Option[String] = None
+            q.waitRemove(Some(deadline), false).onSuccess { item =>
+              rv = item.map { x => new String(x.data) }
             }
-          }.start()
+            q.waiterCount mustEqual 1
+            timer.timerTask.cancelled mustEqual false
 
-          val deadline = 7.days.fromNow
-          var rv: Option[String] = None
-          q.waitRemove(Some(deadline), false).onSuccess { item =>
-            rv = item.map { x => new String(x.data) }
+            q.add("hi".getBytes)
+
+            rv mustEqual Some("hi")
+            q.waiterCount mustEqual 0
+            timer.timerTask.cancelled mustEqual true
           }
-          q.waiterCount mustEqual 1
-          rv must eventually(be_==(Some("hi")))
-          q.waiterCount mustEqual 0
+        }
+
+        "when the connection dies" in {
+          withTempFolder {
+            val q = new PersistentQueue("things", folderName, new QueueBuilder().apply(), timer)
+            q.setup()
+
+            var rv: Option[String] = None
+            val future = q.waitRemove(Some(deadline), false)
+            future.onSuccess { item =>
+              rv = item.map { x => new String(x.data) }
+            }
+            q.waiterCount mustEqual 1
+            timer.timerTask.cancelled mustEqual false
+
+            future.cancel()
+            q.waiterCount mustEqual 0
+            timer.timerTask.cancelled mustEqual true
+          }
         }
       }
     }

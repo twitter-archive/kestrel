@@ -31,13 +31,19 @@ final class DeadlineWaitQueue(timer: Timer) {
   case class Waiter(var timerTask: TimerTask, awaken: () => Unit)
   private val queue = JavaConversions.asScalaSet(new LinkedHashSet[Waiter])
 
-  def add(deadline: Time, awaken: () => Unit, onTimeout: () => Unit) {
+  def add(deadline: Time, awaken: () => Unit, onTimeout: () => Unit) = {
     val waiter = Waiter(null, awaken)
     val timerTask = timer.schedule(deadline) {
       if (synchronized { queue.remove(waiter) }) onTimeout()
     }
     waiter.timerTask = timerTask
     synchronized { queue.add(waiter) }
+    waiter
+  }
+
+  def remove(waiter: Waiter) {
+    synchronized { queue.remove(waiter) }
+    waiter.timerTask.cancel()
   }
 
   def trigger() {

@@ -26,7 +26,7 @@ import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.ostrich.stats.Stats
-import com.twitter.util.{Duration, Future, Promise, Time, Timer, TimerTask, Try}
+import com.twitter.util._
 import config._
 
 class PersistentQueue(val name: String, persistencePath: String, @volatile var config: QueueConfig,
@@ -255,7 +255,9 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     if (synchronized {
       if (!item.isDefined && !closed && !paused && deadline.isDefined && deadline.get > Time.now) {
         // if we get woken up, try again with the same deadline.
-        waiters.add(deadline.get, { () => waitOperation(op, deadline, future) }, { () => future.setValue(None) })
+        val w = waiters.add(deadline.get, { () => waitOperation(op, deadline, future) }, { () => future.setValue(None) })
+        // FIXME: use onCancellation when util-core is bumped.
+        future.linkTo(new CancellableSink({ waiters.remove(w) }))
         false
       } else {
         true
