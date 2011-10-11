@@ -46,7 +46,10 @@ final class DeadlineWaitQueue(timer: Timer) {
         queue.remove(waiter)
         waiter
       }
-    }.foreach { _.awaken() }
+    }.foreach { waiter =>
+      waiter.timerTask.cancel()
+      waiter.awaken()
+    }
   }
 
   def triggerAll() {
@@ -54,7 +57,10 @@ final class DeadlineWaitQueue(timer: Timer) {
       val rv = queue.toArray
       queue.clear()
       rv
-    }.foreach { _.awaken() }
+    }.foreach { waiter =>
+      waiter.timerTask.cancel()
+      waiter.awaken()
+    }
   }
 
   def size() = {
