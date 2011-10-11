@@ -261,7 +261,7 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
         getClient2.finishGet() mustEqual "here i am JH"
       }
     }
-    
+
     "cancel the timer for a long-poll on disconnect" in {
       withTempFolder {
         makeServer()
