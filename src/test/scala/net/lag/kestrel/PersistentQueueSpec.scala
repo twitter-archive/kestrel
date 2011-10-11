@@ -306,6 +306,29 @@ class PersistentQueueSpec extends Specification
           rv mustEqual None
         }
       }
+
+      "really long timeout" in {
+        withTempFolder {
+          val q = new PersistentQueue("things", folderName, new QueueBuilder().apply(), timer)
+          q.setup
+
+          new Thread() {
+            override def run() {
+              Thread.sleep(50)
+              q.add("hi".getBytes)
+            }
+          }.start()
+
+          val deadline = 7.days.fromNow
+          var rv: Option[String] = None
+          q.waitRemove(Some(deadline), false).onSuccess { item =>
+            rv = item.map { x => new String(x.data) }
+          }
+          q.waiterCount mustEqual 1
+          rv must eventually(be_==(Some("hi")))
+          q.waiterCount mustEqual 0
+        }
+      }
     }
 
     "correctly interleave transactions in the journal" in {
