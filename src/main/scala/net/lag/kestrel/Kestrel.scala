@@ -97,6 +97,9 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
     queueCollection = new QueueCollection(queuePath, new NettyTimer(timer), defaultQueueConfig, builders)
     queueCollection.loadQueues()
 
+    Stats.addGauge("items") { queueCollection.currentItems.toDouble }
+    Stats.addGauge("bytes") { queueCollection.currentBytes.toDouble }
+
     // netty setup:
     executor = Executors.newCachedThreadPool()
     channelFactory = new NioServerSocketChannelFactory(executor, executor)
