@@ -1,3 +1,10 @@
+2.1.3
+-----
+release: 13 October 2011
+
+- Fix a bug where timers could stick around even after a client disconnected
+  or received an object.
+- Add 2 missing server stats to the ostrich port.
 
 2.1.2
 -----

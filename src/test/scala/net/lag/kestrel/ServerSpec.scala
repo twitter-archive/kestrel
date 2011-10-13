@@ -36,7 +36,7 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
   val runtime = RuntimeEnvironment(this, Array())
   Kestrel.runtime = runtime
 
-  def makeServer = {
+  def makeServer() = {
     val defaultConfig = new QueueBuilder() {
       maxJournalSize = 16.kilobytes
     }.apply()
@@ -211,27 +211,69 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
         client2.get("auto-rollback/open") mustEqual v.toString
         val client3 = new TestClient("localhost", PORT)
         client3.get("auto-rollback") mustEqual ""
-        var stats = client3.stats
+        var stats = client3.stats()
         stats("queue_auto-rollback_items") mustEqual "0"
         stats("queue_auto-rollback_open_transactions") mustEqual "1"
         stats("queue_auto-rollback_total_items") mustEqual "1"
         stats("queue_auto-rollback_bytes") mustEqual "0"
 
         // oops, client2 dies before committing!
-        client2.disconnect
-        client3.stats("queue_auto-rollback_bytes") must eventually(be_==(v.toString.length.toString))
-        stats = client3.stats
+        client2.disconnect()
+        client3.stats()("queue_auto-rollback_bytes") must eventually(be_==(v.toString.length.toString))
+        stats = client3.stats()
         stats("queue_auto-rollback_items") mustEqual "1"
         stats("queue_auto-rollback_open_transactions") mustEqual "0"
         stats("queue_auto-rollback_total_items") mustEqual "1"
 
         // subsequent fetch must get the same data item back.
         client3.get("auto-rollback/open") mustEqual v.toString
-        stats = client3.stats
+        stats = client3.stats()
         stats("queue_auto-rollback_items") mustEqual "0"
         stats("queue_auto-rollback_open_transactions") mustEqual "1"
         stats("queue_auto-rollback_total_items") mustEqual "1"
         stats("queue_auto-rollback_bytes") mustEqual "0"
+      }
+    }
+
+    "handoff an item in the face of disconnected clients" in {
+      withTempFolder {
+        makeServer()
+
+        val getClient1 = new TestClient("localhost", PORT)
+        // do an initial poll to initialize the queue.
+        getClient1.get("slow") mustEqual ""
+
+        getClient1.startGet("slow/open/t=1000")
+        Thread.sleep(10)
+
+        val getClient2 = new TestClient("localhost", PORT)
+        getClient2.startGet("slow/open/t=1000")
+        Thread.sleep(10)
+
+        // first client dies!
+        getClient1.disconnect()
+        Thread.sleep(10)
+
+        val putClient = new TestClient("localhost", PORT)
+        putClient.set("slow", "here i am JH")
+
+        // after failing to deliver to the disconnected client, should show up on #2:
+        getClient2.finishGet() mustEqual "here i am JH"
+      }
+    }
+
+    "cancel the timer for a long-poll on disconnect" in {
+      withTempFolder {
+        makeServer()
+
+        val client = new TestClient("localhost", PORT)
+        // do an initial poll to initialize the queue.
+        client.get("slow") mustEqual ""
+
+        client.startGet("slow/open/t=3599000")
+        Thread.sleep(10)
+        client.disconnect()
+        kestrel.queueCollection.queue("slow").get.waiterCount mustEqual 0
       }
     }
 
@@ -251,7 +293,7 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
         client2.disconnect
 
         val client3 = new TestClient("localhost", PORT)
-        client3.stats("queue_auto-commit_bytes") must eventually(be_==(v.toString.length.toString))
+        client3.stats()("queue_auto-commit_bytes") must eventually(be_==(v.toString.length.toString))
         client3.get("auto-commit") mustEqual (v + 2).toString
 
         var stats = client3.stats
@@ -271,7 +313,7 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
           time.advance(1.second)
           client.get("test_age") mustEqual "nibbler"
           client.stats.contains("queue_test_age_age") mustEqual true
-          client.stats("queue_test_age_age").toInt >= 1000 mustEqual true
+          client.stats()("queue_test_age_age").toInt >= 1000 mustEqual true
         }
       }
     }
@@ -357,23 +399,23 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
           client.set("q2", "2", 1)
           client.set("q2", "2", 1)
           client.set("q3", "3", 1)
-          client.stats("queue_q1_items") mustEqual "1"
-          client.stats("queue_q2_items") mustEqual "2"
-          client.stats("queue_q3_items") mustEqual "1"
+          client.stats()("queue_q1_items") mustEqual "1"
+          client.stats()("queue_q2_items") mustEqual "2"
+          client.stats()("queue_q3_items") mustEqual "1"
 
           time.advance(5.seconds)
 
           client.out.write("flush_expired q1\n".getBytes)
           client.readline mustEqual "1"
-          client.stats("queue_q1_items") mustEqual "0"
-          client.stats("queue_q2_items") mustEqual "2"
-          client.stats("queue_q3_items") mustEqual "1"
+          client.stats()("queue_q1_items") mustEqual "0"
+          client.stats()("queue_q2_items") mustEqual "2"
+          client.stats()("queue_q3_items") mustEqual "1"
 
           client.out.write("flush_all_expired\n".getBytes)
           client.readline mustEqual "3"
-          client.stats("queue_q1_items") mustEqual "0"
-          client.stats("queue_q2_items") mustEqual "0"
-          client.stats("queue_q3_items") mustEqual "0"
+          client.stats()("queue_q1_items") mustEqual "0"
+          client.stats()("queue_q2_items") mustEqual "0"
+          client.stats()("queue_q3_items") mustEqual "0"
         }
       }
     }

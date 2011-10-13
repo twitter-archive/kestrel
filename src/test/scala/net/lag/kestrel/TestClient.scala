@@ -31,20 +31,20 @@ class TestClient(host: String, port: Int) {
   var out: OutputStream = null
   var in: DataInputStream = null
 
-  connect
+  connect()
 
 
-  def connect = {
+  def connect() {
     socket = new Socket(host, port)
     out = socket.getOutputStream
     in = new DataInputStream(socket.getInputStream)
   }
 
-  def disconnect = {
+  def disconnect() {
     socket.close
   }
 
-  def readline = {
+  def readline() = {
     // this isn't meant to be efficient, just simple.
     val out = new StringBuilder
     var done = false
@@ -61,24 +61,27 @@ class TestClient(host: String, port: Int) {
 
   def set(key: String, value: String): String = {
     out.write(("set " + key + " 0 0 " + value.length + "\r\n" + value + "\r\n").getBytes)
-    readline
+    readline()
   }
 
   def set(key: String, value: String, expiry: Int) = {
     out.write(("set " + key + " 0 " + expiry + " " + value.length + "\r\n" + value + "\r\n").getBytes)
-    readline
+    readline()
   }
 
   def setData(key: String, value: Array[Byte]) = {
     out.write(("set " + key + " 0 0 " + value.size + "\r\n").getBytes)
     out.write(value)
     out.write("\r\n".getBytes)
-    readline
+    readline()
   }
 
-  def getData(key: String): Array[Byte] = {
+  def startGet(key: String) {
     out.write(("get " + key + "\r\n").getBytes)
-    val line = readline
+  }
+
+  def finishGetData(): Array[Byte] = {
+    val line = readline()
     if (line == "END") {
       return new Array[Byte](0)
     }
@@ -89,9 +92,16 @@ class TestClient(host: String, port: Int) {
     val len = line.split(" ")(3).toInt
     val buffer = new Array[Byte](len)
     in.readFully(buffer)
-    readline
-    readline // "END"
+    readline()
+    readline() // "END"
     buffer
+  }
+
+  def finishGet() = new String(finishGetData())
+
+  def getData(key: String): Array[Byte] = {
+    startGet(key)
+    finishGetData()
   }
 
   def get(key: String): String = {
@@ -100,15 +110,15 @@ class TestClient(host: String, port: Int) {
 
   def add(key: String, value: String) = {
     out.write(("add " + key + " 0 0 " + value.length + "\r\n" + value + "\r\n").getBytes)
-    readline
+    readline()
   }
 
-  def stats: Map[String, String] = {
+  def stats(): Map[String, String] = {
     out.write("stats\r\n".getBytes)
     var done = false
     val map = new mutable.HashMap[String, String]
     while (!done) {
-      val line = readline
+      val line = readline()
       if (line startsWith "STAT") {
         val args = line.split(" ")
         map(args(1)) = args(2)
