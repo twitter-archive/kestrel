@@ -73,14 +73,17 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
 
     def peek(name: String): List[Int] = synchronized { transactions(name).toList }
 
-    def cancelAll() {
+    def cancelAll(): Int = {
+      var count = 0
       synchronized {
         val currentTransactions = transactions
         transactions = createMap()
         currentTransactions
       }.foreach { case (name, xids) =>
+        count += xids.size
         xids.foreach { xid => queues.unremove(name, xid) }
       }
+      count
     }
 
     def popAll(name: String): Seq[Int] = {
@@ -100,7 +103,10 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
   // usually called when netty sends a disconnect signal.
   protected def finish() {
     abortAnyTransaction()
-    waitingFor.foreach { _.cancel() }
+    waitingFor.foreach { w =>
+      w.cancel()
+      Stats.incr("cmd_get_timeout_dropped")
+    }
 
     if (finished.getAndSet(true) == false) {
       log.debug("End of session %d", sessionId)
@@ -201,7 +207,7 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
   }
 
   protected def abortAnyTransaction() = {
-    pendingTransactions.cancelAll()
+    Stats.incr("cmd_get_open_dropped", pendingTransactions.cancelAll())
   }
 
   def setItem(key: String, flags: Int, expiry: Option[Time], data: Array[Byte]) = {
