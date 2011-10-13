@@ -252,14 +252,14 @@ exactly one of the functions will be called, never both.
           </div>
           
     </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.DeadlineWaitQueue#add">
-      <a id="add(Time,() ⇒ Unit,() ⇒ Unit):Unit"></a>
+      <a id="add(Time,() ⇒ Unit,() ⇒ Unit):Waiter"></a>
       <h4 class="signature">
       <span class="kind">def</span>
       <span class="symbol">
         <span class="name">add</span>
         
         <span class="params">(<span name="deadline">deadline: <span class="extype" name="com.twitter.util.Time">Time</span></span>, <span name="awaken">awaken: () ⇒ <span class="extype" name="scala.Unit">Unit</span></span>, <span name="onTimeout">onTimeout: () ⇒ <span class="extype" name="scala.Unit">Unit</span></span>)</span>
-        <span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+        <span class="result">: <a href="DeadlineWaitQueue$Waiter.html" class="extype" name="net.lag.kestrel.DeadlineWaitQueue.Waiter">Waiter</a></span>
       </span>
       </h4>
       
@@ -552,6 +552,18 @@ possible to check whether the contents of the list are of the requested typed.
             
           </div>
           
+    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.DeadlineWaitQueue#remove">
+      <a id="remove(Waiter):Unit"></a>
+      <h4 class="signature">
+      <span class="kind">def</span>
+      <span class="symbol">
+        <span class="name">remove</span>
+        
+        <span class="params">(<span name="waiter">waiter: <a href="DeadlineWaitQueue$Waiter.html" class="extype" name="net.lag.kestrel.DeadlineWaitQueue.Waiter">Waiter</a></span>)</span>
+        <span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      
     </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.DeadlineWaitQueue#size">
       <a id="size():Int"></a>
       <h4 class="signature">
