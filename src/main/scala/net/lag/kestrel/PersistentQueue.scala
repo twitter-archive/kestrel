@@ -167,7 +167,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   /**
    * Add a value to the end of the queue, transactionally.
    */
-  def add(value: Array[Byte], expiry: Option[Time], xid: Option[Int]): Boolean = {
+  def add(value: Array[Byte], expiry: Option[Time], xid: Option[Int], addTime: Time): Boolean = {
     val future = synchronized {
       if (closed || value.size > config.maxItemSize.inBytes) return false
       if (config.fanoutOnly && !isFanout) return true
@@ -178,8 +178,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
         if (config.keepJournal) journal.remove()
       }
 
-      val now = Time.now
-      val item = QItem(now, adjustExpiry(now, expiry), value, 0)
+      val item = QItem(addTime, adjustExpiry(Time.now, expiry), value, 0)
       if (config.keepJournal) {
         checkRotateJournal()
         if (!journal.inReadBehind && (queueSize >= config.maxMemorySize.inBytes)) {
@@ -204,11 +203,11 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     true
   }
 
-  def add(value: Array[Byte]): Boolean = add(value, None, None)
-  def add(value: Array[Byte], expiry: Option[Time]): Boolean = add(value, expiry, None)
+  def add(value: Array[Byte]): Boolean = add(value, None, None, Time.now)
+  def add(value: Array[Byte], expiry: Option[Time]): Boolean = add(value, expiry, None, Time.now)
 
-  def continue(xid: Int, value: Array[Byte]): Boolean = add(value, None, Some(xid))
-  def continue(xid: Int, value: Array[Byte], expiry: Option[Time]): Boolean = add(value, expiry, Some(xid))
+  def continue(xid: Int, value: Array[Byte]): Boolean = add(value, None, Some(xid), Time.now)
+  def continue(xid: Int, value: Array[Byte], expiry: Option[Time]): Boolean = add(value, expiry, Some(xid), Time.now)
 
   /**
    * Peek at the head item in the queue, if there is one.
@@ -268,6 +267,10 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   final def waitRemove(deadline: Option[Time], transaction: Boolean): Future[Option[QItem]] = {
     val promise = new Promise[Option[QItem]]()
     waitOperation(remove(transaction), deadline, promise)
+    // if an item was handed off immediately, track latency from the "put" to "get".
+    if (promise.isDefined && promise().isDefined) {
+      Stats.addMetric("get_hit_latency_usec", (Time.now - promise().get.addTime).inMicroseconds.toInt)
+    }
     promise
   }
 

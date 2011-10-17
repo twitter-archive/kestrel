@@ -108,21 +108,22 @@ class QueueCollection(queueFolder: String, timer: Timer,
    *
    * @return true if the item was added; false if the server is shutting down
    */
-  def add(key: String, item: Array[Byte], expiry: Option[Time]): Boolean = {
+  def add(key: String, item: Array[Byte], expiry: Option[Time], addTime: Time): Boolean = {
     for (fanouts <- fanout_queues.get(key); name <- fanouts) {
-      add(name, item, expiry)
+      add(name, item, expiry, addTime)
     }
 
     queue(key) match {
       case None => false
       case Some(q) =>
-        val result = q.add(item, expiry)
+        val result = q.add(item, expiry, None, addTime)
         if (result) Stats.incr("total_items")
         result
     }
   }
 
-  def add(key: String, item: Array[Byte]): Boolean = add(key, item, None)
+  def add(key: String, item: Array[Byte]): Boolean = add(key, item, None, Time.now)
+  def add(key: String, item: Array[Byte], expiry: Option[Time]): Boolean = add(key, item, expiry, Time.now)
 
   /**
    * Retrieve an item from a queue and pass it to a continuation. If no item is available within

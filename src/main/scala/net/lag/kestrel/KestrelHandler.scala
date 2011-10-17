@@ -214,7 +214,7 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
     log.debug("set -> q=%s flags=%d expiry=%s size=%d", key, flags, expiry, data.length)
     Stats.incr("cmd_set")
     Stats.timeMicros("set_latency") {
-      queues.add(key, data, expiry)
+      queues.add(key, data, expiry, Time.now)
     }
   }
 

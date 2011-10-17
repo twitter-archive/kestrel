@@ -178,16 +178,18 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
     }
 
     "put request" in {
-      expect {
-        one(channel).getRemoteAddress() willReturn new InetSocketAddress(0)
-        one(channelGroup).add(channel) willReturn true
-        one(queueCollection).add("test", "hello".getBytes, None) willReturn true
-        one(channel).write(CountResponse(1))
-      }
+      Time.withCurrentTimeFrozen { mutator =>
+        expect {
+          one(channel).getRemoteAddress() willReturn new InetSocketAddress(0)
+          one(channelGroup).add(channel) willReturn true
+          one(queueCollection).add("test", "hello".getBytes, None, Time.now) willReturn true
+          one(channel).write(CountResponse(1))
+        }
 
-      val textHandler = new TextHandler(channelGroup, queueCollection, 10, None)
-      textHandler.handleUpstream(null, new UpstreamChannelStateEvent(channel, ChannelState.OPEN, true))
-      textHandler.handle(TextRequest("put", List("test"), List("hello".getBytes)))
+        val textHandler = new TextHandler(channelGroup, queueCollection, 10, None)
+        textHandler.handleUpstream(null, new UpstreamChannelStateEvent(channel, ChannelState.OPEN, true))
+        textHandler.handle(TextRequest("put", List("test"), List("hello".getBytes)))
+      }
     }
 
     "delete request" in {
