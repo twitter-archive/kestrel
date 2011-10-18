@@ -32,6 +32,8 @@ import org.jboss.netty.channel.{Channel, ChannelFactory, ChannelPipelineFactory,
 import org.jboss.netty.channel.group.DefaultChannelGroup
 import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory
 import org.jboss.netty.util.{HashedWheelTimer, Timeout, Timer, TimerTask}
+import org.apache.thrift.protocol._
+import com.twitter.finagle.thrift._
 import config._
 
 import com.twitter.finagle.builder.{ServerBuilder, Server => FinagleServer}
@@ -44,7 +46,7 @@ import com.twitter.finagle.{ClientConnection, Codec => FinagleCodec, Service => 
 
 class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
               listenAddress: String, memcacheListenPort: Option[Int], textListenPort: Option[Int],
-              queuePath: String, protocol: config.Protocol,
+              thriftListenPort: Option[Int], queuePath: String, protocol: config.Protocol,
               expirationTimerFrequency: Option[Duration], clientTimeout: Option[Duration],
               maxOpenTransactions: Int)
       extends Service {
@@ -55,6 +57,9 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
   var memcacheService: Option[FinagleServer] = None
   var textService: Option[FinagleServer] = None
   var textAcceptor: Option[Channel] = None
+  var thriftService: Option[FinagleServer] = None
+
+  def thriftCodec = ThriftServerFramedCodec()
 
   private def finagledCodec[Req, Resp](codec: => Codec[Resp]) = {
     new FinagleCodec[Req, Resp] {
@@ -76,6 +81,24 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
     clientTimeout.foreach { timeout => builder.readTimeout(timeout) }
     // calling build() is equivalent to calling start() in finagle.
     builder.build(factory)
+  }
+
+  def startThriftServer(
+    name: String,
+    port: Int
+  ): FinagleServer = {
+    val address = new InetSocketAddress(listenAddress, port)
+    val builder = ServerBuilder()
+      .codec(thriftCodec)
+      .name(name)
+      .reportTo(new OstrichStatsReceiver)
+      .bindTo(address)
+    clientTimeout.foreach { timeout => builder.readTimeout(timeout) }
+    // calling build() is equivalent to calling start() in finagle.
+    builder.build(connection => {
+      val handler = new ThriftHandler(connection, queueCollection, maxOpenTransactions)
+      new ThriftFinagledService(handler, new TBinaryProtocol.Factory())
+    })
   }
 
   private def bytesRead(n: Int) {
@@ -118,6 +141,8 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
       }
     }
 
+    thriftService = thriftListenPort.map { port => startThriftServer("kestrel-thrift", port) }
+
     // optionally, start a periodic timer to clean out expired items.
     if (expirationTimerFrequency.isDefined) {
       log.info("Starting up background expiration task.")
@@ -137,6 +162,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
 
     memcacheService.foreach { _.close() }
     textService.foreach { _.close() }
+    thriftService.foreach { _.close() }
     queueCollection.shutdown()
 
     timer.stop()

@@ -34,12 +34,12 @@ import com.twitter.util.{Future, Duration, Time}
 class MemcacheHandler(
   connection: ClientConnection,
   queueCollection: QueueCollection,
-  maxOpenTransactions: Int
+  maxOpenReads: Int
 ) extends Service[MemcacheRequest, MemcacheResponse] {
   val log = Logger.get(getClass.getName)
 
   val sessionId = Kestrel.sessionId.incrementAndGet()
-  protected val handler = new KestrelHandler(queueCollection, maxOpenTransactions, clientDescription, sessionId)
+  protected val handler = new KestrelHandler(queueCollection, maxOpenReads, clientDescription, sessionId)
   log.debug("New session %d from %s", sessionId, clientDescription)
 
   override def release() {
@@ -61,9 +61,10 @@ class MemcacheHandler(
       case "get" =>
         get(request.line(1))
       case "monitor" =>
-        Future(monitor(request.line(1), request.line(2).toInt))
+        val maxItems = if (request.line.size > 3) request.line(3).toInt else maxOpenReads
+        Future(monitor(request.line(1), request.line(2).toInt, maxItems))
       case "confirm" =>
-        if (handler.closeTransactions(request.line(1), request.line(2).toInt)) {
+        if (handler.closeReads(request.line(1), request.line(2).toInt)) {
           Future(new MemcacheResponse("END"))
         } else {
           Future(new MemcacheResponse("ERROR"))
@@ -149,14 +150,14 @@ class MemcacheHandler(
     }
 
     if (aborting) {
-      handler.abortTransaction(key)
+      handler.abortRead(key)
       Future(new MemcacheResponse("END"))
     } else {
       if (closing) {
-        handler.closeTransaction(key)
+        handler.closeRead(key)
       }
       if (opening || !closing) {
-        if (handler.pendingTransactions.size(key) > 0 && !peeking && !opening) {
+        if (handler.pendingReads.size(key) > 0 && !peeking && !opening) {
           log.warning("Attempt to perform a non-transactional fetch with an open transaction on " +
                       " '%s' (sid %d, %s)", key, sessionId, clientDescription)
           return Future(new MemcacheResponse("ERROR") then Codec.Disconnect)
@@ -171,7 +172,7 @@ class MemcacheHandler(
             }
           }
         } catch {
-          case e: TooManyOpenTransactionsException =>
+          case e: TooManyOpenReadsException =>
             Future(new MemcacheResponse("ERROR") then Codec.Disconnect)
         }
       } else {
@@ -180,9 +181,9 @@ class MemcacheHandler(
     }
   }
 
-  private def monitor(key: String, timeout: Int): MemcacheResponse = {
+  private def monitor(key: String, timeout: Int, maxItems: Int): MemcacheResponse = {
     val channel = new LatchedChannelSource[MemcacheResponse]
-    handler.monitorUntil(key, Time.now + timeout.seconds) {
+    handler.monitorUntil(key, Some(Time.now + timeout.seconds), maxItems, true) {
       case None =>
         channel.send(new MemcacheResponse("END"))
         channel.close()
@@ -220,7 +221,7 @@ class MemcacheHandler(
     new MemcacheResponse(summary)
   }
 
-  private def dumpStats(requestedQueueNames : List[String]) = {
+  private def dumpStats(requestedQueueNames: List[String]) = {
     val queueNames = if (!requestedQueueNames.isEmpty) { requestedQueueNames } else { queueCollection.queueNames }
     val dump = new mutable.ListBuffer[String]
     for (qName <- queueNames) {

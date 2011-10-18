@@ -180,6 +180,11 @@ trait KestrelConfig extends ServerConfig[Kestrel] {
   var textListenPort: Option[Int] = Some(2222)
 
   /**
+   * Port for accepting thrift protocol connections.
+   */
+  var thriftListenPort: Option[Int] = Some(9999)
+
+  /**
    * Where queue journals should be stored. Each queue will have its own files in this folder.
    */
   var queuePath: String = "/tmp"
@@ -208,7 +213,7 @@ trait KestrelConfig extends ServerConfig[Kestrel] {
   var maxOpenTransactions: Int = 1
 
   def apply(runtime: RuntimeEnvironment) = {
-    new Kestrel(default(), queues, listenAddress, memcacheListenPort, textListenPort,
+    new Kestrel(default(), queues, listenAddress, memcacheListenPort, textListenPort, thriftListenPort,
                 queuePath, protocol, expirationTimerFrequency, clientTimeout,
                 maxOpenTransactions)
   }

@@ -99,10 +99,10 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
           one(queueCollection).confirmRemove("test", 100)
         }
 
-        textHandler.handler.pendingTransactions.add("test", 100)
-        textHandler.handler.pendingTransactions.peek("test") mustEqual List(100)
+        textHandler.handler.pendingReads.add("test", 100)
+        textHandler.handler.pendingReads.peek("test") mustEqual List(100)
         textHandler(TextRequest("get", List("test"), Nil))() mustEqual ItemResponse(Some(qitem.data))
-        textHandler.handler.pendingTransactions.peek("test") mustEqual List(qitem.xid)
+        textHandler.handler.pendingReads.peek("test") mustEqual List(qitem.xid)
       }
 
       "with timeout" in {

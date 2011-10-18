@@ -20,6 +20,7 @@ package net.lag.kestrel.load
 import java.net._
 import java.nio._
 import java.nio.channels._
+import java.util.concurrent.atomic.AtomicInteger
 import scala.annotation.tailrec
 import scala.collection.mutable
 import com.twitter.conversions.string._
@@ -81,5 +82,26 @@ trait LoadTesting {
     }
     data.rewind()
     data
+  }
+
+  final def expect(socket: SocketChannel, data: ByteBuffer) {
+    val buffer = ByteBuffer.allocate(data.capacity)
+    receive(socket, buffer)
+    data.rewind()
+    if (buffer != data) {
+      throw new Exception("Unexpected response!")
+    }
+  }
+
+  val failedConnects = new AtomicInteger(0)
+
+  final def tryHard[A](f: => A): A = {
+    try {
+      f
+    } catch {
+      case e: java.io.IOException =>
+        failedConnects.incrementAndGet()
+        tryHard(f)
+    }
   }
 }

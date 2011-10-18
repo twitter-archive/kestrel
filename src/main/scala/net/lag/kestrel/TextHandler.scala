@@ -103,12 +103,12 @@ case class StringResponse(message: String) extends TextResponse {
 class TextHandler(
   connection: ClientConnection,
   queueCollection: QueueCollection,
-  maxOpenTransactions: Int
+  maxOpenReads: Int
 ) extends Service[TextRequest, TextResponse] {
   val log = Logger.get(getClass)
 
   val sessionId = Kestrel.sessionId.incrementAndGet()
-  val handler = new KestrelHandler(queueCollection, maxOpenTransactions, clientDescription, sessionId)
+  val handler = new KestrelHandler(queueCollection, maxOpenReads, clientDescription, sessionId)
   log.debug("New text session %d from %s", sessionId, clientDescription)
 
   protected def clientDescription: String = {
@@ -149,15 +149,15 @@ class TextHandler(
           val queueName = request.args(0)
           try {
             val timeout = request.args.drop(1).headOption.map { _.toInt.milliseconds.fromNow }
-            handler.closeAllTransactions(queueName)
+            handler.closeAllReads(queueName)
             handler.getItem(queueName, timeout, true, false).map { item =>
               ItemResponse(item.map { _.data })
             }
           } catch {
             case e: NumberFormatException =>
               Future(ErrorResponse("Error parsing timeout."))
-            case e: TooManyOpenTransactionsException =>
-              Future(ErrorResponse("Too many open transactions; limit=" + maxOpenTransactions))
+            case e: TooManyOpenReadsException =>
+              Future(ErrorResponse("Too many open transactions; limit=" + maxOpenReads))
           }
         }
       case "peek" =>
@@ -168,7 +168,7 @@ class TextHandler(
           val queueName = request.args(0)
           try {
             val timeout = request.args.drop(1).headOption.map { _.toInt.milliseconds.fromNow }
-            handler.closeAllTransactions(queueName)
+            handler.closeAllReads(queueName)
             handler.getItem(queueName, timeout, false, true).map { item =>
               ItemResponse(item.map { _.data })
             }
@@ -184,9 +184,9 @@ class TextHandler(
         } else {
           val queueName = request.args(0)
           val timeout = request.args(1).toInt.milliseconds.fromNow
-          handler.closeAllTransactions(queueName)
+          handler.closeAllReads(queueName)
           val channel = new LatchedChannelSource[TextResponse]
-          handler.monitorUntil(queueName, timeout) {
+          handler.monitorUntil(queueName, Some(timeout), maxOpenReads, true) {
             case None =>
               channel.send(ItemResponse(None))
               channel.close()
@@ -202,7 +202,7 @@ class TextHandler(
         } else {
           val queueName = request.args(0)
           val count = request.args(1).toInt
-          if (handler.closeTransactions(queueName, count)) {
+          if (handler.closeReads(queueName, count)) {
             Future(CountResponse(count))
           } else {
             Future(ErrorResponse("Not that many transactions open."))

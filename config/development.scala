@@ -8,6 +8,7 @@ new KestrelConfig {
   listenAddress = "0.0.0.0"
   memcacheListenPort = 22133
   textListenPort = 2222
+  thriftListenPort = 2229
 
   queuePath = "/var/spool/kestrel"
 
@@ -25,10 +26,7 @@ new KestrelConfig {
   admin.httpPort = 2223
 
   admin.statsNodes = new StatsConfig {
-    reporters = new JsonStatsLoggerConfig {
-      loggerName = "stats"
-      serviceName = "kestrel"
-    } :: new TimeSeriesCollectorConfig
+    reporters = new TimeSeriesCollectorConfig
   }
 
   queues = new QueueBuilder {
