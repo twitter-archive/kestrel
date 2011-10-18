@@ -17,11 +17,13 @@
 
 package net.lag.kestrel.load
 
+import com.twitter.conversions.string._
+import com.twitter.ostrich.stats.Histogram
+import com.twitter.util.{Duration, Time}
 import java.net._
 import java.nio._
 import java.nio.channels._
 import scala.collection.mutable
-import com.twitter.conversions.string._
 
 /**
  * Spam a kestrel server with 1M copies of a pop song lyric, to see how
@@ -53,21 +55,20 @@ object PutMany extends LoadTesting {
 "run down, with no one to find you\n" +
 "we're survivors, here til the end\n"
 
-  def put(socket: SocketChannel, queueName: String, n: Int, globalTimings: mutable.ListBuffer[Long], data: String) = {
+  def put(socket: SocketChannel, queueName: String, n: Int, timings: Array[Int], data: String) = {
     val spam = if (rollup == 1) client.put(queueName, data) else client.putN(queueName, (0 until rollup).map { _ => data })
     val expect = if (rollup == 1) client.putSuccess() else client.putNSuccess(rollup)
 
     val buffer = ByteBuffer.allocate(expect.capacity)
-    val timings = new Array[Long](n min 100000)
 
     var timingCounter = 0
     var i = 0
     while (i < n) {
-      val startTime = System.nanoTime
+      val startTime = Time.now
       send(socket, spam)
       receive(socket, buffer)
-      if (i < 100000) {
-        timings(timingCounter) = System.nanoTime - startTime
+      if (timingCounter < 100000) {
+        timings(timingCounter) = (Time.now - startTime).inMilliseconds.toInt
       }
       expect.rewind()
       if (buffer != expect) {
@@ -76,13 +77,6 @@ object PutMany extends LoadTesting {
       }
       i += rollup
       timingCounter += 1
-    }
-
-    // coalesce timings
-    globalTimings.synchronized {
-      if (globalTimings.size < 100000) {
-        globalTimings ++= timings.toList
-      }
     }
   }
 
@@ -165,6 +159,51 @@ object PutMany extends LoadTesting {
       System.exit(1)
   }
 
+  def showHistogram(timings: Seq[Array[Int]]) {
+    val h = new Histogram()
+    for (t1 <- timings; t2 <- t1) h.add(t2)
+    val stats = Seq(
+      "min" -> h.minimum,
+      "max" -> h.maximum,
+      "p50" -> h.getPercentile(0.5),
+      "p75" -> h.getPercentile(0.75),
+      "p90" -> h.getPercentile(0.9),
+      "p95" -> h.getPercentile(0.95),
+      "p99" -> h.getPercentile(0.99),
+      "p999" -> h.getPercentile(0.999),
+      "p9999" -> h.getPercentile(0.9999)
+    )
+    println("Distribution in usec: " + stats.map { case (k, v) => k + "=" + v }.mkString(" "))
+  }
+
+  def putMany(data: String) {
+    val totalCount = totalItems / clientCount * clientCount
+    val itemsPerClient = totalItems / clientCount
+
+    val timings = (0 until clientCount).map { _ => new Array[Int](itemsPerClient min 100000) }.toSeq
+
+    val threadList = (0 until clientCount).map { i =>
+      new Thread {
+        override def run = {
+          val socket = tryHard { SocketChannel.open(new InetSocketAddress(hostname, port)) }
+          val qName = queueName + (if (queueCount > 1) (i % queueCount).toString else "")
+          put(socket, qName, totalItems / clientCount, timings(i), data)
+        }
+      }
+    }.toSeq
+
+    val startTime = Time.now
+    threadList.foreach { _.start() }
+    threadList.foreach { _.join() }
+    val duration = (Time.now - startTime).inMilliseconds
+
+    Console.println("Finished in %d msec (%.1f usec/put throughput).".format(duration, duration * 1000.0 / totalCount))
+    if (failedConnects.get > 0) {
+      println("Had to retry %d times to make all connections.".format(failedConnects.get))
+    }
+    showHistogram(timings)
+  }
+
   def main(args: Array[String]) = {
     parseArgs(args.toList)
 
@@ -180,9 +219,6 @@ object PutMany extends LoadTesting {
       }
     }
 
-    var threadList: List[Thread] = Nil
-    val timings = new mutable.ListBuffer[Long]
-
     // flush queues first
     if (flushFirst) {
       println("Flushing queues first.")
@@ -197,41 +233,6 @@ object PutMany extends LoadTesting {
 
     println("Put %d items of %d bytes in bursts of %d to %s:%d in %d queues named %s using %d clients.".format(
       totalItems, bytes, rollup, hostname, port, queueCount, queueName, clientCount))
-
-    val startTime = System.currentTimeMillis
-
-    for (i <- 0 until clientCount) {
-      val t = new Thread {
-        override def run = {
-          val socket = tryHard { SocketChannel.open(new InetSocketAddress(hostname, port)) }
-          val qName = queueName + (if (queueCount > 1) (i % queueCount).toString else "")
-          put(socket, qName, totalItems / clientCount, timings, rawData.toString)
-        }
-      }
-      threadList = t :: threadList
-      t.start
-    }
-    for (t <- threadList) {
-      t.join
-    }
-
-    val duration = System.currentTimeMillis - startTime
-    Console.println("Finished in %d msec (%.1f usec/put throughput).".format(duration, duration * 1000.0 / totalCount))
-    if (failedConnects.get > 0) {
-      println("Had to retry %d times to make all connections.".format(failedConnects.get))
-    }
-    val sortedTimings = timings.toList.sorted
-    val average = sortedTimings.foldLeft(0L) { _ + _ } / sortedTimings.size.toDouble / 1000.0
-    val min = sortedTimings(0) / 1000.0
-    val max = sortedTimings(sortedTimings.size - 1) / 1000.0
-    val maxless = sortedTimings(sortedTimings.size - 2) / 1000.0
-    val maxlesser = sortedTimings(sortedTimings.size - 3) / 1000.0
-    val median = (sortedTimings(sortedTimings.size / 2 - 1) + sortedTimings(sortedTimings.size / 2)) / 2000.0
-
-    println("Transactions: min=%.2f; max=%.2f %.2f %.2f; median=%.2f; average=%.2f usec".format(min, max, maxless, maxlesser, median, average))
-    val dist = Array(0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.999, 0.9999) map { r =>
-      "%.2f%%=%.2f".format(r * 100, sortedTimings((sortedTimings.size * r).toInt) / 1000.0)
-    }
-    println("Transactions distribution: " + dist.mkString(" "))
+    putMany(rawData.toString)
   }
 }
