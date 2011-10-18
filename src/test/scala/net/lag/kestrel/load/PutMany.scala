@@ -58,8 +58,41 @@ object PutMany extends LoadTesting {
   case class Session(socket: SocketChannel, queueName: String, count: Int, timings: Array[Int])
 
   def put(session: Session, data: String) = {
-    val spam = if (rollup == 1) client.put(queueName, data) else client.putN(queueName, (0 until rollup).map { _ => data })
+    val spam = if (rollup == 1) {
+      client.put(queueName, data)
+    } else {
+      client.putN(queueName, (0 until rollup).map { _ => data })
+    }
     val expect = if (rollup == 1) client.putSuccess() else client.putNSuccess(rollup)
+
+    val buffer = ByteBuffer.allocate(expect.capacity)
+
+    var timingCounter = 0
+    var i = 0
+    while (i < session.count) {
+      val startTime = Time.now
+      send(session.socket, spam)
+      receive(session.socket, buffer)
+      if (timingCounter < 100000) {
+        session.timings(timingCounter) = (Time.now - startTime).inMilliseconds.toInt
+      }
+      expect.rewind()
+      if (buffer != expect) {
+        // the "!" is important.
+        throw new Exception("Unexpected response at " + i + "!")
+      }
+      i += rollup
+      timingCounter += 1
+    }
+  }
+
+  def get(session: Session, data: String) = {
+    val spam = if (rollup == 1) client.get(queueName, None) else client.getN(queueName, None, rollup)
+    val expect = if (rollup == 1) {
+      client.getSuccess(queueName, data)
+    } else {
+      client.getNSuccess(queueName, (0 until rollup).map { _ => data })
+    }
 
     val buffer = ByteBuffer.allocate(expect.capacity)
 
@@ -92,6 +125,7 @@ object PutMany extends LoadTesting {
   var port = 22133
   var client: Client = MemcacheClient
   var flushFirst = true
+  var getAlso = false
 
   def usage() {
     Console.println("usage: put-many [options]")
@@ -105,7 +139,7 @@ object PutMany extends LoadTesting {
     Console.println("    -b BYTES")
     Console.println("        put BYTES per queue item (default: %d)".format(bytes))
     Console.println("    -r ITEMS")
-    Console.println("        roll up ITEMS items into a single multi-put request (default: %d)".format(rollup))
+    Console.println("        roll up ITEMS items into a single multi-put/multi-get request (default: %d)".format(rollup))
     Console.println("    -q NAME")
     Console.println("        use queue NAME as prefix (default: %s)".format(queueName))
     Console.println("    -Q QUEUES")
@@ -118,6 +152,8 @@ object PutMany extends LoadTesting {
     Console.println("        use thrift RPC")
     Console.println("    -F")
     Console.println("        don't flush queue(s) before the test")
+    Console.println("    -g")
+    Console.println("        get the items afterwards")
   }
 
   def parseArgs(args: List[String]): Unit = args match {
@@ -155,6 +191,9 @@ object PutMany extends LoadTesting {
       parseArgs(xs)
     case "-F" :: xs =>
       flushFirst = false
+      parseArgs(xs)
+    case "-g" :: xs =>
+      getAlso = true
       parseArgs(xs)
     case _ =>
       usage()
@@ -237,6 +276,14 @@ object PutMany extends LoadTesting {
       totalItems, bytes, rollup, hostname, port, queueCount, queueName, clientCount))
     cycle { session =>
       put(session, rawData.toString)
+    }
+
+    if (getAlso) {
+      println("Get %d items of %d bytes in batches of %d from %s:%d in %d queues named %s using %d clients.".format(
+         totalItems, bytes, rollup, hostname, port, queueCount, queueName, clientCount))
+      cycle { session =>
+        get(session, rawData.toString)
+      }
     }
   }
 }

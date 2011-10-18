@@ -39,6 +39,9 @@ trait Client {
   def getEmpty(queueName: String): ByteBuffer
   def getSuccess(queueName: String, data: String): ByteBuffer
 
+  def getN(queueName: String, timeoutMsec: Option[Int], maxItems: Int): ByteBuffer
+  def getNSuccess(queueName: String, data: Seq[String]): ByteBuffer
+
   // "monitor" can return either a single response (monitorSuccess) or a stream of single "get"
   // responses followed by a "getEmpty".
   def monitorHasMultipleResponses: Boolean
@@ -85,6 +88,18 @@ object MemcacheClient extends Client {
 
   def getSuccess(queueName: String, data: String) = {
     ByteBuffer.wrap(("VALUE " + queueName + " 0 " + data.length + "\r\n" + data + "\r\nEND\r\n").getBytes)
+  }
+
+  def getN(queueName: String, timeoutMsec: Option[Int], maxItems: Int) = {
+    ByteBuffer.wrap((0 until maxItems).map { _ =>
+      "get " + queueName + timeoutMsec.map { "/t=" + _ }.getOrElse("") + "\r\n"
+    }.mkString.getBytes)
+  }
+
+  def getNSuccess(queueName: String, data: Seq[String]) = {
+    ByteBuffer.wrap(data.map { d =>
+      "VALUE " + queueName + " 0 " + d.length + "\r\n" + d + "\r\nEND\r\n"
+    }.mkString.getBytes)
   }
 
   def monitorHasMultipleResponses = true
@@ -155,27 +170,16 @@ object ThriftClient extends Client {
     }
   }
 
-  def get(queueName: String, timeoutMsec: Option[Int]) = {
-    withProtocol { p =>
-      p.writeMessageBegin(new TMessage("get", TMessageType.CALL, 0))
-      (new thrift.Kestrel.get_args(queueName, 1, timeoutMsec.getOrElse(0), true)).write(p)
-    }
-  }
+  def get(queueName: String, timeoutMsec: Option[Int]) = getN(queueName, timeoutMsec, 1)
 
-  def getEmpty(queueName: String) = {
-    withProtocol { p =>
-      p.writeMessageBegin(new TMessage("get", TMessageType.REPLY, 0))
-      (new thrift.Kestrel.get_result(success = Some(Nil))).write(p)
-    }
-  }
+  def getEmpty(queueName: String) = getNSuccess(queueName, Nil)
 
-  def getSuccess(queueName: String, data: String) = {
-    withProtocol { p =>
-      p.writeMessageBegin(new TMessage("get", TMessageType.REPLY, 0))
-      val item = new thrift.Item(ByteBuffer.wrap(data.getBytes), 0)
-      (new thrift.Kestrel.get_result(success = Some(Seq(item)))).write(p)
-    }
-  }
+  def getSuccess(queueName: String, data: String) = getNSuccess(queueName, Seq(data))
+
+  def getN(queueName: String, timeoutMsec: Option[Int], maxItems: Int) =
+    monitor(queueName, timeoutMsec.getOrElse(0), maxItems)
+
+  def getNSuccess(queueName: String, data: Seq[String]) = monitorSuccess(queueName, data)
 
   def monitorHasMultipleResponses = false
 
