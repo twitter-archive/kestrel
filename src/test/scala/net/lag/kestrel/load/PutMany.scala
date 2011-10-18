@@ -55,7 +55,9 @@ object PutMany extends LoadTesting {
 "run down, with no one to find you\n" +
 "we're survivors, here til the end\n"
 
-  def put(socket: SocketChannel, queueName: String, n: Int, timings: Array[Int], data: String) = {
+  case class Session(socket: SocketChannel, queueName: String, count: Int, timings: Array[Int])
+
+  def put(session: Session, data: String) = {
     val spam = if (rollup == 1) client.put(queueName, data) else client.putN(queueName, (0 until rollup).map { _ => data })
     val expect = if (rollup == 1) client.putSuccess() else client.putNSuccess(rollup)
 
@@ -63,12 +65,12 @@ object PutMany extends LoadTesting {
 
     var timingCounter = 0
     var i = 0
-    while (i < n) {
+    while (i < session.count) {
       val startTime = Time.now
-      send(socket, spam)
-      receive(socket, buffer)
+      send(session.socket, spam)
+      receive(session.socket, buffer)
       if (timingCounter < 100000) {
-        timings(timingCounter) = (Time.now - startTime).inMilliseconds.toInt
+        session.timings(timingCounter) = (Time.now - startTime).inMilliseconds.toInt
       }
       expect.rewind()
       if (buffer != expect) {
@@ -176,7 +178,7 @@ object PutMany extends LoadTesting {
     println("Distribution in usec: " + stats.map { case (k, v) => k + "=" + v }.mkString(" "))
   }
 
-  def putMany(data: String) {
+  def cycle(f: Session => Unit) {
     val totalCount = totalItems / clientCount * clientCount
     val itemsPerClient = totalItems / clientCount
 
@@ -187,7 +189,7 @@ object PutMany extends LoadTesting {
         override def run = {
           val socket = tryHard { SocketChannel.open(new InetSocketAddress(hostname, port)) }
           val qName = queueName + (if (queueCount > 1) (i % queueCount).toString else "")
-          put(socket, qName, totalItems / clientCount, timings(i), data)
+          f(Session(socket, qName, itemsPerClient, timings(i)))
         }
       }
     }.toSeq
@@ -233,6 +235,8 @@ object PutMany extends LoadTesting {
 
     println("Put %d items of %d bytes in bursts of %d to %s:%d in %d queues named %s using %d clients.".format(
       totalItems, bytes, rollup, hostname, port, queueCount, queueName, clientCount))
-    putMany(rawData.toString)
+    cycle { session =>
+      put(session, rawData.toString)
+    }
   }
 }
