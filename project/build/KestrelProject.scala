@@ -9,9 +9,9 @@ class KestrelProject(info: ProjectInfo)
   with SubversionPublisher
   with PublishSite
 {
-  val ostrich = "com.twitter" % "ostrich" % "4.9.3"
+  val ostrich = "com.twitter" % "ostrich" % "4.9.4"
   val naggati = "com.twitter" % "naggati" % "2.2.0"
-  val finagle = "com.twitter" % "finagle-core" % "1.9.0"
+  val finagle = "com.twitter" % "finagle-core" % "1.9.4-SNAPSHOT"
   val finagle_ostrich4 = "com.twitter" % "finagle-ostrich4" % "1.9.0"
   val scrooge_runtime = "com.twitter" % "scrooge-runtime" % "1.0.3"
   override def scroogeVersion = "1.1.7"
