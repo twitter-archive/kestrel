@@ -95,10 +95,10 @@ Shhh!</p>
 <p>For more information about what it is and how to use it, check out
 the included <a href="https://github.com/robey/kestrel/blob/master/docs/guide.md">guide</a>.</p>
 
-<p>Kestrel has a mailing list here: <a href="&#x6d;&#x61;&#x69;&#108;&#x74;o&#58;&#107;&#101;&#x73;&#116;&#x72;&#101;&#x6c;-&#x74;&#x61;&#x6c;&#x6b;&#x40;&#x67;o&#x6f;&#103;&#108;&#x65;&#103;r&#x6f;&#117;&#112;&#x73;&#x2e;&#99;&#111;&#x6d;">&#x6b;&#x65;&#x73;t&#114;&#101;&#108;&#45;&#116;&#x61;&#108;&#x6b;&#64;&#x67;o&#x6f;g&#108;&#x65;&#103;&#114;&#x6f;&#117;&#x70;&#x73;&#x2e;co&#x6d;</a>
-http://groups.google.com/group/kestrel-talk</p>
+<p>Kestrel has a mailing list here:
+<a href="http://groups.google.com/group/kestrel-talk">kestrel-talk@googlegroups.com</a></p>
 
-<p>Author's address: Robey Pointer &lt;<a href="&#x6d;a&#x69;&#x6c;&#x74;&#x6f;&#58;&#114;&#x6f;&#98;&#x65;&#x79;&#112;&#x6f;&#105;&#110;&#116;&#101;r&#64;&#x67;ma&#105;&#x6c;&#46;c&#x6f;&#x6d;">&#x72;&#x6f;&#x62;e&#121;&#112;&#x6f;&#105;&#110;&#116;&#x65;&#x72;@&#103;&#109;&#x61;&#105;&#x6c;&#x2e;&#x63;&#111;&#109;</a>></p>
+<p>Author's address: Robey Pointer \<a href="m&#x61;&#x69;&#108;&#116;&#111;&#x3a;r&#111;&#x62;&#101;&#121;&#112;&#x6f;&#105;&#110;t&#x65;&#x72;&#64;&#103;&#109;&#x61;&#x69;&#108;&#46;&#x63;&#x6f;&#109;">&#x72;&#x6f;&#98;&#x65;&#121;&#112;&#111;in&#116;&#101;&#x72;&#x40;&#x67;&#x6d;&#97;&#x69;&#108;&#46;&#99;&#x6f;&#x6d;</a></p>
 
 <h2>Features</h2>
 
@@ -111,10 +111,9 @@ http://groups.google.com/group/kestrel-talk</p>
 put into java performance.</p></li>
 <li><p>small</p>
 
-<p>Currently about 2K lines of scala (including comments), because it relies
-on Apache Mina (a rough equivalent of Danger's ziggurat or Ruby's
-EventMachine) and actors -- and frankly because Scala is extremely
-expressive.</p></li>
+<p>Currently about 2500 lines of scala, because it relies on Netty (a rough
+equivalent of Danger's ziggurat or Ruby's EventMachine) -- and because
+Scala is extremely expressive.</p></li>
 <li><p>durable</p>
 
 <p>Queues are stored in memory for speed, but logged into a journal on disk
@@ -144,6 +143,20 @@ but kestrel does not support grouping multiple operations into an atomic
 unit.</p></li>
 </ul>
 
+<h2>Downloading it</h2>
+
+<p>The latest release is always on the homepage here:</p>
+
+<ul>
+<li><a href="http://robey.github.com/kestrel">http://robey.github.com/kestrel</a></li>
+</ul>
+
+<p>Or the latest development versions &amp; branches are on github:</p>
+
+<ul>
+<li><a href="http://github.com/robey/kestrel">http://gitub.com/robey/kestrel</a></li>
+</ul>
+
 <h2>Building it</h2>
 
 <p>Kestrel requires java 6 and sbt 0.7.4. On OS X 10.5, you may have to hard-code
@@ -162,16 +175,13 @@ the first time you do a build. The finished distribution will be in <code>dist</
 
 <h2>Running it</h2>
 
-<p>You can run kestrel by hand via:</p>
+<p>You can run kestrel by hand, in development mode, via:</p>
 
-<pre><code>$ java -jar ./dist/kestrel-VERSION/kestrel-VERSION.jar
+<pre><code>$ ./dist/kestrel-VERSION/scripts/devel.sh
 </code></pre>
 
-<p>To run in development mode (using <code>development.conf</code> instead of
-<code>production.conf</code>), add a <code>stage</code> variable:</p>
-
-<pre><code>$ java -Dstage=development -jar ./dist/kestrel-VERSION/kestrel-VERSION.jar
-</code></pre>
+<p>Like all ostrich-based servers, it uses the "stage" property to determine
+which config file to load, so <code>devel.sh</code> sets <code>-Dstage=development</code>.</p>
 
 <p>When running it as a server, a startup script is provided in
 <code>dist/kestrel-VERSION/scripts/kestrel.sh</code>. The script assumes you have
@@ -193,8 +203,8 @@ logging), it will usually appear in <code>error</code> in the same folder.</p>
 <h2>Configuration</h2>
 
 <p>Queue configuration is described in detail in <code>docs/guide.md</code> (an operational
-guide). Scala docs for the config variables are here:
-http://robey.github.com/kestrel/doc/main/api/net/lag/kestrel/config/KestrelConfig.html</p>
+guide). Scala docs for the config variables are
+<a href="http://robey.github.com/kestrel/doc/main/api/net/lag/kestrel/config/KestrelConfig.html">here</a>.</p>
 
 <h2>Performance</h2>
 
@@ -202,8 +212,7 @@ http://robey.github.com/kestrel/doc/main/api/net/lag/kestrel/config/KestrelConfi
 locally.</p>
 
 <pre><code>$ sbt clean update package-dist
-$ VERSION="2.1.0-SNAPSHOT"
-$ java -server -Xmx1024m -Dstage=development -jar ./dist/kestrel-$VERSION/kestrel-$VERSION.jar
+$ ./dist/kestrel-VERSION/scripts/devel.sh
 </code></pre>
 
 <h2>Put-many</h2>
@@ -211,30 +220,17 @@ $ java -server -Xmx1024m -Dstage=development -jar ./dist/kestrel-$VERSION/kestre
 <p>This test just spams a kestrel server with "put" operations, to see how
 quickly it can absorb and journal them.</p>
 
-<pre><code>$ sbt "put-many --help"
-usage: put-many [options]
-    spam items into kestrel
-
-options:
-    -c CLIENTS
-        use CLIENTS concurrent clients (default: 100)
-    -n ITEMS
-        put ITEMS items into the queue (default: 10000)
-    -b BYTES
-        put BYTES per queue item (default: 1024)
-</code></pre>
-
 <p>A sample run on a 2010 MacBook Pro:</p>
 
-<pre><code>[info] == put-many ==
-[info] Running net.lag.kestrel.load.PutMany -n 1000000
-Finished in 64921 msec (64.9 usec/put throughput).
-Transactions: min=95.00; max=528107.00 524847.00 521780.00;
-  median=3433.00; average=5551.77 usec
-Transactions distribution: 5.00%=810.00 10.00%=1526.00 25.00%=2414.00
-  50.00%=3433.00 75.00%=4851.00 90.00%=6933.00 95.00%=9145.00
-  99.00%=59133.00 99.90%=208001.00 99.99%=505030.00
-[info] == put-many ==
+<pre><code>$ ./dist/kestrel/scripts/load/put-many -n 100000
+Put 100000 items of 1024 bytes to localhost:22133 in 1 queues named spam
+  using 100 clients.
+Finished in 6137 msec (61.4 usec/put throughput).
+Transactions: min=71.00; max=472279.00 472160.00 469075.00;
+  median=3355.00; average=5494.69 usec
+Transactions distribution: 5.00%=485.00 10.00%=1123.00 25.00%=2358.00
+  50.00%=3355.00 75.00%=4921.00 90.00%=7291.00 95.00%=9729.00
+  99.00%=50929.00 99.90%=384638.00 99.99%=467899.00
 </code></pre>
 
 <h2>Many-clients</h2>
@@ -244,51 +240,28 @@ consumers fighting for each item. It usually takes exactly as long as the
 number of items times the delay, but is useful as a validation test to make
 sure kestrel works as advertised without blowing up.</p>
 
-<pre><code>$ sbt "many-clients --help"
-usage: many-clients [options]
-    spin up N clients and have them do timeout reads on a queue while a
-    single producer trickles out.
-
-options:
-    -s MILLESCONDS
-        sleep MILLISECONDS between puts (default: 100)
-    -n ITEMS
-        put ITEMS total items into the queue (default: 100)
-    -c CLIENTS
-        use CLIENTS consumers (default: 100)
-</code></pre>
-
 <p>A sample run on a 2010 MacBook Pro:</p>
 
-<pre><code>[info] == many-clients ==
-[info] Running net.lag.kestrel.load.ManyClients
-Finished in 11104 msec.
-[info] == many-clients ==
+<pre><code>$ ./dist/kestrel/scripts/load/many-clients 
+many-clients: 100 items to localhost using 100 clients, kill rate 0%,
+  at 100 msec/item
+Received 100 items in 11046 msec.
 </code></pre>
+
+<p>This test always takes about 11 seconds -- it's a load test instead of a
+speed test.</p>
 
 <h2>Flood</h2>
 
 <p>This test starts up one producer and one consumer, and just floods items
 through kestrel as fast as it can.</p>
 
-<pre><code>$ sbt "flood --help"
-usage: flood [options]
-    spin up a producer and consumer and flood N items through kestrel
-
-options:
-    -n ITEMS
-        put ITEMS items into the queue (default: 10000)
-    -k KILOBYTES
-        put KILOBYTES per queue item (default: 1)
-</code></pre>
-
 <p>A sample run on a 2010 MacBook Pro:</p>
 
-<pre><code>[info] == flood ==
-[info] Running net.lag.kestrel.load.Flood -n 100000
-flood: 100000 items of 1kB
-Finished in 16834 msec (168.3 usec/put throughput).
-Consumer spun 1 times in misses.
+<pre><code>$ ./dist/kestrel/scripts/load/flood
+flood: 1 threads each sending 10000 items of 1kB through spam
+Finished in 1563 msec (156.3 usec/put throughput).
+Consumer(s) spun 0 times in misses.
 </code></pre>
 
 <h2>Packing</h2>
@@ -300,121 +273,26 @@ with a queue that's fallen behind and <em>stays</em> behind indefinitely, to mak
 sure the journal files are packed periodically without affecting performance
 too badly.</p>
 
-<pre><code>$ sbt "packing --help"
-usage: packing [options]
-    spin up a producer and consumer, write N items, then do read/write cycles
-    with pauses
-
-options:
-    -q NAME
-        use named queue (default: spam)
-    -n ITEMS
-        put ITEMS items into the queue (default: 25000)
-    -k KILOBYTES
-        put KILOBYTES per queue item (default: 1)
-    -t SECONDS
-        pause SECONDS between cycles (default: 1)
-    -c CYCLES
-        do read/writes CYCLES times (default: 100)
-    -x
-        use transactions when fetching
-</code></pre>
-
 <p>A sample run on a 2010 MacBook Pro:</p>
 
-<pre><code>[info] == packing ==
-[info] Running net.lag.kestrel.load.JournalPacking -c 10 -q small
+<pre><code>$ ./dist/kestrel/scripts/load/packing -c 10 -q small
 packing: 25000 items of 1kB with 1 second pauses
 Wrote 25000 items starting at 0.
 cycle: 1
 Wrote 25000 items starting at 25000.
-Read 25000 items in 5402 msec. Consumer spun 0 times in misses.
+Read 25000 items in 5279 msec. Consumer spun 0 times in misses.
 cycle: 2
 Wrote 25000 items starting at 50000.
-Read 25000 items in 5395 msec. Consumer spun 0 times in misses.
-cycle: 3
-Wrote 25000 items starting at 75000.
-Read 25000 items in 4584 msec. Consumer spun 0 times in misses.
-cycle: 4
-Wrote 25000 items starting at 100000.
-Read 25000 items in 4455 msec. Consumer spun 0 times in misses.
-cycle: 5
-Wrote 25000 items starting at 125000.
-Read 25000 items in 4742 msec. Consumer spun 0 times in misses.
-cycle: 6
-Wrote 25000 items starting at 150000.
-Read 25000 items in 4468 msec. Consumer spun 0 times in misses.
-cycle: 7
-Wrote 25000 items starting at 175000.
-Read 25000 items in 5127 msec. Consumer spun 0 times in misses.
-cycle: 8
-Wrote 25000 items starting at 200000.
-Read 25000 items in 4357 msec. Consumer spun 0 times in misses.
-cycle: 9
-Wrote 25000 items starting at 225000.
-Read 25000 items in 4500 msec. Consumer spun 0 times in misses.
+Read 25000 items in 4931 msec. Consumer spun 0 times in misses.
+...
 cycle: 10
 Wrote 25000 items starting at 250000.
-Read 25000 items in 4558 msec. Consumer spun 0 times in misses.
-Read 25000 items in 3141 msec. Consumer spun 0 times in misses.
-[info] == packing ==
+Read 25000 items in 5304 msec. Consumer spun 0 times in misses.
+Read 25000 items in 3370 msec. Consumer spun 0 times in misses.
 </code></pre>
 
-<p>You can see the journals being packed in the kestrel log:</p>
-
-<pre><code>INF [20110405-20:36:57.420] kestrel: Setting up queue small: maxItems=2147483647 maxSize=134217728.bytes maxItemSize=922
-3372036854775807.bytes maxAge=None defaultJournalSize=16777216.bytes maxMemorySize=16777216.bytes maxJournalSize=1342177
-28.bytes discardOldWhenFull=true keepJournal=true syncJournal=never expireToQueue=None maxExpireSweep=2147483647 fanoutO
-nly=false
-INF [20110405-20:36:57.421] kestrel: Replaying transaction journal for 'small'
-INF [20110405-20:36:57.422] kestrel: No transaction journal for 'small'; starting with empty queue.
-INF [20110405-20:36:57.422] kestrel: Finished transaction journal for 'small' (0 items, 0 bytes) xid=0
-INF [20110405-20:36:59.779] kestrel: Rotating journal file for 'small' (qsize=16440320)
-INF [20110405-20:36:59.852] kestrel: Dropping to read-behind for queue 'small' (16.0 MiB)
-INF [20110405-20:37:02.032] kestrel: Rotating journal file for 'small' (qsize=29139968)
-INF [20110405-20:37:04.583] kestrel: Rotating journal file for 'small' (qsize=35066880)
-INF [20110405-20:37:05.005] kestrel: Read-behind on 'small' moving from file small.1302061022051 to small.1302061024673
-INF [20110405-20:37:08.547] kestrel: Read-behind on 'small' moving from file small.1302061024673 to small
-INF [20110405-20:37:09.553] kestrel: Rotating journal file for 'small' (qsize=27975680)
-INF [20110405-20:37:12.412] kestrel: Read-behind on 'small' moving from file small.1302061029571 to small
-INF [20110405-20:37:14.511] kestrel: Rotating journal file for 'small' (qsize=26700800)
-INF [20110405-20:37:16.384] kestrel: Read-behind on 'small' moving from file small.1302061034588 to small
-INF [20110405-20:37:17.122] kestrel: Rotating journal file for 'small' (qsize=29371392)
-INF [20110405-20:37:20.164] kestrel: Read-behind on 'small' moving from file small.1302061037149 to small
-INF [20110405-20:37:21.410] kestrel: Rotating journal file for 'small' (qsize=26664960)
-INF [20110405-20:37:23.113] kestrel: Read-behind on 'small' moving from file small.1302061041427 to small
-INF [20110405-20:37:25.302] kestrel: Rotating journal file for 'small' (qsize=26168320)
-INF [20110405-20:37:27.118] kestrel: Read-behind on 'small' moving from file small.1302061045321 to small
-INF [20110405-20:37:27.119] kestrel: Rewriting journal file from checkpoint for 'small' (qsize=27889664)
-INF [20110405-20:37:27.129] kestrel: Packing journals for 'small': small.1302061019805, small.1302061022051, small.13020
-61024673, small.1302061029571, small.1302061034588, small.1302061037149, small.1302061041427, small.1302061045321
-INF [20110405-20:37:27.635] kestrel: Packing 'small' -- erasing old files.
-INF [20110405-20:37:27.646] kestrel: Packing 'small' done: small.1302061045321, small
-INF [20110405-20:37:28.115] kestrel: Rotating journal file for 'small' (qsize=28761088)
-INF [20110405-20:37:31.108] kestrel: Read-behind on 'small' moving from file small.1302061048143 to small
-INF [20110405-20:37:32.202] kestrel: Rotating journal file for 'small' (qsize=27242496)
-INF [20110405-20:37:34.048] kestrel: Read-behind on 'small' moving from file small.1302061052221 to small
-INF [20110405-20:37:36.255] kestrel: Rotating journal file for 'small' (qsize=25759744)
-INF [20110405-20:37:38.433] kestrel: Read-behind on 'small' moving from file small.1302061056360 to small
-INF [20110405-20:37:39.550] kestrel: Rotating journal file for 'small' (qsize=27325440)
-INF [20110405-20:37:42.266] kestrel: Read-behind on 'small' moving from file small.1302061059646 to small
-INF [20110405-20:37:43.464] kestrel: Rotating journal file for 'small' (qsize=26256384)
-INF [20110405-20:37:45.110] kestrel: Read-behind on 'small' moving from file small.1302061063469 to small
-INF [20110405-20:37:46.110] kestrel: Rotating journal file for 'small' (qsize=27487232)
-INF [20110405-20:37:48.928] kestrel: Read-behind on 'small' moving from file small.1302061066128 to small
-INF [20110405-20:37:49.875] kestrel: Rotating journal file for 'small' (qsize=28101632)
-INF [20110405-20:37:51.801] kestrel: Read-behind on 'small' moving from file small.1302061069893 to small
-INF [20110405-20:37:51.801] kestrel: Rewriting journal file from checkpoint for 'small' (qsize=26379264)
-INF [20110405-20:37:51.804] kestrel: Packing journals for 'small': small.1302061045321, small.1302061048143, small.13020
-61052221, small.1302061056360, small.1302061059646, small.1302061063469, small.1302061066128, small.1302061069893
-INF [20110405-20:37:52.237] kestrel: Packing 'small' -- erasing old files.
-INF [20110405-20:37:52.246] kestrel: Packing 'small' done: small.1302061069893, small
-INF [20110405-20:37:54.012] kestrel: Rotating journal file for 'small' (qsize=26510336)
-INF [20110405-20:37:55.808] kestrel: Read-behind on 'small' moving from file small.1302061074039 to small
-INF [20110405-20:37:56.594] kestrel: Rotating journal file for 'small' (qsize=29006848)
-INF [20110405-20:37:59.363] kestrel: Read-behind on 'small' moving from file small.1302061076614 to small
-INF [20110405-20:37:59.731] kestrel: Coming out of read-behind for queue 'small'
-</code></pre>
+<p>You can see the journals being packed in the kestrel log. Like
+"many-clients", this test is a load test instead of a speed test.</p>
 
 
 </body>
