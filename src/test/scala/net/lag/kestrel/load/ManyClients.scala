@@ -200,6 +200,7 @@ object ManyClients {
       parseArgs(xs)
     case "-k" :: x :: xs =>
       killPercent = x.toInt
+      useTransactions = true
       parseArgs(xs)
     case "-x" :: xs =>
       useTransactions = true
