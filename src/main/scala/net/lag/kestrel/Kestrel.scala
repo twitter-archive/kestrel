@@ -46,7 +46,7 @@ import com.twitter.finagle.{ClientConnection, Codec => FinagleCodec, Service => 
 
 class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
               listenAddress: String, memcacheListenPort: Option[Int], textListenPort: Option[Int],
-              thriftListenPort: Option[Int], queuePath: String, protocol: config.Protocol,
+              thriftListenPort: Option[Int], queuePath: String,
               expirationTimerFrequency: Option[Duration], clientTimeout: Option[Duration],
               maxOpenTransactions: Int)
       extends Service {
@@ -111,22 +111,20 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
 
   def start() {
     log.info("Kestrel config: listenAddress=%s memcachePort=%s textPort=%s queuePath=%s " +
-             "protocol=%s expirationTimerFrequency=%s clientTimeout=%s maxOpenTransactions=%d",
-             listenAddress, memcacheListenPort, textListenPort, queuePath, protocol,
+             "expirationTimerFrequency=%s clientTimeout=%s maxOpenTransactions=%d",
+             listenAddress, memcacheListenPort, textListenPort, queuePath,
              expirationTimerFrequency, clientTimeout, maxOpenTransactions)
 
     // this means no timeout will be at better granularity than 10ms.
     // FIXME: would make more sense to use the finagle Timer. but they'd have to expose it.
     timer = new HashedWheelTimer(10, TimeUnit.MILLISECONDS)
-    queueCollection = new QueueCollection(queuePath, new FinagleTimer(timer), defaultQueueConfig, builders)
+    queueCollection = new QueueCollection(queuePath, new FinagleTimer(timer), defaultQueueConfig,
+      builders)
     queueCollection.loadQueues()
 
     // finagle setup:
     val memcachePipelineFactoryCodec = finagledCodec[MemcacheRequest, MemcacheResponse] {
-      protocol match {
-        case Protocol.Ascii => MemcacheCodec.asciiCodec(bytesRead, bytesWritten)
-        case Protocol.Binary => throw new Exception("Binary protocol not supported yet.")
-      }
+      MemcacheCodec.asciiCodec(bytesRead, bytesWritten)
     }
     memcacheService = memcacheListenPort.map { port =>
       startFinagleServer("kestrel-memcache", port, memcachePipelineFactoryCodec) { connection =>
@@ -134,7 +132,9 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
       }
     }
 
-    val textPipelineFactory = finagledCodec[TextRequest, TextResponse] { TextCodec(bytesRead, bytesWritten) }
+    val textPipelineFactory = finagledCodec[TextRequest, TextResponse] {
+      TextCodec(bytesRead, bytesWritten)
+    }
     textService = textListenPort.map { port =>
       startFinagleServer("kestrel-text", port, textPipelineFactory) { connection =>
         new TextHandler(connection, queueCollection, maxOpenTransactions)

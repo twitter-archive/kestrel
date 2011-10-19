@@ -147,12 +147,6 @@ class QueueBuilder extends Config[QueueConfig] {
   }
 }
 
-sealed abstract class Protocol
-object Protocol {
-  case object Ascii extends Protocol
-  case object Binary extends Protocol
-}
-
 trait KestrelConfig extends ServerConfig[Kestrel] {
   /**
    * Settings for a queue that isn't explicitly listed in `queues`.
@@ -190,11 +184,6 @@ trait KestrelConfig extends ServerConfig[Kestrel] {
   var queuePath: String = "/tmp"
 
   /**
-   * For future support. Only ascii is supported right now.
-   */
-  var protocol: Protocol = Protocol.Ascii
-
-  /**
    * If you would like a timer to periodically sweep through queues and clean up expired items
    * (when they are at the head of a queue), set the timer's frequency here. This is only useful
    * for queues that are rarely (or never) polled, but may contain short-lived items.
@@ -213,9 +202,10 @@ trait KestrelConfig extends ServerConfig[Kestrel] {
   var maxOpenTransactions: Int = 1
 
   def apply(runtime: RuntimeEnvironment) = {
-    new Kestrel(default(), queues, listenAddress, memcacheListenPort, textListenPort, thriftListenPort,
-                queuePath, protocol, expirationTimerFrequency, clientTimeout,
-                maxOpenTransactions)
+    new Kestrel(
+      default(), queues, listenAddress, memcacheListenPort, textListenPort, thriftListenPort,
+      queuePath, expirationTimerFrequency, clientTimeout, maxOpenTransactions
+    )
   }
 
   def reload(kestrel: Kestrel) {
