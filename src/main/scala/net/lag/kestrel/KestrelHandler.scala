@@ -215,9 +215,11 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
   def setItem(key: String, flags: Int, expiry: Option[Time], data: Array[Byte]) = {
     log.debug("set -> q=%s flags=%d expiry=%s size=%d", key, flags, expiry, data.length)
     Stats.incr("cmd_set")
-    Stats.timeMicros("set_latency") {
+    val (rv, nsec) = Duration.inNanoseconds {
       queues.add(key, data, expiry, Time.now)
     }
+    Stats.addMetric("set_latency_usec", nsec / 1000)
+    Stats.addMetric("q/" + key + "/set_latency_usec", nsec / 1000)
   }
 
   protected def flush(key: String) {
