@@ -195,8 +195,10 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
     future.map { itemOption =>
       waitingFor = None
       if (!timeout.isDefined) {
-        Stats.addMetric(if (itemOption.isDefined) "get_hit_latency_usec" else "get_miss_latency_usec",
-          (Time.now - startTime).inMicroseconds.toInt)
+        val statName = if (itemOption.isDefined) "get_hit_latency_usec" else "get_miss_latency_usec"
+        val usec = (Time.now - startTime).inMicroseconds.toInt
+        Stats.addMetric(statName, usec)
+        Stats.addMetric("q/" + key + "/" + statName, usec)
       }
       itemOption.foreach { item =>
         log.debug("get <- %s", item)

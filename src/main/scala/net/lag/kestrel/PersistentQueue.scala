@@ -269,7 +269,9 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     waitOperation(remove(transaction), deadline, promise)
     // if an item was handed off immediately, track latency from the "put" to "get".
     if (promise.isDefined && promise().isDefined) {
-      Stats.addMetric("get_hit_latency_usec", (Time.now - promise().get.addTime).inMicroseconds.toInt)
+      val usec = (Time.now - promise().get.addTime).inMicroseconds.toInt
+      Stats.addMetric("get_hit_latency_usec", usec)
+      Stats.addMetric("q/" + name + "/get_hit_latency_usec", usec)
     }
     promise
   }
