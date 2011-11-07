@@ -64,6 +64,13 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
       }
     }
 
+    "refuse to create a bad queue" in {
+      withTempFolder {
+        qc = new QueueCollection(folderName, timer, config, Nil)
+        qc.queue("hello.there") must throwA[Exception]
+      }
+    }
+
     "load from journal" in {
       withTempFolder {
         qc = new QueueCollection(folderName, timer, config, Nil)
