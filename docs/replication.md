@@ -4,6 +4,7 @@
 ## Goals
 
 - data duplication for disaster recovery
+- transparent to clients
 - simplest thing that could possibly work
 
 ## Non-goals
