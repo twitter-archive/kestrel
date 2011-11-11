@@ -28,7 +28,7 @@ import config._
 
 class InaccessibleQueuePath extends Exception("Inaccessible queue path: Must be a directory and writable")
 
-class QueueCollection(queueFolder: String, timer: Timer,
+class QueueCollection(queueFolder: String, timer: Timer, journalSyncTimer: Timer,
                       @volatile private var defaultQueueConfig: QueueConfig,
                       @volatile var queueBuilders: List[QueueBuilder]) {
   private val log = Logger.get(getClass.getName)
@@ -54,7 +54,7 @@ class QueueCollection(queueFolder: String, timer: Timer,
     }
     val config = queueConfigMap.getOrElse(name, defaultQueueConfig)
     log.info("Setting up queue %s: %s", realName, config)
-    new PersistentQueue(realName, path, config, timer, Some(this.apply))
+    new PersistentQueue(realName, path, config, timer, journalSyncTimer, Some(this.apply))
   }
 
   // preload any queues

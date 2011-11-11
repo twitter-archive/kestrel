@@ -42,7 +42,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
     "create a queue" in {
       withTempFolder {
         Stats.clearAll()
-        qc = new QueueCollection(folderName, timer, config, Nil)
+        qc = new QueueCollection(folderName, timer, timer, config, Nil)
         qc.queueNames mustEqual Nil
 
         qc.add("work1", "stuff".getBytes)
@@ -66,14 +66,14 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
 
     "refuse to create a bad queue" in {
       withTempFolder {
-        qc = new QueueCollection(folderName, timer, config, Nil)
+        qc = new QueueCollection(folderName, timer, timer, config, Nil)
         qc.queue("hello.there") must throwA[Exception]
       }
     }
 
     "load from journal" in {
       withTempFolder {
-        qc = new QueueCollection(folderName, timer, config, Nil)
+        qc = new QueueCollection(folderName, timer, timer, config, Nil)
         qc.add("ducklings", "huey".getBytes)
         qc.add("ducklings", "dewey".getBytes)
         qc.add("ducklings", "louie".getBytes)
@@ -82,7 +82,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
         qc.currentItems mustEqual 3
         qc.shutdown
 
-        qc = new QueueCollection(folderName, timer, config, Nil)
+        qc = new QueueCollection(folderName, timer, timer, config, Nil)
         qc.queueNames mustEqual Nil
         qc.remove("ducklings")() must beSomeQItem("huey")
         // now the queue should be suddenly instantiated:
@@ -94,7 +94,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
     "queue hit/miss tracking" in {
       withTempFolder {
         Stats.clearAll()
-        qc = new QueueCollection(folderName, timer, config, Nil)
+        qc = new QueueCollection(folderName, timer, timer, config, Nil)
         qc.add("ducklings", "ugly1".getBytes)
         qc.add("ducklings", "ugly2".getBytes)
         Stats.getCounter("get_hits")() mustEqual 0
@@ -124,7 +124,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
         new File(folderName + "/apples").createNewFile()
         new File(folderName + "/oranges.101").createNewFile()
         new File(folderName + "/oranges.133").createNewFile()
-        qc = new QueueCollection(folderName, timer, config, Nil)
+        qc = new QueueCollection(folderName, timer, timer, config, Nil)
         qc.loadQueues()
         qc.queueNames.sorted mustEqual List("apples", "oranges")
       }
@@ -135,7 +135,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
         new File(folderName + "/apples").createNewFile()
         new File(folderName + "/oranges").createNewFile()
         new File(folderName + "/oranges~~900").createNewFile()
-        qc = new QueueCollection(folderName, timer, config, Nil)
+        qc = new QueueCollection(folderName, timer, timer, config, Nil)
         qc.loadQueues()
         qc.queueNames.sorted mustEqual List("apples", "oranges")
       }
@@ -145,7 +145,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
       withTempFolder {
         new File(folderName + "/apples").createNewFile()
         new File(folderName + "/oranges").createNewFile()
-        qc = new QueueCollection(folderName, timer, config, Nil)
+        qc = new QueueCollection(folderName, timer, timer, config, Nil)
         qc.loadQueues()
         qc.delete("oranges")
 
@@ -157,7 +157,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
     "fanout queues" in {
       "generate on the fly" in {
         withTempFolder {
-          qc = new QueueCollection(folderName, timer, config, Nil)
+          qc = new QueueCollection(folderName, timer, timer, config, Nil)
           qc.add("jobs", "job1".getBytes)
           qc.remove("jobs+client1")() mustEqual None
           qc.add("jobs", "job2".getBytes)
@@ -172,7 +172,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
         withTempFolder {
           new File(folderName + "/jobs").createNewFile()
           new File(folderName + "/jobs+client1").createNewFile()
-          qc = new QueueCollection(folderName, timer, config, Nil)
+          qc = new QueueCollection(folderName, timer, timer, config, Nil)
           qc.loadQueues()
           qc.add("jobs", "job1".getBytes)
           qc.remove("jobs+client1")() must beSomeQItem("job1")
@@ -188,7 +188,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
         withTempFolder {
           new File(folderName + "/jobs").createNewFile()
           new File(folderName + "/jobs+client1").createNewFile()
-          qc = new QueueCollection(folderName, timer, config, Nil)
+          qc = new QueueCollection(folderName, timer, timer, config, Nil)
           qc.loadQueues()
           qc.add("jobs", "job1".getBytes)
 
@@ -210,7 +210,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
             name = "jobs"
             fanoutOnly = true
           }
-          qc = new QueueCollection(folderName, timer, config, List(jobConfig))
+          qc = new QueueCollection(folderName, timer, timer, config, List(jobConfig))
           qc.loadQueues()
           qc.add("jobs", "job1".getBytes)
           qc.remove("jobs")() mustEqual None
@@ -223,7 +223,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
       withTempFolder {
         Time.withCurrentTimeFrozen { time =>
           new File(folderName + "/expired").createNewFile()
-          qc = new QueueCollection(folderName, timer, config, Nil)
+          qc = new QueueCollection(folderName, timer, timer, config, Nil)
           qc.loadQueues()
 
           qc.add("expired", "hello".getBytes, Some(5.seconds.fromNow))
@@ -245,7 +245,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
             name = "jobs"
             expireToQueue = "expired"
           }
-          qc = new QueueCollection(folderName, timer, config, List(expireConfig))
+          qc = new QueueCollection(folderName, timer, timer, config, List(expireConfig))
           qc.loadQueues()
           qc.add("jobs", "hello".getBytes, Some(1.second.fromNow))
           qc.queue("jobs").get.length mustEqual 1

@@ -30,9 +30,10 @@ import com.twitter.util._
 import config._
 
 class PersistentQueue(val name: String, persistencePath: String, @volatile var config: QueueConfig,
-                      timer: Timer, queueLookup: Option[(String => Option[PersistentQueue])]) {
-  def this(name: String, persistencePath: String, config: QueueConfig, timer: Timer) =
-    this(name, persistencePath, config, timer, None)
+                      timer: Timer, journalSyncTimer: Timer,
+                      queueLookup: Option[(String => Option[PersistentQueue])]) {
+  def this(name: String, persistencePath: String, config: QueueConfig, timer: Timer, journalSyncTimer: Timer) =
+    this(name, persistencePath, config, timer, journalSyncTimer, None)
 
   private val log = Logger.get(getClass.getName)
 
@@ -69,7 +70,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   private var paused = false
 
   private var journal =
-    new Journal(new File(persistencePath).getCanonicalFile, name, timer, config.syncJournal)
+    new Journal(new File(persistencePath).getCanonicalFile, name, journalSyncTimer, config.syncJournal)
 
   private val waiters = new DeadlineWaitQueue(timer)
 
