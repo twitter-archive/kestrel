@@ -165,13 +165,15 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
     }
 
     "put request" in {
-      expect {
-        one(connection).remoteAddress willReturn new InetSocketAddress("", 0)
-        one(queueCollection).add("test", "hello".getBytes, None) willReturn true
-      }
+      Time.withCurrentTimeFrozen { timeMutator =>
+        expect {
+          one(connection).remoteAddress willReturn new InetSocketAddress("", 0)
+          one(queueCollection).add("test", "hello".getBytes, None, Time.now) willReturn true
+        }
 
-      val textHandler = new TextHandler(connection, queueCollection, 10)
-      textHandler(TextRequest("put", List("test"), List("hello".getBytes)))() mustEqual CountResponse(1)
+        val textHandler = new TextHandler(connection, queueCollection, 10)
+        textHandler(TextRequest("put", List("test"), List("hello".getBytes)))() mustEqual CountResponse(1)
+      }
     }
 
     "delete request" in {

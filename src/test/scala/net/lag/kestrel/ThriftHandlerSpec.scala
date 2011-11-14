@@ -46,39 +46,45 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
 
     "put" in {
       "one" in {
-        expect {
-          one(queueCollection).add("test", item1, None) willReturn true
-        }
+        Time.withCurrentTimeFrozen { mutator =>
+          expect {
+            one(queueCollection).add("test", item1, None, Time.now) willReturn true
+          }
 
-        thriftHandler.put("test", List(ByteBuffer.wrap(item1)), 0)() mustEqual 1
+          thriftHandler.put("test", List(ByteBuffer.wrap(item1)), 0)() mustEqual 1
+        }
       }
 
       "two" in {
-        expect {
-          one(queueCollection).add("test", item1, None) willReturn true
-          one(queueCollection).add("test", item2, None) willReturn true
-        }
+        Time.withCurrentTimeFrozen { mutator =>
+          expect {
+            one(queueCollection).add("test", item1, None, Time.now) willReturn true
+            one(queueCollection).add("test", item2, None, Time.now) willReturn true
+          }
 
-        thriftHandler.put("test", List(ByteBuffer.wrap(item1), ByteBuffer.wrap(item2)), 0)() mustEqual 2
+          thriftHandler.put("test", List(ByteBuffer.wrap(item1), ByteBuffer.wrap(item2)), 0)() mustEqual 2
+        }
       }
 
       "three, with only one accepted" in {
-        expect {
-          one(queueCollection).add("test", item1, None) willReturn true
-          one(queueCollection).add("test", item2, None) willReturn false
-        }
+        Time.withCurrentTimeFrozen { mutator =>
+          expect {
+            one(queueCollection).add("test", item1, None, Time.now) willReturn true
+            one(queueCollection).add("test", item2, None, Time.now) willReturn false
+          }
 
-        thriftHandler.put("test", List(
-          ByteBuffer.wrap(item1),
-          ByteBuffer.wrap(item2),
-          ByteBuffer.wrap(item3)
-        ), 0)() mustEqual 1
+          thriftHandler.put("test", List(
+            ByteBuffer.wrap(item1),
+            ByteBuffer.wrap(item2),
+            ByteBuffer.wrap(item3)
+          ), 0)() mustEqual 1
+        }
       }
 
       "with timeout" in {
         Time.withCurrentTimeFrozen { mutator =>
           expect {
-            one(queueCollection).add("test", item1, Some(5.seconds.fromNow)) willReturn true
+            one(queueCollection).add("test", item1, Some(5.seconds.fromNow), Time.now) willReturn true
           }
 
           thriftHandler.put("test", List(ByteBuffer.wrap(item1)), 5000)() mustEqual 1

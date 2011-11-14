@@ -198,7 +198,7 @@ class KestrelHandler(
   }
 
   def abortAnyOpenRead() {
-    Stats.incr("cmd_get_open_dropped", pendingTransactions.cancelAll())
+    Stats.incr("cmd_get_open_dropped", pendingReads.cancelAll())
   }
 
   def setItem(key: String, flags: Int, expiry: Option[Time], data: Array[Byte]) = {
