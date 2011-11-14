@@ -283,6 +283,21 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
       }
     }
 
+    "cancel the timer for a long-poll on disconnect" in {
+      withTempFolder {
+        makeServer()
+
+        val client = new TestClient("localhost", PORT)
+        // do an initial poll to initialize the queue.
+        client.get("slow") mustEqual ""
+
+        client.startGet("slow/open/t=3599000")
+        Thread.sleep(10)
+        client.disconnect()
+        kestrel.queueCollection.queue("slow").get.waiterCount mustEqual 0
+      }
+    }
+
     "auto-commit cycles of transactional gets" in {
       withTempFolder {
         makeServer()

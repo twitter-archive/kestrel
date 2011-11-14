@@ -45,7 +45,7 @@ The config file evaluates to a `KestrelConfig` object that's used to configure
 the server as a whole, a default queue, and any overrides for specific named
 queues. The fields on `KestrelConfig` are documented here with their default
 values:
-http://robey.github.com/kestrel/doc/main/api/net/lag/kestrel/config/KestrelConfig.html
+[KestrelConfig.html](http://robey.github.com/kestrel/doc/main/api/net/lag/kestrel/config/KestrelConfig.html)
 
 To confirm the current configuration of each queue, send "dump_config" to
 a server (which can be done over telnet).
@@ -57,10 +57,28 @@ change the server configuration, restart the server.
 
 Logging is configured according to `util-logging`. The logging configuration
 syntax is described here:
-https://github.com/twitter/util/blob/master/util-logging/README.markdown
+[util-logging](https://github.com/twitter/util/blob/master/util-logging/README.markdown)
 
 Per-queue configuration is documented here:
-http://robey.github.com/kestrel/doc/main/api/net/lag/kestrel/config/QueueBuilder.html
+[QueueBuilder.html](http://robey.github.com/kestrel/doc/main/api/net/lag/kestrel/config/QueueBuilder.html)
+
+
+Full queues
+-----------
+
+A queue can have the following limits set on it:
+
+- `maxItems` - total items in the queue
+- `maxSize` - total bytes of data in the items in the queue
+
+If either of these limits is reached, no new items can be added to the queue.
+(Clients will receive an error when trying to add.) If you set
+`discardOldWhenFull` to true, then all adds will succeed, and the oldest
+item(s) will be silently discarded until the queue is back within the item
+and size limits.
+
+`maxItemSize` limits the size of any individual item. If an add is attempted
+with an item larger than this limit, it always fails.
 
 
 The journal file
@@ -114,12 +132,21 @@ the `maxAge` is used instead. An expiration of 0, which is usually the
 default, means an item never expires.
 
 Expired items are flushed from a queue whenever a new item is added or
-removed. An idle queue won't have any items expired, but you can trigger a
-check by doing a "peek" on it.
+removed. Additionally, if the global config option `expirationTimerFrequency`
+is set, a background thread will periodically remove expired items from the
+head of each queue. The provided `production.conf` sets this to one second.
+If this is turned off, an idle queue won't have any items expired, but you
+can still trigger a check by doing a "peek" on it.
 
-The global config option `expirationTimerFrequency` can be used to
-start a background thread that periodically removes expired items from the
-head of each queue. See `README.md` file for more.
+Normally, expired items are discarded. If `expireToQueue` is set, then
+expired items are moved to the specified queue just as if a client had put
+it there. The item is added with no expiration time, but that can be
+overridden if the new queue has a default expiration policy.
+
+To prevent stalling the server when it encounters a swarm of items that all
+expired at the same time, `maxExpireSweep` limits the number of items that
+will be removed by the background thread in a single round. This is primarily
+useful as a throttling mechanism when using a queue as a way to delay work.
 
 
 Fanout Queues

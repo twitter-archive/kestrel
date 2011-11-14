@@ -41,6 +41,7 @@ class KestrelHandler(
   private val log = Logger.get(getClass.getName)
 
   val finished = new AtomicBoolean(false)
+  @volatile var waitingFor: Option[Future[Option[QItem]]] = None
 
   object pendingReads {
     private val reads = new mutable.HashMap[String, ItemIdList] {
@@ -59,14 +60,18 @@ class KestrelHandler(
     def peek(name: String): Seq[Int] = synchronized { reads(name).peek() }
     def remove(name: String, ids: Set[Int]): Set[Int] = synchronized { reads(name).remove(ids) }
 
-    def cancelAll() {
+    def cancelAll(): Int = {
+      var count = 0
       synchronized {
         val current = reads.clone()
         reads.clear()
         current
       }.foreach { case (name, xids) =>
-        xids.popAll().foreach { xid => queues.unremove(name, xid) }
+        val ids = xids.popAll()
+        count += ids.size
+        ids.foreach { id => queues.unremove(name, id) }
       }
+      count
     }
   }
 
@@ -76,6 +81,10 @@ class KestrelHandler(
   // called exactly once by finagle when the session ends.
   def finish() {
     abortAnyOpenRead()
+    waitingFor.foreach { w =>
+      w.cancel()
+      Stats.incr("cmd_get_timeout_dropped")
+    }
     log.debug("End of session %d", sessionId)
     Kestrel.sessions.decrementAndGet()
   }
@@ -165,9 +174,16 @@ class KestrelHandler(
       Stats.incr("cmd_get")
     }
     val startTime = Time.now
-    val future = queues.remove(key, timeout, opening, peeking).map { itemOption =>
-      Stats.addMetric(if (itemOption.isDefined) "get_hit_latency_usec" else "get_miss_latency_usec",
-        (Time.now - startTime).inMicroseconds.toInt)
+    val future = queues.remove(key, timeout, opening, peeking)
+    waitingFor = Some(future)
+    future.map { itemOption =>
+      waitingFor = None
+      if (!timeout.isDefined) {
+        val statName = if (itemOption.isDefined) "get_hit_latency_usec" else "get_miss_latency_usec"
+        val usec = (Time.now - startTime).inMicroseconds.toInt
+        Stats.addMetric(statName, usec)
+        Stats.addMetric("q/" + key + "/" + statName, usec)
+      }
       itemOption.foreach { item =>
         log.debug("get <- %s", item)
         if (opening) pendingReads.add(key, item.xid)
@@ -182,15 +198,18 @@ class KestrelHandler(
   }
 
   def abortAnyOpenRead() {
-    pendingReads.cancelAll()
+    Stats.incr("cmd_get_open_dropped", pendingTransactions.cancelAll())
   }
 
   def setItem(key: String, flags: Int, expiry: Option[Time], data: Array[Byte]) = {
     log.debug("set -> q=%s flags=%d expiry=%s size=%d", key, flags, expiry, data.length)
     Stats.incr("cmd_set")
-    Stats.timeMicros("set_latency") {
-      queues.add(key, data, expiry)
+    val (rv, nsec) = Duration.inNanoseconds {
+      queues.add(key, data, expiry, Time.now)
     }
+    Stats.addMetric("set_latency_usec", nsec.inMilliseconds.toInt)
+    Stats.addMetric("q/" + key + "/set_latency_usec", nsec.inMilliseconds.toInt)
+    rv
   }
 
   def flush(key: String) {
