@@ -183,12 +183,12 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
       thriftHandler.peek("test")() mustEqual qinfo
     }
 
-    "flush" in {
+    "flush_queue" in {
       expect {
         one(queueCollection).flush("test")
       }
 
-      thriftHandler.flush("test")
+      thriftHandler.flushQueue("test")
     }
 
     "delete_queue" in {
@@ -205,22 +205,14 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
       thriftHandler.getVersion()() must haveClass[String]
     }
 
-    "flush_all" in {
+    "flush_all_queues" in {
       expect {
         one(queueCollection).queueNames willReturn List("test", "spam")
         one(queueCollection).flush("test")
         one(queueCollection).flush("spam")
       }
 
-      thriftHandler.flushAll()
-    }
-
-    "flush_all_expired" in {
-      expect {
-        one(queueCollection).flushAllExpired() willReturn 2
-      }
-
-      thriftHandler.flushAllExpired()() mustEqual 2
+      thriftHandler.flushAllQueues()
     }
   }
 }

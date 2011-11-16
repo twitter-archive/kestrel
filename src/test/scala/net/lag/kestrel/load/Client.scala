@@ -158,15 +158,15 @@ object ThriftClient extends Client {
 
   def flush(queueName: String) = {
     withProtocol { p =>
-      p.writeMessageBegin(new TMessage("flush", TMessageType.CALL, 0))
-      (new thrift.Kestrel.flush_args(queueName)).write(p)
+      p.writeMessageBegin(new TMessage("flush_queue", TMessageType.CALL, 0))
+      (new thrift.Kestrel.flushQueue_args(queueName)).write(p)
     }
   }
 
   def flushSuccess() = {
     withProtocol { p =>
-      p.writeMessageBegin(new TMessage("flush", TMessageType.REPLY, 0))
-      (new thrift.Kestrel.flush_result()).write(p)
+      p.writeMessageBegin(new TMessage("flush_queue", TMessageType.REPLY, 0))
+      (new thrift.Kestrel.flushQueue_result()).write(p)
     }
   }
 
