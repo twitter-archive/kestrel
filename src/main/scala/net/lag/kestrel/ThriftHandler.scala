@@ -99,8 +99,13 @@ class ThriftHandler (
     }
   }
 
-  def flush(queueName: String): Future[Unit] = {
+  def flushQueue(queueName: String): Future[Unit] = {
     handler.flush(queueName)
+    Future.Unit
+  }
+
+  def flushAllQueues(): Future[Unit] = {
+    handler.flushAllQueues()
     Future.Unit
   }
 
@@ -110,15 +115,6 @@ class ThriftHandler (
   }
 
   def getVersion(): Future[String] = Future(Kestrel.runtime.jarVersion)
-
-  def flushAll(): Future[Unit] = {
-    handler.flushAllQueues()
-    Future.Unit
-  }
-
-  def flushAllExpired(): Future[Int] = {
-    Future(queueCollection.flushAllExpired())
-  }
 
   def release() {
     log.debug("Ending session %d from %s", sessionId, clientDescription)
