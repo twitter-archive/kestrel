@@ -194,11 +194,20 @@ abstract class KestrelHandler(val queues: QueueCollection, val maxOpenTransactio
     waitingFor = Some(future)
     future.map { itemOption =>
       waitingFor = None
-      if (!timeout.isDefined) {
-        val statName = if (itemOption.isDefined) "get_hit_latency_usec" else "get_miss_latency_usec"
-        val usec = (Time.now - startTime).inMicroseconds.toInt
-        Stats.addMetric(statName, usec)
-        Stats.addMetric("q/" + key + "/" + statName, usec)
+      timeout match {
+        case None => {
+          val usec = (Time.now - startTime).inMicroseconds.toInt
+          val statName = if (itemOption.isDefined) "get_hit_latency_usec" else "get_miss_latency_usec"
+          Stats.addMetric(statName, usec)
+          Stats.addMetric("q/" + key + "/" + statName, usec)
+        }
+        case Some(_) => {
+          if (!itemOption.isDefined) {
+            val msec = (Time.now - startTime).inMilliseconds.toInt
+            Stats.addMetric("get_timeout_msec", msec)
+            Stats.addMetric("q/" + key + "/get_timeout_msec", msec)
+          }
+        }
       }
       itemOption.foreach { item =>
         log.debug("get <- %s", item)
