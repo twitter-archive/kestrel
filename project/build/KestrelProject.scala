@@ -10,7 +10,8 @@ class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) wit
   val util = "com.twitter" % "util-core" % "1.8.1"
 
   val ostrich = "com.twitter" % "ostrich" % "4.9.3"
-  val naggati = "com.twitter" % "naggati" % "2.1.1"
+  val naggati = "com.twitter" % "naggati" % "2.1.1" intransitive() // allow custom netty
+  val netty   = "org.jboss.netty" % "netty" % "3.2.5.Final"
 
   // for tests only
   val specs = "org.scala-tools.testing" % "specs_2.8.1" % "1.6.7" % "test"
