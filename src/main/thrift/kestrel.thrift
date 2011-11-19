@@ -84,7 +84,13 @@ service Kestrel {
   /*
    * Flush (clear out) a queue. All unfetched items are lost.
    */
-  void flush(1: string queue_name)
+  void flush_queue(1: string queue_name)
+
+  /*
+   * Flush (clear out) ALL QUEUES. All unfetched items from all queues are
+   * lost.
+   */
+  void flush_all_queues()
 
   /*
    * Delete a queue, removing any journal. All unfetched items are lost.
@@ -96,16 +102,5 @@ service Kestrel {
    * Return a string form of the version of this kestrel server.
    */
   string get_version()
-
-  /*
-   * Flush (clear out) ALL QUEUES. All unfetched items from all queues are
-   * lost.
-   */
-  void flush_all()
-
-  /*
-   * Delete ALL QUEUES, removing all journals. All unfetched items from all
-   * queues are lost.
-   */
-  i32 flush_all_expired()
 }
+
