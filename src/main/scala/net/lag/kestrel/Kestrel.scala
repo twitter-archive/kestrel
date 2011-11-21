@@ -72,6 +72,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
 
   var queueCollection: QueueCollection = null
   var timer: Timer = null
+  var journalSyncTimer: Timer = null
   var executor: ExecutorService = null
   var channelFactory: ChannelFactory = null
   var memcacheAcceptor: Option[Channel] = None
@@ -92,9 +93,11 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
              listenAddress, memcacheListenPort, textListenPort, queuePath, protocol,
              expirationTimerFrequency, clientTimeout, maxOpenTransactions)
 
-    // this means no timeout will be at better granularity than 10ms.
-    timer = new HashedWheelTimer(10, TimeUnit.MILLISECONDS)
-    queueCollection = new QueueCollection(queuePath, new NettyTimer(timer), defaultQueueConfig, builders)
+    // this means no timeout will be at better granularity than N ms.
+    journalSyncTimer = new HashedWheelTimer(10, TimeUnit.MILLISECONDS)
+    timer = new HashedWheelTimer(100, TimeUnit.MILLISECONDS)
+
+    queueCollection = new QueueCollection(queuePath, new NettyTimer(timer), new NettyTimer(journalSyncTimer), defaultQueueConfig, builders)
     queueCollection.loadQueues()
 
     Stats.addGauge("items") { queueCollection.currentItems.toDouble }
@@ -158,6 +161,8 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
     executor.awaitTermination(5, TimeUnit.SECONDS)
     timer.stop()
     timer = null
+    journalSyncTimer.stop()
+    journalSyncTimer = null
     log.info("Goodbye.")
   }
 

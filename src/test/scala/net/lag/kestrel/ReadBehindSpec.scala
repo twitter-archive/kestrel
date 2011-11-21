@@ -36,7 +36,7 @@ class ReadBehindSpec extends Specification with TempFolder with TestLogging with
         val config1 = new QueueBuilder {
           maxMemorySize = 1.kilobyte
         }.apply()
-        val q = new PersistentQueue("things", folderName, config1, timer)
+        val q = new PersistentQueue("things", folderName, config1, timer, timer)
 
         q.setup
         for (i <- 0 until 10) {
@@ -97,7 +97,7 @@ class ReadBehindSpec extends Specification with TempFolder with TestLogging with
         val config = new QueueBuilder {
           maxMemorySize = 1.kilobyte
         }.apply()
-        val q = new PersistentQueue("things", folderName, config, timer)
+        val q = new PersistentQueue("things", folderName, config, timer, timer)
 
         q.setup
         for (i <- 0 until 10) {
@@ -111,7 +111,7 @@ class ReadBehindSpec extends Specification with TempFolder with TestLogging with
         q.memoryBytes mustEqual 1024
         q.close
 
-        val q2 = new PersistentQueue("things", folderName, config, timer)
+        val q2 = new PersistentQueue("things", folderName, config, timer, timer)
         q2.setup
 
         q2.inReadBehind mustBe true
@@ -136,7 +136,7 @@ class ReadBehindSpec extends Specification with TempFolder with TestLogging with
         val config = new QueueBuilder {
           maxMemorySize = 1.kilobyte
         }.apply()
-        val q = new PersistentQueue("things", folderName, config, timer)
+        val q = new PersistentQueue("things", folderName, config, timer, timer)
 
         q.setup
         for (i <- 0 until 10) {
@@ -158,7 +158,7 @@ class ReadBehindSpec extends Specification with TempFolder with TestLogging with
         q.memoryBytes mustEqual 0
         q.close
 
-        val q2 = new PersistentQueue("things", folderName, config, timer)
+        val q2 = new PersistentQueue("things", folderName, config, timer, timer)
         q2.setup
         q2.inReadBehind mustBe false
         q2.length mustEqual 0
@@ -174,7 +174,7 @@ class ReadBehindSpec extends Specification with TempFolder with TestLogging with
           maxMemorySize = 512.bytes
           maxJournalSize = 1.kilobyte
         }.apply()
-        val q = new PersistentQueue("things", folderName, config, timer)
+        val q = new PersistentQueue("things", folderName, config, timer, timer)
 
         q.setup
         for (i <- 0 until 10) {
@@ -194,7 +194,7 @@ class ReadBehindSpec extends Specification with TempFolder with TestLogging with
           maxMemorySize = 1.kilobyte
           maxJournalSize = 512.bytes
         }.apply()
-        val q = new PersistentQueue("things", folderName, config, timer)
+        val q = new PersistentQueue("things", folderName, config, timer, timer)
 
         q.setup
         for (i <- 0 until 30) {
@@ -217,7 +217,7 @@ class ReadBehindSpec extends Specification with TempFolder with TestLogging with
         q.inReadBehind mustBe false
         q.close()
 
-        val q2 = new PersistentQueue("things", folderName, config, timer)
+        val q2 = new PersistentQueue("things", folderName, config, timer, timer)
         q2.setup
         q2.inReadBehind mustBe false
         q2.length mustEqual 1

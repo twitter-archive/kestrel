@@ -7,11 +7,13 @@ class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) wit
   with PublishSourcesAndJavadocs
   with PublishSite
 {
-  val util = "com.twitter" % "util-core" % "1.8.1"
+  val utilCore =    "com.twitter" % "util-core"    % "1.12.4"
+  val utilEval =    "com.twitter" % "util-eval"    % "1.12.4"
+  val utilLogging = "com.twitter" % "util-logging" % "1.12.4"
 
-  val ostrich = "com.twitter" % "ostrich" % "4.9.3"
+  val ostrich = "com.twitter" % "ostrich" % "4.10.0"
   val naggati = "com.twitter" % "naggati" % "2.1.1" intransitive() // allow custom netty
-  val netty   = "org.jboss.netty" % "netty" % "3.2.5.Final"
+  val netty   = "org.jboss.netty" % "netty" % "3.2.6.Final"
 
   // for tests only
   val specs = "org.scala-tools.testing" % "specs_2.8.1" % "1.6.7" % "test"
