@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.{immutable, mutable}
 import com.twitter.conversions.time._
 import com.twitter.finagle.builder.Server
+import com.twitter.libkestrel.config._
 import com.twitter.logging.Logger
 import com.twitter.ostrich.admin.{PeriodicBackgroundProcess, RuntimeEnvironment, Service, ServiceTracker}
 import com.twitter.ostrich.stats.Stats
@@ -172,17 +173,6 @@ class Kestrel(defaultQueueConfig: JournaledQueueConfig, queueConfigs: Seq[Journa
     timer.stop()
     timer = null
     log.info("Goodbye.")
-  }
-
-  override def reload() {
-    try {
-      log.info("Reloading %s ...", Kestrel.runtime.configFile)
-      new Eval().apply[KestrelConfig](Kestrel.runtime.configFile).reload(this)
-    } catch {
-      case e: Eval.CompilerException =>
-        log.error(e, "Error in config: %s", e)
-        log.error(e.messages.flatten.mkString("\n"))
-    }
   }
 }
 

@@ -89,8 +89,6 @@ class MemcacheHandler(
           case e: NumberFormatException =>
             Future(new MemcacheResponse("CLIENT_ERROR"))
         }
-      case "stats" =>
-        Future(stats())
       case "shutdown" =>
         handler.shutdown()
         disconnect()
@@ -103,8 +101,6 @@ class MemcacheHandler(
       case "flush_all" =>
         handler.flushAllQueues()
         Future(new MemcacheResponse("Flushed all queues."))
-      case "dump_stats" =>
-        Future(dumpStats(request.line.drop(1)))
       case "delete" =>
         handler.delete(request.line(1))
         Future(new MemcacheResponse("END"))
@@ -191,45 +187,6 @@ class MemcacheHandler(
         channel.send(new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), Some(item.data)))
     }
     new MemcacheResponse("") then Codec.Stream(channel)
-  }
-
-  private def stats() = {
-    var report = new mutable.ArrayBuffer[(String, String)]
-    report += (("uptime", Kestrel.uptime.inSeconds.toString))
-    report += (("time", (Time.now.inMilliseconds / 1000).toString))
-    report += (("version", Kestrel.runtime.jarVersion))
-    report += (("curr_items", queueCollection.currentItems.toString))
-    report += (("total_items", Stats.getCounter("total_items")().toString))
-    report += (("bytes", queueCollection.currentBytes.toString))
-    report += (("curr_connections", Kestrel.sessions.get().toString))
-    report += (("total_connections", Stats.getCounter("total_connections")().toString))
-    report += (("cmd_get", Stats.getCounter("cmd_get")().toString))
-    report += (("cmd_set", Stats.getCounter("cmd_set")().toString))
-    report += (("cmd_peek", Stats.getCounter("cmd_peek")().toString))
-    report += (("get_hits", Stats.getCounter("get_hits")().toString))
-    report += (("get_misses", Stats.getCounter("get_misses")().toString))
-    report += (("bytes_read", Stats.getCounter("bytes_read")().toString))
-    report += (("bytes_written", Stats.getCounter("bytes_written")().toString))
-
-    for (qName <- queueCollection.queueNames) {
-      report ++= queueCollection.stats(qName).map { case (k, v) => ("queue_" + qName + "_" + k, v) }
-    }
-
-    val summary = {
-      for ((key, value) <- report) yield "STAT %s %s".format(key, value)
-    }.mkString("", "\r\n", "\r\nEND")
-    new MemcacheResponse(summary)
-  }
-
-  private def dumpStats(requestedQueueNames: List[String]) = {
-    val queueNames = if (!requestedQueueNames.isEmpty) { requestedQueueNames } else { queueCollection.queueNames }
-    val dump = new mutable.ListBuffer[String]
-    for (qName <- queueNames) {
-      dump += "queue '" + qName + "' {"
-      dump += queueCollection.stats(qName).map { case (k, v) => k + "=" + v }.mkString("  ", "\r\n  ", "")
-      dump += "}"
-    }
-    new MemcacheResponse(dump.mkString("", "\r\n", "\r\nEND"))
   }
 
   private def version() = {

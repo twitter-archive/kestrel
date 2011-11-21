@@ -22,6 +22,7 @@ import java.util.concurrent.CountDownLatch
 import scala.collection.mutable
 import com.twitter.conversions.time._
 import com.twitter.libkestrel._
+import com.twitter.libkestrel.config._
 import com.twitter.logging.Logger
 import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{Duration, Future, Time, Timer}

@@ -18,6 +18,7 @@
 package net.lag.kestrel
 
 import com.twitter.conversions.time._
+import com.twitter.libkestrel._
 import com.twitter.logging.Logger
 import com.twitter.ostrich.admin.{BackgroundProcess, ServiceTracker}
 import com.twitter.ostrich.stats.Stats
@@ -41,7 +42,7 @@ class KestrelHandler(
   private val log = Logger.get(getClass.getName)
 
   val finished = new AtomicBoolean(false)
-  @volatile var waitingFor: Option[Future[Option[QItem]]] = None
+  @volatile var waitingFor: Option[Future[Option[QueueItem]]] = None
 
   object pendingReads {
     private val reads = new mutable.HashMap[String, ItemIdList] {
@@ -52,13 +53,13 @@ class KestrelHandler(
       }
     }
 
-    def pop(name: String): Option[Int] = synchronized { reads(name).pop() }
-    def popN(name: String, count: Int): Seq[Int] = synchronized { reads(name).pop(count) }
-    def add(name: String, xid: Int) = synchronized { reads(name) add xid }
+    def pop(name: String): Option[Long] = synchronized { reads(name).pop() }
+    def popN(name: String, count: Int): Seq[Long] = synchronized { reads(name).pop(count) }
+    def add(name: String, xid: Long) = synchronized { reads(name) add xid }
     def size(name: String): Int = synchronized { reads(name).size }
-    def popAll(name: String): Seq[Int] = synchronized { reads(name).popAll() }
-    def peek(name: String): Seq[Int] = synchronized { reads(name).peek() }
-    def remove(name: String, ids: Set[Int]): Set[Int] = synchronized { reads(name).remove(ids) }
+    def popAll(name: String): Seq[Long] = synchronized { reads(name).popAll() }
+    def peek(name: String): Seq[Long] = synchronized { reads(name).toSeq }
+    def remove(name: String, ids: Set[Long]): Set[Long] = synchronized { reads(name).remove(ids) }
 
     def cancelAll(): Int = {
       var count = 0
@@ -125,13 +126,13 @@ class KestrelHandler(
     xids.size > 0
   }
 
-  def closeReads(key: String, xids: Set[Int]): Int = {
+  def closeReads(key: String, xids: Set[Long]): Int = {
     val real = pendingReads.remove(key, xids)
     real.foreach { xid => queues.confirmRemove(key, xid) }
     real.size
   }
 
-  def abortReads(key: String, xids: Set[Int]): Int = {
+  def abortReads(key: String, xids: Set[Long]): Int = {
     val real = pendingReads.remove(key, xids)
     real.foreach { xid => queues.unremove(key, xid) }
     real.size
@@ -144,7 +145,7 @@ class KestrelHandler(
   }
 
   // will do a continuous fetch on a queue until time runs out or read buffer is full.
-  final def monitorUntil(key: String, timeLimit: Option[Time], maxItems: Int, opening: Boolean)(f: Option[QItem] => Unit) {
+  final def monitorUntil(key: String, timeLimit: Option[Time], maxItems: Int, opening: Boolean)(f: Option[QueueItem] => Unit) {
     log.debug("monitor -> q=%s t=%s max=%d open=%s", key, timeLimit, maxItems, opening)
     if (maxItems == 0 || (timeLimit.isDefined && timeLimit.get <= Time.now) || pendingReads.size(key) >= maxOpenReads) {
       f(None)
@@ -153,14 +154,14 @@ class KestrelHandler(
         case None =>
           f(None)
         case x @ Some(item) =>
-          if (opening) pendingReads.add(key, item.xid)
+          if (opening) pendingReads.add(key, item.id)
           f(x)
           monitorUntil(key, timeLimit, maxItems - 1, opening)(f)
       }
     }
   }
 
-  def getItem(key: String, timeout: Option[Time], opening: Boolean, peeking: Boolean): Future[Option[QItem]] = {
+  def getItem(key: String, timeout: Option[Time], opening: Boolean, peeking: Boolean): Future[Option[QueueItem]] = {
     if (opening && pendingReads.size(key) >= maxOpenReads) {
       log.warning("Attempt to open too many reads on '%s' (sid %d, %s)", key, sessionId,
                   clientDescription)
@@ -186,7 +187,7 @@ class KestrelHandler(
       }
       itemOption.foreach { item =>
         log.debug("get <- %s", item)
-        if (opening) pendingReads.add(key, item.xid)
+        if (opening) pendingReads.add(key, item.id)
       }
       itemOption
     }

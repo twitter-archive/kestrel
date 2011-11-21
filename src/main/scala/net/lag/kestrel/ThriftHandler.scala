@@ -74,28 +74,30 @@ class ThriftHandler (
           future.setValue(rv.toList)
         }
         case Some(item) => {
-          rv += new thrift.Item(ByteBuffer.wrap(item.data), item.xid)
+          rv += new thrift.Item(ByteBuffer.wrap(item.data), item.id)
         }
       }
     }
     future
   }
 
-  def confirm(queueName: String, xids: Set[Int]): Future[Int] = {
+  def confirm(queueName: String, xids: Set[Long]): Future[Int] = {
     Future(handler.closeReads(queueName, xids))
   }
 
-  def abort(queueName: String, xids: Set[Int]): Future[Int] = {
+  def abort(queueName: String, xids: Set[Long]): Future[Int] = {
     Future(handler.abortReads(queueName, xids))
   }
 
   def peek(queueName: String): Future[thrift.QueueInfo] = {
     handler.getItem(queueName, None, false, true).map { itemOption =>
       val data = itemOption.map { item => ByteBuffer.wrap(item.data) }
-      val stats = queueCollection.stats(queueName).toMap
-      new thrift.QueueInfo(data, stats("items").toLong, stats("bytes").toLong,
-        stats("logsize").toLong, stats("age").toLong, stats("waiters").toInt,
-        stats("open_transactions").toInt)
+      queueCollection.reader(queueName) map { queue =>
+        new thrift.QueueInfo(data, queue.items, queue.bytes, queue.writer.journalBytes,
+          queue.age.inMilliseconds, queue.waiterCount, queue.openItems)
+      } getOrElse {
+        new thrift.QueueInfo(data, 0, 0, 0, 0, 0, 0)
+      }
     }
   }
 
