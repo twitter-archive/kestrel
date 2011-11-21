@@ -1,3 +1,15 @@
+2.1.4
+-----
+
+- Separate timers for journal fsync operations from those used for request
+  timeouts and queue expiry
+- Additional statistics include set/get latency in microseconds and actual
+  request timeout length in milliseconds
+- Upgrade to latest Netty, Ostrich and Util libraries (fixes for Netty timer
+  bugs)
+- Creating a queue with an illegal name causes an error
+
+
 2.1.3
 -----
 release: 13 October 2011
