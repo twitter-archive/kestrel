@@ -9,12 +9,15 @@ class KestrelProject(info: ProjectInfo)
   with SubversionPublisher
   with PublishSite
 {
-  val ostrich = "com.twitter" % "ostrich" % "4.9.4"
+  val finagleVersion = "1.9.6"
+
+  val libkestrel = "com.twitter" % "libkestrel" % "1.0.0-SNAPSHOT"
   val naggati = "com.twitter" % "naggati" % "2.2.0"
-  val finagle = "com.twitter" % "finagle-core" % "1.9.5"
-  val finagle_ostrich4 = "com.twitter" % "finagle-ostrich4" % "1.9.5"
+  val finagle = "com.twitter" % "finagle-core" % finagleVersion
+  val finagle_ostrich4 = "com.twitter" % "finagle-ostrich4" % finagleVersion
+
   val scrooge_runtime = "com.twitter" % "scrooge-runtime" % "1.0.3"
-  override def scroogeVersion = "1.1.7"
+  override def scroogeVersion = "2.2.0"
 
   // building docs seems to make scalac's head explode, so skip it for now. :(
   override def docSources = sources(mainJavaSourcePath ##)
@@ -54,22 +57,4 @@ class KestrelProject(info: ProjectInfo)
     }
   lazy val packageLoadTests = packageLoadTestsAction
   override def packageDistTask = packageLoadTestsAction && super.packageDistTask
-
-//  override def fork = forkRun(List("-Xmx1024m", "-verbosegc", "-XX:+PrintGCDetails"))
-
-  lazy val putMany = task { args =>
-    runTask(Some("net.lag.kestrel.load.PutMany"), testClasspath, args).dependsOn(testCompile)
-  } describedAs "Run a load test on PUT."
-
-  lazy val manyClients = task { args =>
-    runTask(Some("net.lag.kestrel.load.ManyClients"), testClasspath, args).dependsOn(testCompile)
-  } describedAs "Run a load test on many slow clients."
-
-  lazy val flood = task { args =>
-    runTask(Some("net.lag.kestrel.load.Flood"), testClasspath, args).dependsOn(testCompile)
-  } describedAs "Run a load test on a flood of PUT/GET."
-
-  lazy val packing = task { args =>
-    runTask(Some("net.lag.kestrel.load.JournalPacking"), testClasspath, args).dependsOn(testCompile)
-  } describedAs "Run a load test on journal packing."
 }

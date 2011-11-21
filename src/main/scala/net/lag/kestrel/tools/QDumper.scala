@@ -22,6 +22,7 @@ import java.io.{FileNotFoundException, IOException}
 import scala.collection.mutable
 import com.twitter.conversions.time._
 import com.twitter.util.{Duration, Time}
+import net.lag.kestrel.oldjournal._
 
 class QueueDumper(filename: String, quiet: Boolean, dump: Boolean, dumpRaw: Boolean) {
   var offset = 0L

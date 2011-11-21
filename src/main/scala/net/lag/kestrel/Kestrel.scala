@@ -39,12 +39,13 @@ import config._
 import com.twitter.finagle.builder.{ServerBuilder, Server => FinagleServer}
 import com.twitter.finagle.stats.OstrichStatsReceiver
 import com.twitter.finagle.util.{Timer => FinagleTimer}
+import com.twitter.libkestrel._
 import com.twitter.util.Future
 import com.twitter.naggati.Codec
 import com.twitter.naggati.codec.{MemcacheResponse, MemcacheRequest, MemcacheCodec}
 import com.twitter.finagle.{ClientConnection, Codec => FinagleCodec, Service => FinagleService}
 
-class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
+class Kestrel(defaultQueueConfig: JournaledQueueConfig, queueConfigs: Seq[JournaledQueueConfig],
               listenAddress: String, memcacheListenPort: Option[Int], textListenPort: Option[Int],
               thriftListenPort: Option[Int], queuePath: String,
               expirationTimerFrequency: Option[Duration], clientTimeout: Option[Duration],
@@ -119,7 +120,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
     // FIXME: would make more sense to use the finagle Timer. but they'd have to expose it.
     timer = new HashedWheelTimer(10, TimeUnit.MILLISECONDS)
     queueCollection = new QueueCollection(queuePath, new FinagleTimer(timer), defaultQueueConfig,
-      builders)
+      queueConfigs)
     queueCollection.loadQueues()
 
     Stats.addGauge("items") { queueCollection.currentItems.toDouble }
@@ -182,10 +183,6 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
         log.error(e, "Error in config: %s", e)
         log.error(e.messages.flatten.mkString("\n"))
     }
-  }
-
-  def reload(newDefaultQueueConfig: QueueConfig, newQueueBuilders: List[QueueBuilder]) {
-    queueCollection.reload(newDefaultQueueConfig, newQueueBuilders)
   }
 }
 

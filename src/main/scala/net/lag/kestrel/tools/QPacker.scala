@@ -19,6 +19,7 @@ package net.lag.kestrel
 package tools
 
 import java.io.{FileNotFoundException, IOException}
+import net.lag.kestrel.oldjournal._
 import scala.collection.mutable
 
 

@@ -16,6 +16,7 @@
  */
 
 package net.lag.kestrel
+package oldjournal
 
 import java.io._
 import java.nio.{ByteBuffer, ByteOrder}
@@ -25,6 +26,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.annotation.tailrec
 import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
+import com.twitter.libkestrel.PeriodicSyncFile
 import com.twitter.logging.Logger
 import com.twitter.ostrich.admin.BackgroundProcess
 import com.twitter.util.{Future, Duration, Timer, Time}

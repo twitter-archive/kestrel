@@ -16,6 +16,7 @@
  */
 
 package net.lag.kestrel
+package oldjournal
 
 import java.io.FileOutputStream
 import scala.annotation.tailrec

@@ -21,6 +21,7 @@ import java.io.File
 import java.util.concurrent.CountDownLatch
 import scala.collection.mutable
 import com.twitter.conversions.time._
+import com.twitter.libkestrel._
 import com.twitter.logging.Logger
 import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{Duration, Future, Time, Timer}
@@ -29,8 +30,8 @@ import config._
 class InaccessibleQueuePath extends Exception("Inaccessible queue path: Must be a directory and writable")
 
 class QueueCollection(queueFolder: String, timer: Timer,
-                      @volatile private var defaultQueueConfig: QueueConfig,
-                      @volatile var queueBuilders: List[QueueBuilder]) {
+                      defaultQueueConfig: JournaledQueueConfig,
+                      queueConfigs: Seq[JournaledQueueConfig]) {
   private val log = Logger.get(getClass.getName)
 
   private val path = new File(queueFolder)
@@ -42,11 +43,10 @@ class QueueCollection(queueFolder: String, timer: Timer,
     throw new InaccessibleQueuePath
   }
 
-  private val queues = new mutable.HashMap[String, PersistentQueue]
+  private[this] val queueConfigMap = queueConfigs.map { config => (config.name, config) }.toMap
+  private val queues = new mutable.HashMap[String, JournaledQueue]
   private val fanout_queues = new mutable.HashMap[String, mutable.HashSet[String]]
   @volatile private var shuttingDown = false
-
-  @volatile private var queueConfigMap = Map(queueBuilders.map { builder => (builder.name, builder()) }: _*)
 
   private def buildQueue(name: String, realName: String, path: String) = {
     if ((name contains ".") || (name contains "/") || (name contains "~")) {
@@ -54,56 +54,48 @@ class QueueCollection(queueFolder: String, timer: Timer,
     }
     val config = queueConfigMap.getOrElse(name, defaultQueueConfig)
     log.info("Setting up queue %s: %s", realName, config)
-    new PersistentQueue(realName, path, config, timer, Some(this.apply))
+    new JournaledQueue(config, new File(path), timer)
   }
 
   // preload any queues
   def loadQueues() {
-    Journal.getQueueNamesFromFolder(path) map { queue(_) }
+    Journal.getQueueNamesFromFolder(path) map { writer(_) }
   }
 
   def queueNames: List[String] = synchronized {
     queues.keys.toList
   }
 
-  def currentItems = queues.values.foldLeft(0L) { _ + _.length }
+  def currentItems = queues.values.foldLeft(0L) { _ + _.items }
   def currentBytes = queues.values.foldLeft(0L) { _ + _.bytes }
-
-  def reload(newDefaultQueueConfig: QueueConfig, newQueueBuilders: List[QueueBuilder]) {
-    defaultQueueConfig = newDefaultQueueConfig
-    queueBuilders = newQueueBuilders
-    queueConfigMap = Map(queueBuilders.map { builder => (builder.name, builder()) }: _*)
-    queues.foreach { case (name, queue) =>
-      val configName = if (name contains '+') name.split('+')(0) else name
-      queue.config = queueConfigMap.get(configName).getOrElse(defaultQueueConfig)
-    }
-  }
 
   /**
    * Get a named queue, creating it if necessary.
    */
-  def queue(name: String): Option[PersistentQueue] = synchronized {
+  def writer(name: String): Option[JournaledQueue] = synchronized {
     if (shuttingDown) {
       None
     } else {
       Some(queues.get(name) getOrElse {
         // only happens when creating a queue for the first time.
-        val q = if (name contains '+') {
-          val master = name.split('+')(0)
-          fanout_queues.getOrElseUpdate(master, new mutable.HashSet[String]) += name
-          log.info("Fanout queue %s added to %s", name, master)
-          buildQueue(master, name, path.getPath)
-        } else {
-          buildQueue(name, name, path.getPath)
-        }
-        q.setup
+        val q = buildQueue(name, name, path.getPath)
         queues(name) = q
         q
       })
     }
   }
 
-  def apply(name: String) = queue(name)
+  def reader(name: String): Option[JournaledQueue#Reader] = {
+    val (writerName, readerName) = if (name contains '+') {
+      val names = name.split("+", 2)
+      (names(0), names(1))
+    } else {
+      (name, "")
+    }
+    writer(writerName).map { _.reader(readerName) }
+  }
+
+//  def apply(name: String) = queue(name)
 
   /**
    * Add an item to a named queue. Will not return until the item has been synchronously added
@@ -111,18 +103,13 @@ class QueueCollection(queueFolder: String, timer: Timer,
    *
    * @return true if the item was added; false if the server is shutting down
    */
-  def add(key: String, item: Array[Byte], expiry: Option[Time], addTime: Time): Boolean = {
-    for (fanouts <- fanout_queues.get(key); name <- fanouts) {
-      add(name, item, expiry, addTime)
-    }
-
-    queue(key) match {
-      case None => false
-      case Some(q) =>
-        val result = q.add(item, expiry, None, addTime)
-        if (result) Stats.incr("total_items")
-        result
-    }
+  def add(key: String, data: Array[Byte], expiry: Option[Time], addTime: Time): Boolean = {
+    writer(key) flatMap { q =>
+      q.put(data, addTime, expiry) map { future =>
+        future map { _ => Stats.incr("total_items") }
+        true
+      }
+    } getOrElse(false)
   }
 
   def add(key: String, item: Array[Byte]): Boolean = add(key, item, None, Time.now)
@@ -132,52 +119,55 @@ class QueueCollection(queueFolder: String, timer: Timer,
    * Retrieve an item from a queue and pass it to a continuation. If no item is available within
    * the requested time, or the server is shutting down, None is passed.
    */
-  def remove(key: String, deadline: Option[Time] = None, transaction: Boolean = false, peek: Boolean = false): Future[Option[QItem]] = {
-    queue(key) match {
+  def remove(key: String, deadline: Option[Time] = None, transaction: Boolean = false, peek: Boolean = false): Future[Option[QueueItem]] = {
+    reader(key) match {
       case None =>
         Future.value(None)
       case Some(q) =>
         val future = if (peek) {
-          q.waitPeek(deadline)
+          q.peek()
         } else {
-          q.waitRemove(deadline, transaction)
+          q.get(deadline)
         }
-        future.map { item =>
-          item match {
-            case None =>
+        future.map { itemOption =>
+          itemOption match {
+            case None => {
               Stats.incr("get_misses")
-            case Some(_) =>
+            }
+            case Some(item) => {
               Stats.incr("get_hits")
+              if (!transaction) q.commit(item.id)
+            }
           }
-          item
+          itemOption
         }
     }
   }
 
-  def unremove(key: String, xid: Int) {
-    queue(key) map { q => q.unremove(xid) }
+  def unremove(key: String, xid: Long) {
+    reader(key) map { q => q.unget(xid) }
   }
 
-  def confirmRemove(key: String, xid: Int) {
-    queue(key) map { q => q.confirmRemove(xid) }
+  def confirmRemove(key: String, xid: Long) {
+    reader(key) map { q => q.commit(xid) }
   }
 
   def flush(key: String) {
-    queue(key) map { q => q.flush() }
+    reader(key) map { q => q.flush() }
   }
 
   def delete(name: String): Unit = synchronized {
     if (!shuttingDown) {
-      queues.get(name) map { q =>
-        q.close()
-        q.destroyJournal()
-        q.removeStats()
-        queues.remove(name)
+      queues.get(name) foreach { q =>
+        q.erase()
+        queues -= name
       }
       if (name contains '+') {
-        val master = name.split('+')(0)
-        fanout_queues.getOrElseUpdate(master, new mutable.HashSet[String]) -= name
-        log.info("Fanout queue %s dropped from %s", name, master)
+        val (writerName, readerName) = {
+          val names = name.split("+", 2)
+          (names(0), names(1))
+        }
+        queues(writerName).dropReader(readerName)
       }
     }
   }
@@ -186,7 +176,7 @@ class QueueCollection(queueFolder: String, timer: Timer,
     if (shuttingDown) {
       0
     } else {
-      queue(name) map { q => q.discardExpired(q.config.maxExpireSweep) } getOrElse(0)
+      writer(name) map { _.discardExpired() } getOrElse(0)
     }
   }
 
@@ -194,12 +184,15 @@ class QueueCollection(queueFolder: String, timer: Timer,
     queueNames.foldLeft(0) { (sum, qName) => sum + flushExpired(qName) }
   }
 
+
+  /* FIXME
   def stats(key: String): Array[(String, String)] = queue(key) match {
     case None => Array[(String, String)]()
     case Some(q) =>
       q.dumpStats() ++
         fanout_queues.get(key).map { qset => ("children", qset.mkString(",")) }.toList
   }
+  */
 
   /**
    * Shutdown this queue collection. Any future queue requests will fail.
