@@ -81,12 +81,12 @@ class ThriftHandler (
     future
   }
 
-  def confirm(queueName: String, xids: Set[Int]): Future[Int] = {
-    Future(handler.closeReads(queueName, xids))
+  def confirm(queueName: String, xids: Set[Long]): Future[Int] = {
+    Future(handler.closeReads(queueName, xids.map { _.toInt }))
   }
 
-  def abort(queueName: String, xids: Set[Int]): Future[Int] = {
-    Future(handler.abortReads(queueName, xids))
+  def abort(queueName: String, xids: Set[Long]): Future[Int] = {
+    Future(handler.abortReads(queueName, xids.map { _.toInt }))
   }
 
   def peek(queueName: String): Future[thrift.QueueInfo] = {

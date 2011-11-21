@@ -5,7 +5,7 @@ struct Item {
   1: binary data
 
   /* transaction ID, to be used in the `confirm` call */
-  2: i32 xid
+  2: i64 xid
 }
 
 struct QueueInfo {
@@ -65,13 +65,13 @@ service Kestrel {
    * Confirm a set of items previously fetched with `get`.
    * Returns the count of confirmed items.
    */
-  i32 confirm(1: string queue_name, 2: set<i32> xids)
+  i32 confirm(1: string queue_name, 2: set<i64> xids)
 
   /*
    * Abort a set of items previously fetched with `get`.
    * Returns the count of aborted items.
    */
-  i32 abort(1: string queue_name, 2: set<i32> xids)
+  i32 abort(1: string queue_name, 2: set<i64> xids)
 
   /*
    * Return some basic info about a queue, and the head item if there is
