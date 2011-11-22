@@ -19,9 +19,8 @@ new KestrelConfig {
   maxOpenTransactions = 100
 
   // default queue settings:
-  default.defaultJournalSize = 16.megabytes
-  default.maxMemorySize = 128.megabytes
-  default.maxJournalSize = 1.gigabyte
+  default.journalSize = 16.megabytes
+  default.defaultReader.maxMemorySize = 128.megabytes
 
   admin.httpPort = 2223
 
@@ -33,17 +32,17 @@ new KestrelConfig {
     // keep items for no longer than a half hour, and don't accept any more if
     // the queue reaches 1.5M items.
     name = "weather_updates"
-    maxAge = 1800.seconds
-    maxItems = 1500000
+    defaultReader.maxAge = 1800.seconds
+    defaultReader.maxItems = 1500000
   } :: new QueueBuilder {
     // don't keep a journal file for this queue. when kestrel exits, any
     // remaining contents will be lost.
     name = "transient_events"
-    keepJournal = false
+    journaled = false
   } :: new QueueBuilder {
     name = "jobs_pending"
-    expireToQueue = "jobs_ready"
-    maxAge = 30.seconds
+    defaultReader.expireToQueue = "jobs_ready"
+    defaultReader.maxAge = 30.seconds
   } :: new QueueBuilder {
     name = "jobs_ready"
     syncJournal = 0.seconds
@@ -52,31 +51,20 @@ new KestrelConfig {
   } :: new QueueBuilder {
     name = "spam0"
   } :: new QueueBuilder {
-    name = "hello"
-    fanoutOnly = true
-  } :: new QueueBuilder {
     name = "small"
-    maxSize = 128.megabytes
-    maxMemorySize = 16.megabytes
-    maxJournalSize = 128.megabytes
-    discardOldWhenFull = true
+    journalSize = 1.megabyte
+    defaultReader.maxSize = 128.megabytes
+    defaultReader.maxMemorySize = 16.megabytes
+    defaultReader.discardOldWhenFull = true
   } :: new QueueBuilder {
     name = "slow"
     syncJournal = 10.milliseconds
   }
 
   loggers = new LoggerConfig {
-    level = Level.INFO
+    level = Level.DEBUG
     handlers = new FileHandlerConfig {
       filename = "/var/log/kestrel/kestrel.log"
-      roll = Policy.Never
-    }
-  } :: new LoggerConfig {
-    node = "stats"
-    level = Level.INFO
-    useParents = false
-    handlers = new FileHandlerConfig {
-      filename = "/var/log/kestrel/stats.log"
       roll = Policy.Never
     }
   }

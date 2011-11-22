@@ -47,6 +47,8 @@ class KestrelProject(info: ProjectInfo)
 
   override def githubRemote = "github"
 
+  override def validateConfigFilesSet = allConfigFiles
+
   // generate a jar that can be run for load tests.
   def loadTestJarFilename = "kestrel-tests-" + version.toString + ".jar"
   def loadTestPaths = ((testCompilePath ##) ***) +++ ((mainCompilePath ##) ***)
