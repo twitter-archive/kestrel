@@ -102,7 +102,7 @@ class KestrelHandler(
                     key, sessionId, clientDescription)
         false
       case Some(xid) =>
-        log.debug("abort -> q=%s", key)
+        log.debug("abort -> q=%s %d", key, xid)
         queues.unremove(key, xid)
         true
     }

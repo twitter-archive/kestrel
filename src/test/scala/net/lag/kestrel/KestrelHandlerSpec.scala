@@ -21,6 +21,8 @@ import java.io.{File, FileInputStream}
 import scala.collection.mutable
 import scala.util.Sorting
 import com.twitter.conversions.time._
+import com.twitter.libkestrel.{ItemIdList, QueueItem}
+import com.twitter.libkestrel.config.JournaledQueueConfig
 import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{TempFolder, Time, Timer}
 import org.specs.Specification
@@ -30,41 +32,11 @@ import config._
 class FakeKestrelHandler(queues: QueueCollection, maxOpenTransactions: Int)
   extends KestrelHandler(queues, maxOpenTransactions, "none", 0)
 
-class ItemIdListSpec extends Specification with TestLogging {
-  "ItemIdList" should {
-    "add and pop" in {
-      val x = new ItemIdList()
-      x.add(Seq(5, 4))
-      x.size mustEqual 2
-      x.pop() mustEqual Some(5)
-      x.pop() mustEqual Some(4)
-      x.pop() mustEqual None
-    }
-
-    "remove from the middle" in {
-      val x = new ItemIdList()
-      x.add(Seq(7, 6, 5, 4, 3, 2))
-      x.pop() mustEqual Some(7)
-      x.remove(Set(5, 4, 2)) mustEqual Set(5, 4, 2)
-      x.popAll() mustEqual Seq(6, 3)
-    }
-
-    "remove and pop combined" in {
-      val x = new ItemIdList()
-      x.add(Seq(7, 6, 5, 4, 3, 2))
-      x.remove(Set(6)) mustEqual Set(6)
-      x.pop() mustEqual Some(7)
-      x.pop() mustEqual Some(5)
-      x.popAll() mustEqual Seq(4, 3, 2)
-    }
-  }
-}
-
 class KestrelHandlerSpec extends Specification with TempFolder with TestLogging {
-  val config = new QueueBuilder().apply()
+  val config = new JournaledQueueConfig(name = "test")
 
-  case class beString(expected: String) extends Matcher[Option[QItem]]() {
-    def apply(v: => Option[QItem]) = {
+  case class beString(expected: String) extends Matcher[Option[QueueItem]]() {
+    def apply(v: => Option[QueueItem]) = {
       val actual = v.map { item => new String(item.data) }
       (actual == Some(expected), "ok", "item " + actual + " != " + expected)
     }
@@ -195,7 +167,7 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
         withTempFolder {
           queues = new QueueCollection(folderName, timer, config, Nil)
           val handler = new FakeKestrelHandler(queues, 5)
-          val got = new mutable.ListBuffer[QItem]()
+          val got = new mutable.ListBuffer[QueueItem]()
           handler.setItem("red", 0, None, "red1".getBytes)
           handler.setItem("red", 0, None, "red2".getBytes)
           handler.setItem("red", 0, None, "red3".getBytes)

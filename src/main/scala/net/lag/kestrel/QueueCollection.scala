@@ -53,7 +53,7 @@ class QueueCollection(queueFolder: String, timer: Timer,
     if ((name contains ".") || (name contains "/") || (name contains "~")) {
       throw new Exception("Queue name contains illegal characters (one of: ~ . /).")
     }
-    val config = queueConfigMap.getOrElse(name, defaultQueueConfig)
+    val config = queueConfigMap.getOrElse(name, defaultQueueConfig.copy(name = name))
     log.info("Setting up queue %s: %s", realName, config)
     new JournaledQueue(config, new File(path), timer)
   }
@@ -88,15 +88,13 @@ class QueueCollection(queueFolder: String, timer: Timer,
 
   def reader(name: String): Option[JournaledQueue#Reader] = {
     val (writerName, readerName) = if (name contains '+') {
-      val names = name.split("+", 2)
+      val names = name.split("\\+", 2)
       (names(0), names(1))
     } else {
       (name, "")
     }
     writer(writerName).map { _.reader(readerName) }
   }
-
-//  def apply(name: String) = queue(name)
 
   /**
    * Add an item to a named queue. Will not return until the item has been synchronously added
@@ -165,7 +163,7 @@ class QueueCollection(queueFolder: String, timer: Timer,
       }
       if (name contains '+') {
         val (writerName, readerName) = {
-          val names = name.split("+", 2)
+          val names = name.split("\\+", 2)
           (names(0), names(1))
         }
         queues(writerName).dropReader(readerName)

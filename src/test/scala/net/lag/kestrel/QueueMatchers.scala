@@ -17,34 +17,29 @@
 
 package net.lag.kestrel
 
+import com.twitter.libkestrel.QueueItem
 import org.specs.matcher.Matcher
 
 trait QueueMatchers {
-  def beSomeQItem(s: String) = new Matcher[Option[QItem]] {
-    def apply(qitemEval: => Option[QItem]) = {
-      val qitem = qitemEval
-      (qitem.isDefined && (new String(qitem.get.data) == s), "ok", "wrong or missing queue item")
+  def beSomeQueueItem(s: String) = new Matcher[Option[QueueItem]] {
+    def apply(QueueItemEval: => Option[QueueItem]) = {
+      val QueueItem = QueueItemEval
+      (QueueItem.isDefined && (new String(QueueItem.get.data) == s), "ok", "wrong or missing queue item")
     }
   }
 
-  def beSomeQItem(len: Int) = new Matcher[Option[QItem]] {
-    def apply(qitemEval: => Option[QItem]) = {
-      val qitem = qitemEval
-      (qitem.isDefined && (qitem.get.data.size == len), "ok", "wrong or missing queue item")
+  def beSomeQueueItem(len: Int) = new Matcher[Option[QueueItem]] {
+    def apply(QueueItemEval: => Option[QueueItem]) = {
+      val QueueItem = QueueItemEval
+      (QueueItem.isDefined && (QueueItem.get.data.size == len), "ok", "wrong or missing queue item")
     }
   }
 
-  def beSomeQItem(len: Int, n: Int) = new Matcher[Option[QItem]] {
-    def apply(qitemEval: => Option[QItem]) = {
-      val qitem = qitemEval
-      (qitem.isDefined && (qitem.get.data.size == len) && (qitem.get.data(0) == n),
-        "ok", "wrong or missing queue item at " + n + "; got " + qitem.get.data(0))
+  def beSomeQueueItem(len: Int, n: Int) = new Matcher[Option[QueueItem]] {
+    def apply(QueueItemEval: => Option[QueueItem]) = {
+      val QueueItem = QueueItemEval
+      (QueueItem.isDefined && (QueueItem.get.data.size == len) && (QueueItem.get.data(0) == n),
+        "ok", "wrong or missing queue item at " + n + "; got " + QueueItem.get.data(0))
     }
-  }
-
-  def put(q: PersistentQueue, bytes: Int, n: Int) {
-    val data = new Array[Byte](bytes)
-    data(0) = n.toByte
-    q.add(data)
   }
 }

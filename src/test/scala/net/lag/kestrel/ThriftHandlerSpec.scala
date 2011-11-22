@@ -18,6 +18,7 @@ package net.lag.kestrel
 
 import com.twitter.conversions.time._
 import com.twitter.finagle.ClientConnection
+import com.twitter.libkestrel.{JournaledQueue, QueueItem}
 import com.twitter.ostrich.admin.RuntimeEnvironment
 import com.twitter.util.{Future, Promise, Time}
 import java.net.InetSocketAddress
@@ -94,7 +95,7 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
 
     "get" in {
       "one, no timeout" in {
-        val qitem = QItem(Time.now, None, item1, 0)
+        val qitem = QueueItem(0, Time.now, None, item1)
 
         expect {
           one(queueCollection).remove("test", None, false, false) willReturn Future(Some(qitem))
@@ -105,7 +106,7 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
 
       "one, with timeout" in {
         Time.withCurrentTimeFrozen { mutator =>
-          val qitem = QItem(Time.now, None, item1, 0)
+          val qitem = QueueItem(0, Time.now, None, item1)
 
           expect {
             one(queueCollection).remove("test", Some(1.second.fromNow), false, false) willReturn Future(Some(qitem))
@@ -116,7 +117,7 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
       }
 
       "one, reliably" in {
-        val qitem = QItem(Time.now, None, item1, 1)
+        val qitem = QueueItem(1, Time.now, None, item1)
 
         expect {
           one(queueCollection).remove("test", None, true, false) willReturn Future(Some(qitem))
@@ -126,8 +127,8 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
       }
 
       "multiple" in {
-        val qitem1 = QItem(Time.now, None, item1, 0)
-        val qitem2 = QItem(Time.now, None, item2, 0)
+        val qitem1 = QueueItem(10, Time.now, None, item1)
+        val qitem2 = QueueItem(11, Time.now, None, item2)
 
         expect {
           one(queueCollection).remove("test", None, true, false) willReturn Future(Some(qitem1))
@@ -136,8 +137,8 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
         }
 
         thriftHandler.get("test", 5, 0, false)() mustEqual List(
-          thrift.Item(ByteBuffer.wrap(item1), 0),
-          thrift.Item(ByteBuffer.wrap(item2), 0)
+          thrift.Item(ByteBuffer.wrap(item1), 10),
+          thrift.Item(ByteBuffer.wrap(item2), 11)
         )
       }
     }
@@ -165,10 +166,21 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
     }
 
     "peek" in {
-      val qitem1 = QItem(Time.now, None, item1, 0)
+      val qitem1 = QueueItem(0, Time.now, None, item1)
+      val writer = mock[JournaledQueue]
+      val reader = mock[JournaledQueue#Reader]
 
       expect {
         one(queueCollection).remove("test", None, false, true) willReturn Future(Some(qitem1))
+        one(queueCollection).reader("test") willReturn Some(reader)
+        one(reader).items willReturn 10
+        one(reader).bytes willReturn 10240
+        one(reader).writer willReturn writer
+        one(writer).journalBytes willReturn 29999
+        one(reader).age willReturn 500.milliseconds
+        one(reader).waiterCount willReturn 2
+        one(reader).openItems willReturn 1
+/*
         one(queueCollection).stats("test") willReturn List(
           ("items", "10"),
           ("bytes", "10240"),
@@ -177,6 +189,7 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
           ("waiters", "2"),
           ("open_transactions", "1")
         ).toArray
+        */
       }
 
       val qinfo = new thrift.QueueInfo(Some(ByteBuffer.wrap(item1)), 10, 10240, 29999, 500, 2, 1)
