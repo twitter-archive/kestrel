@@ -31,8 +31,8 @@ import config._
 class InaccessibleQueuePath extends Exception("Inaccessible queue path: Must be a directory and writable")
 
 class QueueCollection(queueFolder: String, timer: Timer,
-                      defaultQueueConfig: JournaledQueueConfig,
-                      queueConfigs: Seq[JournaledQueueConfig]) {
+                      defaultQueueBuilder: QueueBuilder,
+                      queueBuilders: Seq[QueueBuilder]) {
   private val log = Logger.get(getClass.getName)
 
   private val path = new File(queueFolder)
@@ -44,7 +44,7 @@ class QueueCollection(queueFolder: String, timer: Timer,
     throw new InaccessibleQueuePath
   }
 
-  private[this] val queueConfigMap = queueConfigs.map { config => (config.name, config) }.toMap
+  private[this] val queueBuilderMap = queueBuilders.map { b => (b.name, b) }.toMap
   private val queues = new mutable.HashMap[String, JournaledQueue]
   private val fanout_queues = new mutable.HashMap[String, mutable.HashSet[String]]
   @volatile private var shuttingDown = false
@@ -53,7 +53,8 @@ class QueueCollection(queueFolder: String, timer: Timer,
     if ((name contains ".") || (name contains "/") || (name contains "~")) {
       throw new Exception("Queue name contains illegal characters (one of: ~ . /).")
     }
-    val config = queueConfigMap.getOrElse(name, defaultQueueConfig.copy(name = name))
+    val builder = queueBuilderMap.getOrElse(name, defaultQueueBuilder)
+    val config = builder().copy(name = name)
     log.info("Setting up queue %s: %s", realName, config)
     new JournaledQueue(config, new File(path), timer)
   }
@@ -135,7 +136,7 @@ class QueueCollection(queueFolder: String, timer: Timer,
             }
             case Some(item) => {
               Stats.incr("get_hits")
-              if (!transaction) q.commit(item.id)
+              if (!transaction && !peek) q.commit(item.id)
             }
           }
           itemOption

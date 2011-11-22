@@ -46,7 +46,7 @@ import com.twitter.naggati.Codec
 import com.twitter.naggati.codec.{MemcacheResponse, MemcacheRequest, MemcacheCodec}
 import com.twitter.finagle.{ClientConnection, Codec => FinagleCodec, Service => FinagleService}
 
-class Kestrel(defaultQueueConfig: JournaledQueueConfig, queueConfigs: Seq[JournaledQueueConfig],
+class Kestrel(defaultQueueBuilder: QueueBuilder, queueBuilders: Seq[QueueBuilder],
               listenAddress: String, memcacheListenPort: Option[Int], textListenPort: Option[Int],
               thriftListenPort: Option[Int], queuePath: String,
               expirationTimerFrequency: Option[Duration], clientTimeout: Option[Duration],
@@ -120,8 +120,8 @@ class Kestrel(defaultQueueConfig: JournaledQueueConfig, queueConfigs: Seq[Journa
     // this means no timeout will be at better granularity than 10ms.
     // FIXME: would make more sense to use the finagle Timer. but they'd have to expose it.
     timer = new HashedWheelTimer(10, TimeUnit.MILLISECONDS)
-    queueCollection = new QueueCollection(queuePath, new FinagleTimer(timer), defaultQueueConfig,
-      queueConfigs)
+    queueCollection = new QueueCollection(queuePath, new FinagleTimer(timer), defaultQueueBuilder,
+      queueBuilders)
     queueCollection.loadQueues()
 
     Stats.addGauge("items") { queueCollection.currentItems.toDouble }

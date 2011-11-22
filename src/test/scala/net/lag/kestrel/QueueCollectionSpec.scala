@@ -25,12 +25,19 @@ import com.twitter.libkestrel.QueueItem
 import com.twitter.libkestrel.config._
 import com.twitter.ostrich.stats.Stats
 import org.specs.Specification
+import org.specs.mock.{ClassMocker, JMocker}
 import config._
 
-class QueueCollectionSpec extends Specification with TempFolder with TestLogging with QueueMatchers {
+class QueueCollectionSpec extends Specification
+  with TempFolder
+  with TestLogging
+  with QueueMatchers
+  with JMocker
+  with ClassMocker
+{
   private var qc: QueueCollection = null
 
-  val config = new JournaledQueueConfig(name = "test")
+  val config = new QueueBuilder { name = "test" }
 
   "QueueCollection" should {
     val timer = new FakeTimer()
@@ -258,17 +265,21 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
         Time.withCurrentTimeFrozen { time =>
           new File(folderName + "/jobs").createNewFile()
           new File(folderName + "/expired").createNewFile()
-          val expireConfig = JournaledQueueConfig(
-            name = "jobs",
-            defaultReaderConfig = JournaledQueueReaderConfig(
-              processExpiredItem = { item: QueueItem => qc.writer("expired").get.put(item.data, Time.now, None) }
-            )
-          )
+          val expireConfig = new QueueBuilder {
+            name = "jobs"
+            defaultReader.expireToQueue = "expired"
+          }
+
           qc = new QueueCollection(folderName, timer, config, List(expireConfig))
           qc.loadQueues()
           qc.add("jobs", "hello".getBytes, Some(1.second.fromNow))
           qc.reader("jobs").get.items mustEqual 1
           qc.reader("expired").get.items mustEqual 0
+
+          Kestrel.kestrel = mock[Kestrel]
+          expect {
+            one(Kestrel.kestrel).queueCollection willReturn qc
+          }
 
           time.advance(2.seconds)
           qc.reader("jobs").get.items mustEqual 1

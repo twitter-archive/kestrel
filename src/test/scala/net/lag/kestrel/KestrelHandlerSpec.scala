@@ -33,7 +33,7 @@ class FakeKestrelHandler(queues: QueueCollection, maxOpenTransactions: Int)
   extends KestrelHandler(queues, maxOpenTransactions, "none", 0)
 
 class KestrelHandlerSpec extends Specification with TempFolder with TestLogging {
-  val config = new JournaledQueueConfig(name = "test")
+  val config = new QueueBuilder { name = "test" }
 
   case class beString(expected: String) extends Matcher[Option[QueueItem]]() {
     def apply(v: => Option[QueueItem]) = {
