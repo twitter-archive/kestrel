@@ -20,7 +20,7 @@ package net.lag.kestrel
 import java.io._
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.channels.FileChannel
-import java.util.concurrent.{CountDownLatch, Executor}
+import java.util.concurrent.{CountDownLatch, Executor, ScheduledExecutorService}
 import scala.collection.mutable
 import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
@@ -30,10 +30,10 @@ import com.twitter.util._
 import config._
 
 class PersistentQueue(val name: String, persistencePath: String, @volatile var config: QueueConfig,
-                      timer: Timer, journalSyncTimer: Timer,
+                      timer: Timer, journalSyncScheduler: ScheduledExecutorService,
                       queueLookup: Option[(String => Option[PersistentQueue])]) {
-  def this(name: String, persistencePath: String, config: QueueConfig, timer: Timer, journalSyncTimer: Timer) =
-    this(name, persistencePath, config, timer, journalSyncTimer, None)
+  def this(name: String, persistencePath: String, config: QueueConfig, timer: Timer, journalSyncScheduler: ScheduledExecutorService) =
+    this(name, persistencePath, config, timer, journalSyncScheduler, None)
 
   private val log = Logger.get(getClass.getName)
 
@@ -70,7 +70,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   private var paused = false
 
   private var journal =
-    new Journal(new File(persistencePath).getCanonicalFile, name, journalSyncTimer, config.syncJournal)
+    new Journal(new File(persistencePath).getCanonicalFile, name, journalSyncScheduler, config.syncJournal)
 
   private val waiters = new DeadlineWaitQueue(timer)
 

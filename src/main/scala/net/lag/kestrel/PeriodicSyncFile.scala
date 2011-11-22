@@ -1,7 +1,7 @@
 package net.lag.kestrel
 
 import java.nio.ByteBuffer
-import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.{ConcurrentLinkedQueue, ScheduledExecutorService, TimeUnit}
 import com.twitter.conversions.time._
 import com.twitter.util._
 import java.io.{IOException, FileOutputStream, File}
@@ -10,7 +10,7 @@ import java.io.{IOException, FileOutputStream, File}
  * Open a file for writing, and fsync it on a schedule. The period may be 0 to force an fsync
  * after every write, or `Duration.MaxValue` to never fsync.
  */
-class PeriodicSyncFile(file: File, timer: Timer, period: Duration) {
+class PeriodicSyncFile(file: File, scheduler: ScheduledExecutorService, period: Duration) {
   // pre-completed future for writers who are behaving synchronously.
   private final val DONE = Future(())
 
@@ -20,9 +20,11 @@ class PeriodicSyncFile(file: File, timer: Timer, period: Duration) {
   @volatile var closed = false
 
   if (period > 0.seconds && period < Duration.MaxValue) {
-    timer.schedule(Time.now, period) {
-      if (!closed && !promises.isEmpty) fsync()
-    }
+    scheduler.scheduleWithFixedDelay(new Runnable {
+        override def run {
+          if (!closed && !promises.isEmpty) fsync()
+        }
+      }, period.inMilliseconds, period.inMilliseconds, TimeUnit.MILLISECONDS)
   }
 
   private def fsync() {
