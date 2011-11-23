@@ -231,7 +231,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
    *     head of the queue)
    */
   def remove(transaction: Boolean): Option[QItem] = {
-    synchronized {
+    val removedItem = synchronized {
       if (closed || paused || queueLength == 0) {
         None
       } else {
@@ -241,15 +241,16 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
           checkRotateJournal()
         }
 
-        item.foreach { qItem =>
-          val usec = (Time.now - qItem.addTime).inMilliseconds.toInt max 0
-          Stats.addMetric("delivery_latency_msec", usec)
-          Stats.addMetric("q/" + name + "/delivery_latency_msec", usec)
-        }
-
         item
       }
     }
+
+    removedItem.foreach { qItem =>
+      val usec = (Time.now - qItem.addTime).inMilliseconds.toInt max 0
+      Stats.addMetric("delivery_latency_msec", usec)
+      Stats.addMetric("q/" + name + "/delivery_latency_msec", usec)
+    }
+    removedItem
   }
 
   /**
