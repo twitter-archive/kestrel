@@ -1,10 +1,34 @@
 package net.lag.kestrel
 
 import java.nio.ByteBuffer
-import java.util.concurrent.{ConcurrentLinkedQueue, ScheduledExecutorService, TimeUnit}
+import java.util.concurrent.{ConcurrentLinkedQueue, ScheduledExecutorService, ScheduledFuture, TimeUnit}
 import com.twitter.conversions.time._
 import com.twitter.util._
 import java.io.{IOException, FileOutputStream, File}
+
+class PeriodicSyncTask(val scheduler: ScheduledExecutorService, initialDelay: Duration, period: Duration) {
+  @volatile var scheduledFsync: Option[ScheduledFuture[_]] = None
+
+  def start(f: => Unit): Unit = synchronized {
+    if (scheduledFsync.isEmpty && period > 0.seconds) {
+      val handle = scheduler.scheduleWithFixedDelay(new Runnable {
+        override def run = f
+      }, initialDelay.inMilliseconds, period.inMilliseconds, TimeUnit.MILLISECONDS)
+      scheduledFsync = Some(handle)
+    }
+  }
+
+  def stop: Unit = synchronized { _stop }
+
+  def stopIf(f: => Boolean): Unit = synchronized {
+    if (f) _stop
+  }
+
+  private[this] def _stop = {
+    scheduledFsync.foreach { _.cancel(false) }
+    scheduledFsync = None
+  }
+}
 
 /**
  * Open a file for writing, and fsync it on a schedule. The period may be 0 to force an fsync
@@ -16,16 +40,9 @@ class PeriodicSyncFile(file: File, scheduler: ScheduledExecutorService, period: 
 
   val writer = new FileOutputStream(file, true).getChannel
   val promises = new ConcurrentLinkedQueue[Promise[Unit]]()
+  val periodicSyncTask = new PeriodicSyncTask(scheduler, period, period)
 
   @volatile var closed = false
-
-  if (period > 0.seconds && period < Duration.MaxValue) {
-    scheduler.scheduleWithFixedDelay(new Runnable {
-        override def run {
-          if (!closed && !promises.isEmpty) fsync()
-        }
-      }, period.inMilliseconds, period.inMilliseconds, TimeUnit.MILLISECONDS)
-  }
 
   private def fsync() {
     synchronized {
@@ -44,6 +61,8 @@ class PeriodicSyncFile(file: File, scheduler: ScheduledExecutorService, period: 
       for (i <- 0 until completed) {
         promises.poll().setValue(())
       }
+
+      periodicSyncTask.stopIf { promises.isEmpty }
     }
   }
 
@@ -65,6 +84,9 @@ class PeriodicSyncFile(file: File, scheduler: ScheduledExecutorService, period: 
     } else {
       val promise = new Promise[Unit]()
       promises.add(promise)
+      periodicSyncTask.start {
+        if (!closed && !promises.isEmpty) fsync()
+      }
       promise
     }
   }
@@ -75,6 +97,7 @@ class PeriodicSyncFile(file: File, scheduler: ScheduledExecutorService, period: 
    */
   def close() {
     closed = true
+    periodicSyncTask.stop
     fsync()
     writer.close()
   }
