@@ -18,7 +18,7 @@
 package net.lag.kestrel
 
 import java.io.File
-import java.util.concurrent.CountDownLatch
+import java.util.concurrent.{ConcurrentHashMap, CountDownLatch}
 import scala.collection.mutable
 import com.twitter.conversions.time._
 import com.twitter.libkestrel._
@@ -45,8 +45,8 @@ class QueueCollection(queueFolder: String, timer: Timer,
   }
 
   private[this] val queueBuilderMap = queueBuilders.map { b => (b.name, b) }.toMap
-  private val queues = new mutable.HashMap[String, JournaledQueue]
-  private val fanout_queues = new mutable.HashMap[String, mutable.HashSet[String]]
+  private[this] val queues = new mutable.HashMap[String, JournaledQueue]
+  private[this] val seenReaders = new ConcurrentHashMap[String, JournaledQueue#Reader]
   @volatile private var shuttingDown = false
 
   private def buildQueue(name: String, realName: String, path: String) = {
@@ -94,7 +94,15 @@ class QueueCollection(queueFolder: String, timer: Timer,
     } else {
       (name, "")
     }
-    writer(writerName).map { _.reader(readerName) }
+    val rv = writer(writerName).map { _.reader(readerName) }
+    rv foreach { reader =>
+      if (seenReaders.putIfAbsent(reader.fullname, reader) eq null) {
+        Stats.makeCounter("q/" + reader.fullname + "/total_items", reader.putCount)
+        Stats.makeCounter("q/" + reader.fullname + "/expired_items", reader.expiredCount)
+        Stats.makeCounter("q/" + reader.fullname + "/discarded", reader.discardedCount)
+      }
+    }
+    rv
   }
 
   /**
@@ -125,7 +133,7 @@ class QueueCollection(queueFolder: String, timer: Timer,
         Future.value(None)
       case Some(q) =>
         val future = if (peek) {
-          q.peek()
+          q.peek(deadline)
         } else {
           q.get(deadline)
         }
@@ -184,15 +192,24 @@ class QueueCollection(queueFolder: String, timer: Timer,
     queueNames.foldLeft(0) { (sum, qName) => sum + flushExpired(qName) }
   }
 
-
-  /* FIXME
-  def stats(key: String): Array[(String, String)] = queue(key) match {
+  def stats(key: String): Array[(String, String)] = reader(key) match {
     case None => Array[(String, String)]()
-    case Some(q) =>
-      q.dumpStats() ++
-        fanout_queues.get(key).map { qset => ("children", qset.mkString(",")) }.toList
+    case Some(q) => {
+      Array(
+        ("items", (q.items - q.openItems).toString),
+        ("bytes", (q.bytes - q.openBytes).toString),
+        ("total_items", q.putCount.toString),
+        ("logsize", q.writer.journalBytes.toString),
+        ("expired_items", q.expiredCount.toString),
+        ("mem_items", (q.memoryItems - q.openItems).toString),
+        ("mem_bytes", (q.memoryBytes - q.openBytes).toString),
+        ("age", q.age.inMilliseconds.toString),
+        ("discarded", q.discardedCount.toString),
+        ("waiters", q.waiterCount.toString),
+        ("open_transactions", q.openItems.toString)
+      )
+    }
   }
-  */
 
   /**
    * Shutdown this queue collection. Any future queue requests will fail.

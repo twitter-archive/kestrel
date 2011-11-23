@@ -52,7 +52,6 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
       Some(PORT), None, None, canonicalFolderName, None, None, 1)
     kestrel.start()
   }
-/*
 
   "Server" should {
     doAfter {
@@ -63,31 +62,12 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
     "configure per-queue" in {
       withTempFolder {
         makeServer()
-        val starship = kestrel.queueCollection("starship").get
-        val weatherUpdates = kestrel.queueCollection("weather_updates").get
-        starship.config.maxItems mustEqual Int.MaxValue
-        starship.config.maxAge mustEqual None
-        weatherUpdates.config.maxItems mustEqual 1500000
-        weatherUpdates.config.maxAge mustEqual Some(1800.seconds)
-      }
-    }
-
-    "reload" in {
-      withTempFolder {
-        makeServer()
-        val starship = kestrel.queueCollection("starship").get
-        val weatherUpdates = kestrel.queueCollection("weather_updates").get
-        starship.config.maxItems mustEqual Int.MaxValue
-        weatherUpdates.config.maxItems mustEqual 1500000
-        new KestrelConfig {
-          default.maxItems = 9999
-          queues = new QueueBuilder {
-            name = "starship"
-            maxItems = 50
-          }
-        }.reload(kestrel)
-        starship.config.maxItems mustEqual 50
-        weatherUpdates.config.maxItems mustEqual 9999
+        val starship = kestrel.queueCollection.writer("starship").get
+        val weatherUpdates = kestrel.queueCollection.writer("weather_updates").get
+        starship.reader("").readerConfig.maxItems mustEqual Int.MaxValue
+        starship.reader("").readerConfig.maxAge mustEqual None
+        weatherUpdates.reader("").readerConfig.maxItems mustEqual 1500000
+        weatherUpdates.reader("").readerConfig.maxAge mustEqual Some(1800.seconds)
       }
     }
 
@@ -296,7 +276,7 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
         client.startGet("slow/open/t=3599000")
         Thread.sleep(10)
         client.disconnect()
-        kestrel.queueCollection.queue("slow").get.waiterCount mustEqual 0
+        kestrel.queueCollection.reader("slow").get.waiterCount mustEqual 0
       }
     }
 
@@ -354,30 +334,6 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
         client2.get("testy/peek") mustEqual "nibbler"
         client2.get("testy") mustEqual "nibbler"
         client2.get("testy") mustEqual ""
-      }
-    }
-
-    "rotate logs" in {
-      withTempFolder {
-        makeServer()
-        val v = new String(new Array[Byte](8192))
-
-        val client = new TestClient("localhost", PORT)
-
-        client.set("test_log_rotation", v) mustEqual "STORED"
-        new File(folderName + "/test_log_rotation").length mustEqual 8192 + 16 + 5
-        // specs is very slow to compare long strings
-        (client.get("test_log_rotation") == v) must beTrue
-        new File(folderName + "/test_log_rotation").length mustEqual 8192 + 16 + 5 + 1
-
-        client.get("test_log_rotation") mustEqual ""
-        new File(folderName + "/test_log_rotation").length mustEqual 8192 + 16 + 5 + 1
-
-        client.set("test_log_rotation", v) mustEqual "STORED"
-        new File(folderName + "/test_log_rotation").length mustEqual 2 * (8192 + 16 + 5) + 1
-        (client.get("test_log_rotation") == v) must beTrue
-        new File(folderName + "/test_log_rotation").length mustEqual 0
-        new File(folderName).listFiles.length mustEqual 1
       }
     }
 
@@ -443,5 +399,4 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
       }
     }
   }
-  */
 }

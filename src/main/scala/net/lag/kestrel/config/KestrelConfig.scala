@@ -165,10 +165,7 @@ class QueueReaderBuilder extends Config[JournaledQueueReaderConfig] {
         }
         case None => { _ => () }
       },
-      maxExpireSweep = maxExpireSweep,
-      incrExpiredCount = { reader => Stats.incr("q/" + reader.fullname + "/expired_items") },
-      incrDiscardedCount = { reader => Stats.incr("q/" + reader.fullname + "/discarded") },
-      incrPutCount = { reader => Stats.incr("q/" + reader.fullname + "/total_items") }
+      maxExpireSweep = maxExpireSweep
     )
   }
 }
