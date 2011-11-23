@@ -14,6 +14,7 @@ class KestrelProject(info: ProjectInfo)
   val libkestrel = "com.twitter" % "libkestrel" % "1.0.0-SNAPSHOT"
   val naggati = "com.twitter" % "naggati" % "2.2.0"
   val finagle = "com.twitter" % "finagle-core" % finagleVersion
+  val ostrich = "com.twitter" % "ostrich" % "4.10.1-SNAPSHOT"
   val finagle_ostrich4 = "com.twitter" % "finagle-ostrich4" % finagleVersion
 
   val scrooge_runtime = "com.twitter" % "scrooge-runtime" % "1.0.3"
