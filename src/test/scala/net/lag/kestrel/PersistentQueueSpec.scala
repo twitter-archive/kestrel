@@ -622,7 +622,7 @@ class PersistentQueueSpec extends Specification
           q.add("ol dirty bastard".getBytes, Some(expiry)) mustEqual true
           q.add("raekwon".getBytes) mustEqual true
           time.advance(2.seconds)
-          q.discardExpired(q.length.toInt) mustEqual 3
+          q.discardExpired() mustEqual 3
           q.length mustEqual 1
           q.remove must beSomeQItem("raekwon")
         }
@@ -647,7 +647,7 @@ class PersistentQueueSpec extends Specification
           q.add("u-god".getBytes, Some(expiry)) mustEqual true
           q.add("masta killa".getBytes) mustEqual true
           time.advance(2.seconds)
-          q.discardExpired(q.length.toInt) mustEqual 3
+          q.discardExpired() mustEqual 3
           q.length mustEqual 1
           q.remove must beSomeQItem("masta killa")
 
@@ -655,6 +655,47 @@ class PersistentQueueSpec extends Specification
           r.remove must beSomeQItem("method man")
           r.remove must beSomeQItem("ghostface killah")
           r.remove must beSomeQItem("u-god")
+        }
+      }
+    }
+
+    "expire over maxExpireSweep number of items" in {
+      withTempFolder {
+        Time.withCurrentTimeFrozen { time =>
+          val configWithMaxExpireSweep = new QueueBuilder {
+            keepJournal = false
+            maxExpireSweep = 3
+          }.apply()
+          val configWithoutMaxExpireSweep = new QueueBuilder {
+            keepJournal = false
+          }.apply()
+          val r = new PersistentQueue("vocaloid", folderName, configWithoutMaxExpireSweep, timer, timer)
+          val q = new PersistentQueue("wu_tang", folderName, configWithMaxExpireSweep, timer, timer)
+          r.setup()
+          q.setup()
+
+          val expiryQ = Time.now + 1.second
+          q.add("rza".getBytes, Some(expiryQ)) mustEqual true
+          q.add("gza".getBytes, Some(expiryQ)) mustEqual true
+          q.add("ol dirty bastard".getBytes, Some(expiryQ)) mustEqual true
+          q.add("cappadonna".getBytes, Some(expiryQ)) mustEqual true
+          q.add("raekwon".getBytes) mustEqual true
+          time.advance(2.seconds)
+          q.discardExpired(true) mustEqual 3
+          q.length mustEqual 2
+          q.remove must beSomeQItem("raekwon")
+          q.length mustEqual 0
+
+          val expiryR = Time.now + 1.second
+          r.add("miku".getBytes, Some(expiryR)) mustEqual true
+          r.add("rin".getBytes, Some(expiryR)) mustEqual true
+          r.add("len".getBytes, Some(expiryR)) mustEqual true
+          r.add("luka".getBytes, Some(expiryR)) mustEqual true
+          r.add("geso".getBytes) mustEqual true
+          time.advance(2.seconds)
+          r.discardExpired(true) mustEqual 4
+          r.length mustEqual 1
+          r.remove must beSomeQItem("geso")
         }
       }
     }

@@ -428,7 +428,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   //  -----  internal implementations
 
   private def _add(item: QItem) {
-    discardExpired(config.maxExpireSweep)
+    discardExpired()
     if (!journal.inReadBehind) {
       queue += item
       _memoryBytes += item.data.length
@@ -439,12 +439,12 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   }
 
   private def _peek(): Option[QItem] = {
-    discardExpired(config.maxExpireSweep)
+    discardExpired()
     if (queue.isEmpty) None else Some(queue.front)
   }
 
   private def _remove(transaction: Boolean, xid: Option[Int]): Option[QItem] = {
-    discardExpired(config.maxExpireSweep)
+    discardExpired()
     if (queue.isEmpty) return None
 
     val now = Time.now
@@ -462,12 +462,13 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     Some(item)
   }
 
-  final def discardExpired(max: Int): Int = {
+  final def discardExpired(limit: Boolean = false): Int = {
     val itemsToRemove = synchronized {
       var continue = true
       val toRemove = new mutable.ListBuffer[QItem]
+      val hasLimit = limit && config.maxExpireSweep > 0
       while (continue) {
-        if (queue.isEmpty || journal.isReplaying) {
+        if (queue.isEmpty || (hasLimit && toRemove.size >= config.maxExpireSweep) || journal.isReplaying) {
           continue = false
         } else {
           val realExpiry = adjustExpiry(queue.front.addTime, queue.front.expiry)
