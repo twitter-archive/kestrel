@@ -34,11 +34,11 @@ daemon_args="--name $APP_NAME --pidfile $daemon_pidfile --core --chdir /"
 daemon_start_args="--stdout=/var/log/$APP_NAME/stdout --stderr=/var/log/$APP_NAME/error"
 
 
-function running() {
+running() {
   $DAEMON $daemon_args --running
 }
 
-function find_java() {
+find_java() {
   if [ ! -z "$JAVA_HOME" ]; then
     return
   fi
