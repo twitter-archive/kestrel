@@ -180,16 +180,14 @@ class QueueCollection(queueFolder: String, timer: Timer,
     }
   }
 
-  def flushExpired(name: String): Int = {
-    if (shuttingDown) {
-      0
-    } else {
-      writer(name) map { _.discardExpired() } getOrElse(0)
+  def flushExpired(name: String) {
+    if (!shuttingDown) {
+      writer(name) foreach { _.discardExpired() }
     }
   }
 
-  def flushAllExpired(): Int = {
-    queueNames.foldLeft(0) { (sum, qName) => sum + flushExpired(qName) }
+  def flushAllExpired() {
+    queueNames foreach { queueName => flushExpired(queueName) }
   }
 
   def stats(key: String): Array[(String, String)] = reader(key) match {

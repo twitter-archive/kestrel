@@ -107,10 +107,11 @@ class MemcacheHandler(
         handler.delete(request.line(1))
         Future(new MemcacheResponse("END"))
       case "flush_expired" =>
-        Future(new MemcacheResponse(handler.flushExpired(request.line(1)).toString))
+        handler.flushExpired(request.line(1))
+        Future(new MemcacheResponse("END"))
       case "flush_all_expired" =>
-        val flushed = queueCollection.flushAllExpired()
-        Future(new MemcacheResponse(flushed.toString))
+        queueCollection.flushAllExpired()
+        Future(new MemcacheResponse("END"))
       case "version" =>
         Future(version())
       case "quit" =>

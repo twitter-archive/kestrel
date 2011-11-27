@@ -153,10 +153,7 @@ class Kestrel(defaultQueueBuilder: QueueBuilder, queueBuilders: Seq[QueueBuilder
       log.info("Starting up background expiration task.")
       new PeriodicBackgroundProcess("background-expiration", expirationTimerFrequency.get) {
         def periodic() {
-          val expired = Kestrel.this.queueCollection.flushAllExpired()
-          if (expired > 0) {
-            log.info("Expired %d item(s) from queues automatically.", expired)
-          }
+          Kestrel.this.queueCollection.flushAllExpired()
         }
       }.start()
     }

@@ -385,13 +385,13 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
           time.advance(5.seconds)
 
           client.out.write("flush_expired q1\n".getBytes)
-          client.readline mustEqual "1"
+          client.readline mustEqual "END"
           client.stats()("queue_q1_items") mustEqual "0"
           client.stats()("queue_q2_items") mustEqual "2"
           client.stats()("queue_q3_items") mustEqual "1"
 
           client.out.write("flush_all_expired\n".getBytes)
-          client.readline mustEqual "3"
+          client.readline mustEqual "END"
           client.stats()("queue_q1_items") mustEqual "0"
           client.stats()("queue_q2_items") mustEqual "0"
           client.stats()("queue_q3_items") mustEqual "0"
