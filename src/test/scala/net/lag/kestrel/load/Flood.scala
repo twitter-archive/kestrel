@@ -76,12 +76,13 @@ object Flood extends LoadTesting {
       }
       if (rollup == 1 || client.monitorHasMultipleResponses) {
         val got = expecting(socket)
-        leftInCycle -= 1
         if (got == expectNoData) {
           // nothing yet. poop. :(
           misses += 1
+          leftInCycle = 0
         } else {
           count += 1
+          leftInCycle -= 1
           if (leftInCycle == 0 && rollup > 1) {
             if (expecting(socket) != expectNoData) {
               throw new Exception("Unexpected monitor response at " + count + "!")
