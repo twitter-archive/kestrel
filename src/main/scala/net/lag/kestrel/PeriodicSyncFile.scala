@@ -1,10 +1,11 @@
 package net.lag.kestrel
 
-import java.nio.ByteBuffer
-import java.util.concurrent.{ConcurrentLinkedQueue, ScheduledExecutorService, ScheduledFuture, TimeUnit}
 import com.twitter.conversions.time._
+import com.twitter.ostrich.stats.Stats
 import com.twitter.util._
 import java.io.{IOException, FileOutputStream, File}
+import java.nio.ByteBuffer
+import java.util.concurrent.{ConcurrentLinkedQueue, ScheduledExecutorService, ScheduledFuture, TimeUnit}
 
 abstract class PeriodicSyncTask(val scheduler: ScheduledExecutorService, initialDelay: Duration, period: Duration)
 extends Runnable {
@@ -39,7 +40,7 @@ class PeriodicSyncFile(file: File, scheduler: ScheduledExecutorService, period: 
   private final val DONE = Future(())
 
   val writer = new FileOutputStream(file, true).getChannel
-  val promises = new ConcurrentLinkedQueue[Promise[Unit]]()
+  val promises = new ConcurrentLinkedQueue[Tuple2[Promise[Unit], Time]]()
   val periodicSyncTask = new PeriodicSyncTask(scheduler, period, period) {
     override def run() {
       if (!closed && !promises.isEmpty) fsync()
@@ -52,18 +53,23 @@ class PeriodicSyncFile(file: File, scheduler: ScheduledExecutorService, period: 
     synchronized {
       // race: we could underestimate the number of completed writes. that's okay.
       val completed = promises.size
+      val fsyncStart = Time.now
       try {
         writer.force(false)
       } catch {
         case e: IOException =>
           for (i <- 0 until completed) {
-            promises.poll().setException(e)
+            promises.poll()._1.setException(e)
           }
         return;
       }
 
       for (i <- 0 until completed) {
-        promises.poll().setValue(())
+        val (promise, time) = promises.poll()
+        promise.setValue(())
+        val delaySinceWrite = fsyncStart - time
+        val durationBehind = if (delaySinceWrite > period) delaySinceWrite - period else 0.seconds
+        Stats.addMetric("fsync_delay", durationBehind.inMicroseconds.toInt)
       }
 
       periodicSyncTask.stopIf { promises.isEmpty }
@@ -87,7 +93,7 @@ class PeriodicSyncFile(file: File, scheduler: ScheduledExecutorService, period: 
       DONE
     } else {
       val promise = new Promise[Unit]()
-      promises.add(promise)
+      promises.add((promise, Time.now))
       periodicSyncTask.start
       promise
     }
