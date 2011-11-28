@@ -18,7 +18,9 @@
 package net.lag.kestrel
 
 import com.twitter.conversions.time._
+import com.twitter.util.Duration
 import java.util.concurrent._
+import java.util.concurrent.atomic.AtomicInteger
 import org.specs.Specification
 import org.specs.matcher.Matcher
 
@@ -28,7 +30,12 @@ class PeriodicSyncFileSpec extends Specification
 {
   "PeriodicSyncTask" should {
     val scheduler = new ScheduledThreadPoolExecutor(4)
-    val syncTask = new PeriodicSyncTask(scheduler, 0.seconds, 20.milliseconds)
+    val invocations = new AtomicInteger(0)
+    val syncTask = new PeriodicSyncTask(scheduler, 0.milliseconds, 20.milliseconds) {
+      override def run {
+        invocations.incrementAndGet
+      }
+    }
 
     doAfter {
       scheduler.shutdown
@@ -36,44 +43,45 @@ class PeriodicSyncFileSpec extends Specification
     }
 
     "only start once" in {
-      var invocations = new ConcurrentHashMap[String, Int]()
-      syncTask.start { invocations.put("#1", invocations.get("#1") + 1) }
-      syncTask.start { invocations.put("#1", invocations.get("#2") + 1) }
-      Thread.sleep(100)
-      syncTask.stop
-      invocations.size mustEqual 1
+      val (_, duration) = Duration.inMilliseconds {
+        syncTask.start
+        syncTask.start
+        Thread.sleep(100)
+        syncTask.stop
+      }
+
+      val expectedInvocations = duration.inMilliseconds / 20
+      (invocations.get <= expectedInvocations * 3 / 2) mustBe true
     }
 
     "stop" in {
-      @volatile var invocations = 0
-      syncTask.start { invocations += 1 }
+      syncTask.start
       Thread.sleep(100)
       syncTask.stop
-      val invocationsPostTermination = invocations
+      val invocationsPostTermination = invocations.get
       Thread.sleep(100)
-      invocations mustEqual invocationsPostTermination
+      invocations.get mustEqual invocationsPostTermination
     }
 
     "stop given a condition" in {
-      @volatile var invocations = 0
-         syncTask.start { invocations += 1 }
+      syncTask.start
       Thread.sleep(100)
 
-      val invocationsPreStop = invocations
+      val invocationsPreStop = invocations.get
       syncTask.stopIf { false }
       Thread.sleep(100)
 
-      val invocationsPostIgnoredStop = invocations
+      val invocationsPostIgnoredStop = invocations.get
       syncTask.stopIf { true }
       Thread.sleep(100)
 
-      val invocationsPostStop = invocations
+      val invocationsPostStop = invocations.get
       Thread.sleep(100)
 
       (invocationsPreStop > 0) mustBe true                            // did something
       (invocationsPostIgnoredStop > invocationsPreStop) mustBe true   // kept going
       (invocationsPostStop >= invocationsPostIgnoredStop) mustBe true // maybe did more
-      invocations mustEqual invocationsPostStop                       // stopped
+      invocations.get mustEqual invocationsPostStop                   // stopped
     }
   }
 }

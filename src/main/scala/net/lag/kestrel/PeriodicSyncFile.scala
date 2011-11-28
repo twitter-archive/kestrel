@@ -6,14 +6,14 @@ import com.twitter.conversions.time._
 import com.twitter.util._
 import java.io.{IOException, FileOutputStream, File}
 
-class PeriodicSyncTask(val scheduler: ScheduledExecutorService, initialDelay: Duration, period: Duration) {
-  @volatile var scheduledFsync: Option[ScheduledFuture[_]] = None
+abstract class PeriodicSyncTask(val scheduler: ScheduledExecutorService, initialDelay: Duration, period: Duration)
+extends Runnable {
+  @volatile private[this] var scheduledFsync: Option[ScheduledFuture[_]] = None
 
-  def start(f: => Unit): Unit = synchronized {
+  def start: Unit = synchronized {
     if (scheduledFsync.isEmpty && period > 0.seconds) {
-      val handle = scheduler.scheduleWithFixedDelay(new Runnable {
-        override def run = f
-      }, initialDelay.inMilliseconds, period.inMilliseconds, TimeUnit.MILLISECONDS)
+      val handle = scheduler.scheduleWithFixedDelay(this, initialDelay.inMilliseconds, period.inMilliseconds,
+                                                    TimeUnit.MILLISECONDS)
       scheduledFsync = Some(handle)
     }
   }
@@ -40,7 +40,11 @@ class PeriodicSyncFile(file: File, scheduler: ScheduledExecutorService, period: 
 
   val writer = new FileOutputStream(file, true).getChannel
   val promises = new ConcurrentLinkedQueue[Promise[Unit]]()
-  val periodicSyncTask = new PeriodicSyncTask(scheduler, period, period)
+  val periodicSyncTask = new PeriodicSyncTask(scheduler, period, period) {
+    override def run() {
+      if (!closed && !promises.isEmpty) fsync()
+    }
+  }
 
   @volatile var closed = false
 
@@ -84,9 +88,7 @@ class PeriodicSyncFile(file: File, scheduler: ScheduledExecutorService, period: 
     } else {
       val promise = new Promise[Unit]()
       promises.add(promise)
-      periodicSyncTask.start {
-        if (!closed && !promises.isEmpty) fsync()
-      }
+      periodicSyncTask.start
       promise
     }
   }
