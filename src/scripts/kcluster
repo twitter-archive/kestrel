@@ -18,20 +18,28 @@ def fetch_stats(host, port, data)
   while !done && line = sock.gets.chomp
     if (line == 'END') then
       done = true
-    elsif line =~ /STAT queue_(\w+) (\d+)/
+    elsif line =~ /STAT queue_([\w+]+) (\d+)/
       key = $1
       value = $2.to_i
-      if key =~ /(\w+)_total_items/
-        data[:total_items][$1] += value
-      elsif key =~ /(\w+)_items/
-        data[:items][$1] += value
-      elsif key =~ /(\w+)_mem_bytes/
-        data[:mem_bytes][$1] += value
-      elsif key =~ /(\w+)_bytes/
-        data[:bytes][$1] += value
-      elsif key =~ /(\w+)_age/
-        data[:min_age][$1] = value if value < data[:min_age][$1]
-        data[:max_age][$1] = value if value > data[:max_age][$1]
+      (stat, queue_name) = case key
+        when /([\w+]+)_total_items/   then [:total_items, $1]
+        when /([\w+]+)_expired_items/ then [:expired_items, $1]
+        when /([\w+]+)_mem_items/     then [:mem_items, $1]
+        when /([\w+]+)_items/         then [:items, $1]
+        when /([\w+]+)_mem_bytes/     then [:mem_bytes, $1]
+        when /([\w+]+)_bytes/         then [:bytes, $1]
+        when /([\w+]+)_age/           then [:age, $1]
+      end
+
+      if (queue_name)
+        queue_name = queue_name.split('+', 2).first if $options[:rollup_fanouts]
+
+        if (stat == :age)
+          data[:min_age][queue_name] = value if value < data[:min_age][queue_name]
+          data[:max_age][queue_name] = value if value > data[:max_age][queue_name]
+        else
+          data[stat][queue_name] += value
+        end
       end
     end
   end
@@ -65,7 +73,8 @@ def report(data, key)
   format = "%14s %s\n"
   printf(format, key, "queue")
   printf(format, "============", "====================")
-  data[key].each { |queue, value| printf("%14d %s\n", value, queue) }
+  stats = data[key] || {}
+  stats.each { |queue, value| printf("%14d %s\n", value, queue) }
 end
 
 def report_all(data, keys)
@@ -131,8 +140,8 @@ def find_stale(rounds)
   printf("%11s %11s %s\n", "total_items", "items", "queue")
   printf("%11s %11s %s\n", "-----------", "-----------", "--------------------")
   stale.each do |queue_name|
-    items = sorted[:items][stale]
-    total_items = sorted[:total_items][stale]
+    items = last[:items][queue_name]
+    total_items = last[:total_items][queue_name]
     printf("%11d %11d %s\n", total_items, items, queue_name)
   end
 end
@@ -149,6 +158,9 @@ parser = OptionParser.new do |opts|
   end
   opts.on("-p", "--port=N", "use port (default: #{$options[:port]})") do |port|
     $options[:port] = port.to_i
+  end
+  opts.on("-r", "--rollup-fanouts", "roll up stats for fanout queues into a single count") do
+    $options[:rollup_fanouts] = true
   end
 
   opts.separator ""
