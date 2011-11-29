@@ -148,9 +148,10 @@ class KestrelHandler(
   final def monitorUntil(key: String, timeLimit: Option[Time], maxItems: Int, opening: Boolean)(f: Option[QueueItem] => Unit) {
     log.debug("monitor -> q=%s t=%s max=%d open=%s", key, timeLimit, maxItems, opening)
     if (maxItems == 0 || (timeLimit.isDefined && timeLimit.get <= Time.now) || pendingReads.size(key) >= maxOpenReads) {
+      log.debug("monitor <- max=%s timeLimit=%s opened=%s", maxItems, timeLimit, pendingReads.size(key))
       f(None)
     } else {
-      queues.remove(key, timeLimit, opening, false).onSuccess {
+      queues.remove(key, timeLimit, opening, false) onSuccess {
         case None =>
           f(None)
         case x @ Some(item) =>
