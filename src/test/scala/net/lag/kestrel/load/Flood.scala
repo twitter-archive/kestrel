@@ -226,6 +226,7 @@ object Flood extends LoadTesting {
         override def run = {
           val socket = tryHard { SocketChannel.open(new InetSocketAddress(hostname, port)) }
           val n = get(socket, queueName, totalItems, data)
+          socket.close()
           misses.addAndGet(n)
         }
       }
