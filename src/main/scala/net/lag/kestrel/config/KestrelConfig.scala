@@ -224,10 +224,15 @@ trait KestrelConfig extends ServerConfig[Kestrel] {
    */
   var maxOpenTransactions: Int = 1
 
+  /**
+   * For debugging: Every second, log relevant stats about these named queues.
+   */
+  var debugLogQueues: List[String] = Nil
+
   def apply(runtime: RuntimeEnvironment) = {
     new Kestrel(
       default, queues, listenAddress, memcacheListenPort, textListenPort, thriftListenPort,
-      queuePath, expirationTimerFrequency, clientTimeout, maxOpenTransactions
+      queuePath, expirationTimerFrequency, clientTimeout, maxOpenTransactions, debugLogQueues
     )
   }
 }

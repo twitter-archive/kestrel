@@ -50,7 +50,7 @@ class Kestrel(defaultQueueBuilder: QueueBuilder, queueBuilders: Seq[QueueBuilder
               listenAddress: String, memcacheListenPort: Option[Int], textListenPort: Option[Int],
               thriftListenPort: Option[Int], queuePath: String,
               expirationTimerFrequency: Option[Duration], clientTimeout: Option[Duration],
-              maxOpenTransactions: Int)
+              maxOpenTransactions: Int, debugLogQueues: List[String] = Nil)
       extends Service {
   private val log = Logger.get(getClass.getName)
 
@@ -154,6 +154,16 @@ class Kestrel(defaultQueueBuilder: QueueBuilder, queueBuilders: Seq[QueueBuilder
       new PeriodicBackgroundProcess("background-expiration", expirationTimerFrequency.get) {
         def periodic() {
           Kestrel.this.queueCollection.flushAllExpired()
+        }
+      }.start()
+    }
+
+    if (!debugLogQueues.isEmpty) {
+      new PeriodicBackgroundProcess("debug-logger", 1.second) {
+        def periodic() {
+          debugLogQueues.foreach { queueName =>
+            Kestrel.this.queueCollection.debugLog(queueName)
+          }
         }
       }.start()
     }

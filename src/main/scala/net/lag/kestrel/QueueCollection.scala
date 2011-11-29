@@ -209,6 +209,15 @@ class QueueCollection(queueFolder: String, timer: Timer,
     }
   }
 
+  def debugLog(queueName: String) {
+    reader(queueName) foreach { reader =>
+      log.info("%s: items=%d bytes=%d mem_items=%d mem_bytes=%d age=%s waiters=%d journal_size=%d",
+        queueName,
+        reader.items, reader.bytes, reader.memoryItems, reader.memoryBytes, reader.age,
+        reader.waiterCount, reader.writer.journalBytes)
+    }
+  }
+
   /**
    * Shutdown this queue collection. Any future queue requests will fail.
    */
