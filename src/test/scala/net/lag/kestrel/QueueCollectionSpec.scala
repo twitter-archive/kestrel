@@ -44,7 +44,7 @@ class QueueCollectionSpec extends Specification
 
     doAfter {
       if (qc ne null) {
-        qc.shutdown
+        qc.shutdown()
       }
     }
 
