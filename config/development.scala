@@ -10,7 +10,7 @@ new KestrelConfig {
   textListenPort = 2222
   thriftListenPort = 2229
 
-  queuePath = "/var/spool/kestrel"
+  queuePath = System.getenv("HOME") + "/queues"
 
   clientTimeout = 30.seconds
 
@@ -61,11 +61,14 @@ new KestrelConfig {
     syncJournal = 10.milliseconds
   }
 
+  debugLogQueues = List()
+
   loggers = new LoggerConfig {
-    level = Level.DEBUG
+    level = Level.INFO
     handlers = new FileHandlerConfig {
       filename = "/var/log/kestrel/kestrel.log"
       roll = Policy.Never
     }
   }
 }
+

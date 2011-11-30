@@ -161,7 +161,7 @@ class QueueCollection(queueFolder: String, timer: Timer,
   }
 
   def flush(key: String) {
-    reader(key) map { q => q.flush() }
+    reader(key) map { q => q.flush()() }
   }
 
   def delete(name: String): Unit = synchronized {

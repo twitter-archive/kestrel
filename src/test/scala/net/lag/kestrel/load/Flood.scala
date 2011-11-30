@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-package net.lag.kestrel.load
+package net.lag.kestrel
+package load
 
 import java.net._
 import java.nio._
@@ -115,6 +116,7 @@ object Flood extends LoadTesting {
   var blockingReads = false
   var client: Client = MemcacheClient
   var flushFirst = true
+  var monitor = false
 
   def usage() {
     Console.println("usage: flood [options]")
@@ -143,6 +145,8 @@ object Flood extends LoadTesting {
     Console.println("        use thrift RPC")
     Console.println("    -F")
     Console.println("        don't flush queue(s) before the test")
+    Console.println("    -M")
+    Console.println("        monitor queue stats during the test")
   }
 
   def parseArgs(args: List[String]): Unit = args match {
@@ -183,6 +187,9 @@ object Flood extends LoadTesting {
       parseArgs(xs)
     case "-F" :: xs =>
       flushFirst = false
+      parseArgs(xs)
+    case "-M" :: xs =>
+      monitor = true
       parseArgs(xs)
     case _ =>
       usage()
@@ -233,6 +240,8 @@ object Flood extends LoadTesting {
 
       threadList = producerThread :: consumerThread :: threadList
     }
+
+    if (monitor) monitorQueue(hostname, queueName)
 
     val startTime = System.currentTimeMillis
     threadList.foreach { _.start() }
