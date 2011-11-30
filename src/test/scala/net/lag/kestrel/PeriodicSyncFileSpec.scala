@@ -32,22 +32,22 @@ class PeriodicSyncFileSpec extends Specification
     val scheduler = new ScheduledThreadPoolExecutor(4)
     val invocations = new AtomicInteger(0)
     val syncTask = new PeriodicSyncTask(scheduler, 0.milliseconds, 20.milliseconds) {
-      override def run {
+      override def run() {
         invocations.incrementAndGet
       }
     }
 
     doAfter {
-      scheduler.shutdown
+      scheduler.shutdown()
       scheduler.awaitTermination(5, TimeUnit.SECONDS)
     }
 
     "only start once" in {
       val (_, duration) = Duration.inMilliseconds {
-        syncTask.start
-        syncTask.start
+        syncTask.start()
+        syncTask.start()
         Thread.sleep(100)
-        syncTask.stop
+        syncTask.stop()
       }
 
       val expectedInvocations = duration.inMilliseconds / 20
@@ -55,16 +55,16 @@ class PeriodicSyncFileSpec extends Specification
     }
 
     "stop" in {
-      syncTask.start
+      syncTask.start()
       Thread.sleep(100)
-      syncTask.stop
+      syncTask.stop()
       val invocationsPostTermination = invocations.get
       Thread.sleep(100)
       invocations.get mustEqual invocationsPostTermination
     }
 
     "stop given a condition" in {
-      syncTask.start
+      syncTask.start()
       Thread.sleep(100)
 
       val invocationsPreStop = invocations.get

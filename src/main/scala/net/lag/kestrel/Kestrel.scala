@@ -171,7 +171,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
     executor.awaitTermination(5, TimeUnit.SECONDS)
     timer.stop()
     timer = null
-    journalSyncScheduler.shutdown
+    journalSyncScheduler.shutdown()
     journalSyncScheduler.awaitTermination(5, TimeUnit.SECONDS)
     journalSyncScheduler = null
     log.info("Goodbye.")

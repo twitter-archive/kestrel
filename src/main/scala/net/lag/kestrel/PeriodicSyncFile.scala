@@ -11,21 +11,27 @@ abstract class PeriodicSyncTask(val scheduler: ScheduledExecutorService, initial
 extends Runnable {
   @volatile private[this] var scheduledFsync: Option[ScheduledFuture[_]] = None
 
-  def start: Unit = synchronized {
-    if (scheduledFsync.isEmpty && period > 0.seconds) {
-      val handle = scheduler.scheduleWithFixedDelay(this, initialDelay.inMilliseconds, period.inMilliseconds,
-                                                    TimeUnit.MILLISECONDS)
-      scheduledFsync = Some(handle)
+  def start() {
+    synchronized {
+      if (scheduledFsync.isEmpty && period > 0.seconds) {
+        val handle = scheduler.scheduleWithFixedDelay(this, initialDelay.inMilliseconds, period.inMilliseconds,
+                                                      TimeUnit.MILLISECONDS)
+        scheduledFsync = Some(handle)
+      }
     }
   }
 
-  def stop: Unit = synchronized { _stop }
-
-  def stopIf(f: => Boolean): Unit = synchronized {
-    if (f) _stop
+  def stop() {
+    synchronized { _stop }
   }
 
-  private[this] def _stop = {
+  def stopIf(f: => Boolean) {
+    synchronized {
+      if (f) _stop
+    }
+  }
+
+  private[this] def _stop {
     scheduledFsync.foreach { _.cancel(false) }
     scheduledFsync = None
   }
@@ -39,8 +45,10 @@ class PeriodicSyncFile(file: File, scheduler: ScheduledExecutorService, period: 
   // pre-completed future for writers who are behaving synchronously.
   private final val DONE = Future(())
 
+  case class TimestampedPromise(val promise: Promise[Unit], val time: Time)
+
   val writer = new FileOutputStream(file, true).getChannel
-  val promises = new ConcurrentLinkedQueue[Tuple2[Promise[Unit], Time]]()
+  val promises = new ConcurrentLinkedQueue[TimestampedPromise]()
   val periodicSyncTask = new PeriodicSyncTask(scheduler, period, period) {
     override def run() {
       if (!closed && !promises.isEmpty) fsync()
@@ -59,17 +67,17 @@ class PeriodicSyncFile(file: File, scheduler: ScheduledExecutorService, period: 
       } catch {
         case e: IOException =>
           for (i <- 0 until completed) {
-            promises.poll()._1.setException(e)
+            promises.poll().promise.setException(e)
           }
         return;
       }
 
       for (i <- 0 until completed) {
-        val (promise, time) = promises.poll()
-        promise.setValue(())
-        val delaySinceWrite = fsyncStart - time
+        val timestampedPromise = promises.poll()
+        timestampedPromise.promise.setValue(())
+        val delaySinceWrite = fsyncStart - timestampedPromise.time
         val durationBehind = if (delaySinceWrite > period) delaySinceWrite - period else 0.seconds
-        Stats.addMetric("fsync_delay", durationBehind.inMicroseconds.toInt)
+        Stats.addMetric("fsync_delay_usec", durationBehind.inMicroseconds.toInt)
       }
 
       periodicSyncTask.stopIf { promises.isEmpty }
@@ -93,8 +101,8 @@ class PeriodicSyncFile(file: File, scheduler: ScheduledExecutorService, period: 
       DONE
     } else {
       val promise = new Promise[Unit]()
-      promises.add((promise, Time.now))
-      periodicSyncTask.start
+      promises.add(TimestampedPromise(promise, Time.now))
+      periodicSyncTask.start()
       promise
     }
   }
@@ -105,7 +113,7 @@ class PeriodicSyncFile(file: File, scheduler: ScheduledExecutorService, period: 
    */
   def close() {
     closed = true
-    periodicSyncTask.stop
+    periodicSyncTask.stop()
     fsync()
     writer.close()
   }
