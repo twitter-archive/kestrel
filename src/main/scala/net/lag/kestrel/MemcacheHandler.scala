@@ -85,7 +85,7 @@ extends NettyHandler[MemcacheRequest](channelGroup, queueCollection, maxOpenTran
         dumpStats(request.line.drop(1))
       case "delete" =>
         delete(request.line(1))
-        channel.write(new MemcacheResponse("END"))
+        channel.write(new MemcacheResponse("DELETED"))
       case "flush_expired" =>
         channel.write(new MemcacheResponse(flushExpired(request.line(1)).toString))
       case "flush_all_expired" =>
