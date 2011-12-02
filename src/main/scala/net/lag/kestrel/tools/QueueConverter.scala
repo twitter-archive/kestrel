@@ -35,9 +35,9 @@ object QueueConverter {
 
   def usage() {
     println()
-    println("usage: qconverter.sh <old_path> <new_path>")
+    println("usage: qconverter.sh <old_folder> <new_folder>")
     println("    convert old (2.x) kestrel journal file(s) into the 3.0 format.")
-    println("    journals are read from <old_path> and written to <new_path>.")
+    println("    journals are read from <old_folder> and written to <new_folder>.")
     println()
     println("options:")
     println("    -q name         only convert one queue")
@@ -75,17 +75,7 @@ object QueueConverter {
 
     def addItem(item: oldjournal.QItem): String = {
       val hash = md5.digest(item.data).hexlify
-      val insert = if (allowDupes) {
-        true
-      } else {
-        if (seenIds contains hash) {
-          false
-        } else {
-          true
-        }
-      }
-
-      if (insert) {
+      if (allowDupes || !(seenIds contains hash)) {
         val qitem = newJournal.put(item.data, item.addTime, item.expiry).map {
           case (qitem, sync) => qitem
         }.get()
@@ -160,13 +150,13 @@ object QueueConverter {
       System.exit(0)
     }
     if (!oldFolder.exists || !oldFolder.isDirectory() || !oldFolder.canRead()) {
-      println("The old folder (%s) must be a readable folder.".format(oldFolder))
+      println("The old folder (%s) must be readable.".format(oldFolder))
       System.exit(1)
     }
     if (!newFolder.exists || !newFolder.isDirectory() || !newFolder.canWrite()) {
       newFolder.mkdirs()
       if (!newFolder.exists || !newFolder.isDirectory() || !newFolder.canWrite()) {
-        println("The new folder (%s) must be a writable folder.".format(newFolder))
+        println("The new folder (%s) must be writable.".format(newFolder))
         System.exit(1)
       }
     }
