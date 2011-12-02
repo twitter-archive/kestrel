@@ -1,0 +1,170 @@
+/*
+ * Copyright 2011 Twitter, Inc.
+ * Copyright 2011 Robey Pointer <robeypointer@gmail.com>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License. You may obtain
+ * a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package net.lag.kestrel
+package tools
+
+import com.twitter.conversions.storage._
+import com.twitter.conversions.string._
+import com.twitter.libkestrel
+import com.twitter.util.Duration
+import java.io.{File, FileNotFoundException, IOException}
+import java.security.MessageDigest
+import net.lag.kestrel.oldjournal
+import scala.collection.mutable
+
+object QueueConverter {
+  var oldFolder: File = null
+  var newFolder: File = null
+  var queueName: Option[String] = None
+  var allowDupes = false
+
+  def usage() {
+    println()
+    println("usage: qconverter.sh <old_path> <new_path>")
+    println("    convert old (2.x) kestrel journal file(s) into the 3.0 format.")
+    println("    journals are read from <old_path> and written to <new_path>.")
+    println()
+    println("options:")
+    println("    -q name         only convert one queue")
+    println("    -D              allow duplicate queue items")
+    println("        (by default, queue items are unique-ified)")
+    println()
+  }
+
+  def parseArgs(args: List[String]): Unit = args match {
+    case Nil =>
+    case "--help" :: xs =>
+      usage()
+      System.exit(0)
+    case "-q" :: name :: xs =>
+      queueName = Some(name)
+      parseArgs(xs)
+    case "-D" :: xs =>
+      allowDupes = true
+      parseArgs(xs)
+    case a :: b :: xs =>
+      oldFolder = new File(a)
+      newFolder = new File(b)
+      parseArgs(xs)
+  }
+
+  def convertJournal(name: String) {
+    val md5 = MessageDigest.getInstance("MD5")
+    val seen = new mutable.HashSet[String]
+
+    val oldJournals = oldjournal.Journal.journalsForQueue(oldFolder, name).map { filename =>
+      new File(oldFolder, filename).getCanonicalPath
+    }
+    val packer = new oldjournal.JournalPacker(oldJournals)
+    val journalState = packer { (bytes1, bytes2) =>
+      print("\rQueue %s: read %-6s    ".format(name, bytes2.bytes.toHuman))
+      Console.flush()
+    }
+
+    val newJournal = new libkestrel.Journal(newFolder, name, 16.megabytes, null, Duration.MaxValue,
+      None)
+    var lastUpdate = 0L
+    var dupes = 0
+    (journalState.openTransactions ++ journalState.items).foreach { item =>
+      val insert = if (allowDupes) {
+        true
+      } else {
+        val hash = md5.digest(item.data).hexlify
+        if (seen contains hash) {
+          false
+        } else {
+          seen += hash
+          true
+        }
+      }
+
+      if (insert) {
+        val qitem = newJournal.put(item.data, item.addTime, item.expiry).map {
+          case (qitem, sync) => qitem
+        }.get()
+
+        val size = newJournal.journalSize
+        if (size - lastUpdate > 1024 * 1024 || lastUpdate == 0L) {
+          print("\rQueue %s: write %-6s    ".format(name, size.bytes.toHuman))
+          Console.flush()
+          lastUpdate = size
+        }
+      } else {
+        dupes += 1
+      }
+    }
+    newJournal.close()
+    print("\r" + (" " * 40) + "\r")
+    println("Queue %s: %s (%d dupes discarded)".format(name, newJournal.journalSize.bytes.toHuman, dupes))
+  }
+
+  def main(args: Array[String]) {
+    parseArgs(args.toList)
+    if ((oldFolder eq null) || (newFolder eq null)) {
+      usage()
+      System.exit(0)
+    }
+    if (!oldFolder.exists || !oldFolder.isDirectory() || !oldFolder.canRead()) {
+      println("The old folder (%s) must be a readable folder.".format(oldFolder))
+      System.exit(1)
+    }
+    if (!newFolder.exists || !newFolder.isDirectory() || !newFolder.canWrite()) {
+      newFolder.mkdirs()
+      if (!newFolder.exists || !newFolder.isDirectory() || !newFolder.canWrite()) {
+        println("The new folder (%s) must be a writable folder.".format(newFolder))
+        System.exit(1)
+      }
+    }
+    if (oldFolder.getCanonicalPath() == newFolder.getCanonicalPath()) {
+      println("The old folder (%s) and new folder (%s) have the same canonical path.".format(
+        oldFolder, newFolder))
+      System.exit(1)
+    }
+
+    val rawQueues = oldjournal.Journal.getQueueNamesFromFolder(oldFolder)
+    val queues = rawQueues.filterNot { _ contains '+' }.toList.sorted
+    val fanoutQueues = (rawQueues -- queues).map { name =>
+      val segments = name.split("\\+", 2)
+      (segments(0), name)
+    }.toMap
+
+    println(queues)
+    println(fanoutQueues)
+    queues.foreach { q => convertJournal(q) }
+/*
+
+    println("Packing journals...")
+    val packer = new JournalPacker(filenames, newFilename)
+    val journalState = packer { (bytes1, bytes2) =>
+      print("\rPacking: %-6s %-6s".format(bytes1.bytes.toHuman, bytes2.bytes.toHuman))
+      Console.flush()
+    }
+
+    println("\rWriting new journal..." + (" " * 40))
+    Console.flush()
+
+    val out = new Journal(newFilename, Duration.MaxValue)
+    out.open()
+    out.dump(journalState.openTransactions, journalState.items)
+    out.close()
+
+    print("\r" + (" " * 40) + "\r")
+    println("Done. New journal size: %d".format(out.size))
+    */
+  }
+}
