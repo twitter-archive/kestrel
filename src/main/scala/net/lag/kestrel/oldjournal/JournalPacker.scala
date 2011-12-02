@@ -30,13 +30,12 @@ case class JournalState(openTransactions: Seq[QItem], items: Stream[QItem])
  * Pack one or more journal files into a single new file that only consists of the queue's current
  * contents, as of the end of the last journal file processed.
  */
-class JournalPacker(filenames: Seq[String], newFilename: String) {
+class JournalPacker(filenames: Seq[String]) {
   private val log = Logger.get
 
   val journals = filenames.map { filename => new Journal(filename, Duration.MaxValue) }
   val remover = journals.map { _.walk() }.iterator.flatten
   val adder = journals.map { _.walk() }.iterator.flatten
-  val writer = new FileOutputStream(newFilename, false).getChannel
 
   val adderStack = new mutable.ListBuffer[QItem]
   val openTransactions = new mutable.HashMap[Int, QItem]
