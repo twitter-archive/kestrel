@@ -71,6 +71,7 @@ object QueueConverter {
       None)
     var lastUpdate = 0L
     var dupes = 0
+    var items = 0
 
     def addItem(item: oldjournal.QItem): String = {
       val hash = md5.digest(item.data).hexlify
@@ -96,6 +97,7 @@ object QueueConverter {
           Console.flush()
           lastUpdate = size
         }
+        items += 1
       } else {
         dupes += 1
       }
@@ -140,7 +142,8 @@ object QueueConverter {
     }
 
     print("\r" + (" " * 70) + "\r")
-    println("Queue %s: %s (%d dupes discarded)".format(name, newJournal.journalSize.bytes.toHuman, dupes))
+    println("Queue %s:\n%6d items, %8s, %6d dupes discarded".format(
+      name, items, newJournal.journalSize.bytes.toHuman, dupes))
     fanouts.foreach { fanoutName =>
       val reader = newJournal.reader(fanoutName)
       println("    Reader %s: head=%s done=%s".format(
@@ -172,6 +175,7 @@ object QueueConverter {
         oldFolder, newFolder))
       System.exit(1)
     }
+    newFolder.listFiles().foreach { _.delete() }
 
     val rawQueues = oldjournal.Journal.getQueueNamesFromFolder(oldFolder)
     val queues = rawQueues.filterNot { _ contains '+' }.toList.sorted
@@ -182,8 +186,6 @@ object QueueConverter {
       fanoutQueues(segments(0)) = segments(1) :: oldList
     }
 
-    println(queues)
-    println(fanoutQueues)
     queues.foreach { q => convertQueue(q, fanoutQueues.getOrElse(q, Nil)) }
   }
 }
