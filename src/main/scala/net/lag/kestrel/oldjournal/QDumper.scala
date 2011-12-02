@@ -16,10 +16,11 @@
  */
 
 package net.lag.kestrel
-package tools
+package oldjournal
 
 import java.io.{FileNotFoundException, IOException}
 import scala.collection.mutable
+import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
 import com.twitter.util.{Duration, Time}
 import net.lag.kestrel.oldjournal._
@@ -48,7 +49,7 @@ class QueueDumper(filename: String, quiet: Boolean, dump: Boolean, dumpRaw: Bool
         dumpItem(item)
         offset += itemsize
         if (quiet && !dumpRaw && offset - lastDisplay > 1024 * 1024) {
-          print("\rReading journal: %-6s".format(Util.bytesToHuman(offset, 0)))
+          print("\rReading journal: %-6s".format(offset.bytes.toHuman))
           Console.flush()
           lastDisplay = offset
         }
