@@ -22,16 +22,16 @@ extends Runnable {
   }
 
   def stop() {
-    synchronized { _stop }
+    synchronized { _stop() }
   }
 
   def stopIf(f: => Boolean) {
     synchronized {
-      if (f) _stop
+      if (f) _stop()
     }
   }
 
-  private[this] def _stop {
+  private[this] def _stop() {
     scheduledFsync.foreach { _.cancel(false) }
     scheduledFsync = None
   }
