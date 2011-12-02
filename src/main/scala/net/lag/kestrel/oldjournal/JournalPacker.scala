@@ -30,13 +30,12 @@ case class JournalState(openTransactions: Seq[QItem], items: Stream[QItem])
  * Pack one or more journal files into a single new file that only consists of the queue's current
  * contents, as of the end of the last journal file processed.
  */
-class JournalPacker(filenames: Seq[String], newFilename: String) {
+class JournalPacker(filenames: Seq[String]) {
   private val log = Logger.get
 
   val journals = filenames.map { filename => new Journal(filename, Duration.MaxValue) }
   val remover = journals.map { _.walk() }.iterator.flatten
   val adder = journals.map { _.walk() }.iterator.flatten
-  val writer = new FileOutputStream(newFilename, false).getChannel
 
   val adderStack = new mutable.ListBuffer[QItem]
   val openTransactions = new mutable.HashMap[Int, QItem]
@@ -77,7 +76,7 @@ class JournalPacker(filenames: Seq[String], newFilename: String) {
       item match {
         case JournalItem.Add(qitem) =>
         case JournalItem.Remove =>
-          advanceAdder().get
+          advanceAdder()
         case JournalItem.RemoveTentative(xid) =>
           val xxid = if (xid == 0) {
             do {
@@ -87,13 +86,14 @@ class JournalPacker(filenames: Seq[String], newFilename: String) {
           } else {
             xid
           }
-          val qitem = advanceAdder().get
-          qitem.xid = xxid
-          openTransactions(xxid) = qitem
+          advanceAdder() foreach { qitem =>
+            qitem.xid = xxid
+            openTransactions(xxid) = qitem
+          }
         case JournalItem.SavedXid(xid) =>
           currentXid = xid
         case JournalItem.Unremove(xid) =>
-          adderStack prepend openTransactions.remove(xid).get
+          openTransactions.remove(xid) foreach { adderStack prepend _ }
         case JournalItem.ConfirmRemove(xid) =>
           openTransactions -= xid
       }
