@@ -33,7 +33,7 @@ object QPacker {
   def usage() {
     println()
     println("usage: qpack.sh <journal-files...>")
-    println("    pack one or more kestrel journal file into a single new one")
+    println("    pack one or more old (2.x) kestrel journal file(s) into a single new one")
     println()
     println("options:")
     println("    -f filename     new packed journal file")

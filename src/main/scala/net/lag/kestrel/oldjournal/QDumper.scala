@@ -160,7 +160,7 @@ object QDumper {
   def usage() {
     println()
     println("usage: qdump.sh <journal-files...>")
-    println("    describe the contents of a kestrel journal file")
+    println("    describe the contents of an old (2.x) kestrel journal file")
     println()
     println("options:")
     println("    -q      quiet: don't describe every line, just the summary")
