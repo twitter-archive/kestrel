@@ -76,7 +76,7 @@ class JournalPacker(filenames: Seq[String]) {
       item match {
         case JournalItem.Add(qitem) =>
         case JournalItem.Remove =>
-          advanceAdder().get
+          advanceAdder()
         case JournalItem.RemoveTentative(xid) =>
           val xxid = if (xid == 0) {
             do {
@@ -86,13 +86,14 @@ class JournalPacker(filenames: Seq[String]) {
           } else {
             xid
           }
-          val qitem = advanceAdder().get
-          qitem.xid = xxid
-          openTransactions(xxid) = qitem
+          advanceAdder() foreach { qitem =>
+            qitem.xid = xxid
+            openTransactions(xxid) = qitem
+          }
         case JournalItem.SavedXid(xid) =>
           currentXid = xid
         case JournalItem.Unremove(xid) =>
-          adderStack prepend openTransactions.remove(xid).get
+          openTransactions.remove(xid) foreach { adderStack prepend _ }
         case JournalItem.ConfirmRemove(xid) =>
           openTransactions -= xid
       }

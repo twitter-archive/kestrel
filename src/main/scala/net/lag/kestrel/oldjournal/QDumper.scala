@@ -111,14 +111,25 @@ class QueueDumper(filename: String, quiet: Boolean, dump: Boolean, dumpRaw: Bool
         } else {
           xid
         }
-        openTransactions(xxid) = queue.dequeue()
-        verbose("RSV %d\n", xxid)
+        if (queue.size > 0) {
+          openTransactions(xxid) = queue.dequeue()
+          verbose("RSV %d\n", xxid)
+        } else {
+          verbose("RSV %d INVALID\n", xxid)
+        }
       case JournalItem.SavedXid(xid) =>
         verbose("XID %d\n", xid)
         currentXid = xid
       case JournalItem.Unremove(xid) =>
-        openTransactions.remove(xid).get +=: queue
-        verbose("CAN %d\n", xid)
+        openTransactions.remove(xid) match {
+          case None => {
+            verbose("CAN %d INVALID\n", xid)
+          }
+          case Some(item) => {
+            verbose("CAN %d\n", xid)
+            item +=: queue
+          }
+        }
       case JournalItem.ConfirmRemove(xid) =>
         verbose("ACK %d\n", xid)
         openTransactions.remove(xid)
