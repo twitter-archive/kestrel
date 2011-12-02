@@ -185,25 +185,5 @@ object QueueConverter {
     println(queues)
     println(fanoutQueues)
     queues.foreach { q => convertQueue(q, fanoutQueues.getOrElse(q, Nil)) }
-/*
-
-    println("Packing journals...")
-    val packer = new JournalPacker(filenames, newFilename)
-    val journalState = packer { (bytes1, bytes2) =>
-      print("\rPacking: %-6s %-6s".format(bytes1.bytes.toHuman, bytes2.bytes.toHuman))
-      Console.flush()
-    }
-
-    println("\rWriting new journal..." + (" " * 40))
-    Console.flush()
-
-    val out = new Journal(newFilename, Duration.MaxValue)
-    out.open()
-    out.dump(journalState.openTransactions, journalState.items)
-    out.close()
-
-    print("\r" + (" " * 40) + "\r")
-    println("Done. New journal size: %d".format(out.size))
-    */
   }
 }
