@@ -18,6 +18,7 @@
 package net.lag.kestrel
 package tools
 
+import com.twitter.util.Duration
 import java.io.{FileNotFoundException, IOException}
 import net.lag.kestrel.oldjournal._
 import scala.collection.mutable
@@ -63,15 +64,20 @@ object QPacker {
 
     println("Packing journals...")
     val packer = new JournalPacker(filenames, newFilename)
-    val journal = packer { (bytes1, bytes2) =>
-      if (bytes1 == 0 && bytes2 == 0) {
-        println("\rWriting new journal..." + (" " * 40))
-      } else {
-        print("\rPacking: %-6s %-6s".format(Util.bytesToHuman(bytes1, 0), Util.bytesToHuman(bytes2, 0)))
-      }
+    val journalState = packer { (bytes1, bytes2) =>
+      print("\rPacking: %-6s %-6s".format(Util.bytesToHuman(bytes1, 0), Util.bytesToHuman(bytes2, 0)))
       Console.flush()
     }
-    println("\r" + (" " * 40))
-    println("Done. New journal size: %d".format(journal.size))
+
+    println("\rWriting new journal..." + (" " * 40))
+    Console.flush()
+
+    val out = new Journal(newFilename, Duration.MaxValue)
+    out.open()
+    out.dump(journalState.openTransactions, journalState.items)
+    out.close()
+
+    print("\r" + (" " * 40) + "\r")
+    println("Done. New journal size: %d".format(out.size))
   }
 }

@@ -24,6 +24,8 @@ import scala.collection.mutable
 import com.twitter.logging.Logger
 import com.twitter.util.Duration
 
+case class JournalState(openTransactions: Seq[QItem], items: Stream[QItem])
+
 /**
  * Pack one or more journal files into a single new file that only consists of the queue's current
  * contents, as of the end of the last journal file processed.
@@ -69,7 +71,7 @@ class JournalPacker(filenames: Seq[String], newFilename: String) {
     }
   }
 
-  def apply(statusCallback: (Long, Long) => Unit) = {
+  def apply(statusCallback: (Long, Long) => Unit): JournalState = {
     this.statusCallback = statusCallback
     for ((item, itemsize) <- remover) {
       item match {
@@ -102,20 +104,12 @@ class JournalPacker(filenames: Seq[String], newFilename: String) {
       }
     }
 
-    // now write the new journal.
-    statusCallback(0, 0)
     def next(): Stream[QItem] = {
       advanceAdder() match {
         case Some(x) => new Stream.Cons(x, next())
         case None => Stream.Empty
       }
     }
-    val remaining = next()
-
-    val out = new Journal(newFilename, Duration.MaxValue)
-    out.open()
-    out.dump(openTransactions.values.toList, remaining)
-    out.close()
-    out
+    JournalState(openTransactions.values.toList, next())
   }
 }
