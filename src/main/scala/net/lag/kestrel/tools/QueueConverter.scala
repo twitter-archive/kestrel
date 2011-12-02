@@ -63,32 +63,23 @@ object QueueConverter {
       parseArgs(xs)
   }
 
-  def convertJournal(name: String) {
+  def convertQueue(name: String, fanouts: Seq[String]) {
     val md5 = MessageDigest.getInstance("MD5")
-    val seen = new mutable.HashSet[String]
-
-    val oldJournals = oldjournal.Journal.journalsForQueue(oldFolder, name).map { filename =>
-      new File(oldFolder, filename).getCanonicalPath
-    }
-    val packer = new oldjournal.JournalPacker(oldJournals)
-    val journalState = packer { (bytes1, bytes2) =>
-      print("\rQueue %s: read %-6s    ".format(name, bytes2.bytes.toHuman))
-      Console.flush()
-    }
+    val seenIds = new mutable.HashMap[String, Long]
 
     val newJournal = new libkestrel.Journal(newFolder, name, 16.megabytes, null, Duration.MaxValue,
       None)
     var lastUpdate = 0L
     var dupes = 0
-    (journalState.openTransactions ++ journalState.items).foreach { item =>
+
+    def addItem(item: oldjournal.QItem): String = {
+      val hash = md5.digest(item.data).hexlify
       val insert = if (allowDupes) {
         true
       } else {
-        val hash = md5.digest(item.data).hexlify
-        if (seen contains hash) {
+        if (seenIds contains hash) {
           false
         } else {
-          seen += hash
           true
         }
       }
@@ -97,6 +88,7 @@ object QueueConverter {
         val qitem = newJournal.put(item.data, item.addTime, item.expiry).map {
           case (qitem, sync) => qitem
         }.get()
+        seenIds(hash) = qitem.id
 
         val size = newJournal.journalSize
         if (size - lastUpdate > 1024 * 1024 || lastUpdate == 0L) {
@@ -107,10 +99,55 @@ object QueueConverter {
       } else {
         dupes += 1
       }
+      hash
+    }
+
+    def stateFor(queueName: String): Seq[oldjournal.QItem] = {
+      val files = oldjournal.Journal.journalsForQueue(oldFolder, queueName).map { filename =>
+        new File(oldFolder, filename).getCanonicalPath
+      }
+      val packer = new oldjournal.JournalPacker(files)
+      val journalState = packer { (bytes1, bytes2) =>
+        print("\rQueue %s: read %-6s    ".format(queueName, bytes2.bytes.toHuman))
+        Console.flush()
+      }
+      (journalState.openTransactions ++ journalState.items)
+    }
+
+    // add items from the "parent" queue.
+    stateFor(name).foreach { item => addItem(item) }
+
+    // for each fanout queue, add items that weren't in the parent queue.
+    val fanoutUnseenIds = new mutable.HashMap[String, mutable.Set[String]]
+    fanouts.foreach { fanoutName =>
+      fanoutUnseenIds(fanoutName) = new mutable.HashSet[String]
+      stateFor(name + "+" + fanoutName).foreach { item =>
+        fanoutUnseenIds(fanoutName) += addItem(item)
+      }
+    }
+
+    /*
+     * for each fanout queue, take all the items that are in the "parent" queue, but were NOT in
+     * this queue, and mark them as "read".
+     */
+    fanouts.foreach { fanoutName =>
+      val reader = newJournal.reader(fanoutName)
+      reader.head = 0L
+      (seenIds.keySet -- fanoutUnseenIds(fanoutName)).foreach { hash =>
+        reader.commit(seenIds(hash))
+      }
+      reader.checkpoint().get()
+    }
+
+    print("\r" + (" " * 70) + "\r")
+    println("Queue %s: %s (%d dupes discarded)".format(name, newJournal.journalSize.bytes.toHuman, dupes))
+    fanouts.foreach { fanoutName =>
+      val reader = newJournal.reader(fanoutName)
+      println("    Reader %s: head=%s done=%s".format(
+        fanoutName, reader.head, reader.doneSet.toList.sorted.mkString("(", ", ", ")")
+      ))
     }
     newJournal.close()
-    print("\r" + (" " * 40) + "\r")
-    println("Queue %s: %s (%d dupes discarded)".format(name, newJournal.journalSize.bytes.toHuman, dupes))
   }
 
   def main(args: Array[String]) {
@@ -138,14 +175,16 @@ object QueueConverter {
 
     val rawQueues = oldjournal.Journal.getQueueNamesFromFolder(oldFolder)
     val queues = rawQueues.filterNot { _ contains '+' }.toList.sorted
-    val fanoutQueues = (rawQueues -- queues).map { name =>
+    val fanoutQueues = new mutable.HashMap[String, List[String]]
+    (rawQueues -- queues).foreach { name =>
       val segments = name.split("\\+", 2)
-      (segments(0), name)
-    }.toMap
+      val oldList = fanoutQueues.getOrElse(segments(0), Nil)
+      fanoutQueues(segments(0)) = segments(1) :: oldList
+    }
 
     println(queues)
     println(fanoutQueues)
-    queues.foreach { q => convertJournal(q) }
+    queues.foreach { q => convertQueue(q, fanoutQueues.getOrElse(q, Nil)) }
 /*
 
     println("Packing journals...")
