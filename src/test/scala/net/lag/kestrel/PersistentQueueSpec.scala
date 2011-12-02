@@ -42,7 +42,7 @@ class PersistentQueueSpec extends Specification
 
     "add and remove one item" in {
       withTempFolder {
-        val q = new PersistentQueue("work", folderName, new QueueBuilder().apply(), timer)
+        val q = new PersistentQueue("work", folderName, new QueueBuilder().apply(), timer, timer)
         q.setup
 
         q.length mustEqual 0
@@ -75,7 +75,7 @@ class PersistentQueueSpec extends Specification
         val config = new QueueBuilder {
           maxItemSize = 128.bytes
         }.apply()
-        val q = new PersistentQueue("work", folderName, config, timer)
+        val q = new PersistentQueue("work", folderName, config, timer, timer)
         q.setup()
         q.length mustEqual 0
         q.add(new Array[Byte](127)) mustEqual true
@@ -87,7 +87,7 @@ class PersistentQueueSpec extends Specification
 
     "flush all items" in {
       withTempFolder {
-        val q = new PersistentQueue("work", folderName, new QueueBuilder().apply(), timer)
+        val q = new PersistentQueue("work", folderName, new QueueBuilder().apply(), timer, timer)
         q.setup()
 
         q.length mustEqual 0
@@ -115,7 +115,7 @@ class PersistentQueueSpec extends Specification
         val config = new QueueBuilder {
           defaultJournalSize = 64.bytes
         }.apply()
-        val q = new PersistentQueue("rolling", folderName, config, timer)
+        val q = new PersistentQueue("rolling", folderName, config, timer, timer)
         q.setup()
 
         q.add(new Array[Byte](32))
@@ -145,7 +145,7 @@ class PersistentQueueSpec extends Specification
         val config = new QueueBuilder {
           defaultJournalSize = 64.bytes
         }.apply()
-        val q = new PersistentQueue("rolling", folderName, config, timer)
+        val q = new PersistentQueue("rolling", folderName, config, timer, timer)
         q.setup()
 
         q.add(new Array[Byte](32))
@@ -173,7 +173,7 @@ class PersistentQueueSpec extends Specification
 
     "recover the journal after a restart" in {
       withTempFolder {
-        val q = new PersistentQueue("rolling", folderName, new QueueBuilder().apply(), timer)
+        val q = new PersistentQueue("rolling", folderName, new QueueBuilder().apply(), timer, timer)
         q.setup
         q.add("first".getBytes)
         q.add("second".getBytes)
@@ -181,7 +181,7 @@ class PersistentQueueSpec extends Specification
         q.journalSize mustEqual 5 + 6 + 16 + 16 + 5 + 5 + 1
         q.close
 
-        val q2 = new PersistentQueue("rolling", folderName, new QueueBuilder().apply(), timer)
+        val q2 = new PersistentQueue("rolling", folderName, new QueueBuilder().apply(), timer, timer)
         q2.setup
         q2.journalSize mustEqual 5 + 6 + 16 + 16 + 5 + 5 + 1
         new String(q2.remove.get.data) mustEqual "second"
@@ -189,7 +189,7 @@ class PersistentQueueSpec extends Specification
         q2.length mustEqual 0
         q2.close
 
-        val q3 = new PersistentQueue("rolling", folderName, new QueueBuilder().apply(), timer)
+        val q3 = new PersistentQueue("rolling", folderName, new QueueBuilder().apply(), timer, timer)
         q3.setup
         q3.journalSize mustEqual 5 + 6 + 16 + 16 + 5 + 5 + 1 + 1
         q3.length mustEqual 0
@@ -198,7 +198,7 @@ class PersistentQueueSpec extends Specification
 
     "recover a journal with a rewritten transaction" in {
       withTempFolder {
-        val q = new PersistentQueue("rolling", folderName, new QueueBuilder().apply(), timer)
+        val q = new PersistentQueue("rolling", folderName, new QueueBuilder().apply(), timer, timer)
         q.setup()
         q.add("zero".getBytes)
         q.add("first".getBytes)
@@ -215,7 +215,7 @@ class PersistentQueueSpec extends Specification
         q.confirmRemove(item.xid)
         q.close()
 
-        val q2 = new PersistentQueue("rolling", folderName, new QueueBuilder().apply(), timer)
+        val q2 = new PersistentQueue("rolling", folderName, new QueueBuilder().apply(), timer, timer)
         q2.setup()
         new String(q2.remove().get.data) mustEqual "second"
         q2.close()
@@ -229,7 +229,7 @@ class PersistentQueueSpec extends Specification
           val config = new QueueBuilder {
             maxAge = 3.seconds
           }.apply()
-          val q = new PersistentQueue("weather_updates", folderName, config, timer)
+          val q = new PersistentQueue("weather_updates", folderName, config, timer, timer)
           q.setup()
           q.add("sunny".getBytes) mustEqual true
           q.length mustEqual 1
@@ -254,13 +254,13 @@ class PersistentQueueSpec extends Specification
         val config1 = new QueueBuilder {
           maxMemorySize = 123.bytes
         }.apply()
-        val q1 = new PersistentQueue("test1", folderName, config1, timer)
+        val q1 = new PersistentQueue("test1", folderName, config1, timer, timer)
         q1.config.maxJournalSize mustEqual new QueueBuilder().maxJournalSize
         q1.config.maxMemorySize mustEqual 123.bytes
         val config2 = new QueueBuilder {
           maxJournalSize = 123.bytes
         }.apply()
-        val q2 = new PersistentQueue("test1", folderName, config2, timer)
+        val q2 = new PersistentQueue("test1", folderName, config2, timer, timer)
         q2.config.maxJournalSize mustEqual 123.bytes
         q2.config.maxMemorySize mustEqual new QueueBuilder().maxMemorySize
       }
@@ -272,7 +272,7 @@ class PersistentQueueSpec extends Specification
           val config1 = new QueueBuilder {
             maxMemorySize = 1.kilobyte
           }.apply()
-          val q = new PersistentQueue("things", folderName, config1, timer)
+          val q = new PersistentQueue("things", folderName, config1, timer, new FakeTimer)
           q.setup
 
           var rv: Option[String] = None
@@ -294,7 +294,7 @@ class PersistentQueueSpec extends Specification
           val config1 = new QueueBuilder {
             maxMemorySize = 1.kilobyte
           }.apply()
-          val q = new PersistentQueue("things", folderName, config1, timer)
+          val q = new PersistentQueue("things", folderName, config1, timer, new FakeTimer)
           q.setup
 
           var rv: Option[String] = Some("foo")
@@ -316,7 +316,7 @@ class PersistentQueueSpec extends Specification
 
         "when an item arrives" in {
           withTempFolder {
-            val q = new PersistentQueue("things", folderName, new QueueBuilder().apply(), timer)
+            val q = new PersistentQueue("things", folderName, new QueueBuilder().apply(), timer, new FakeTimer)
             q.setup()
 
             var rv: Option[String] = None
@@ -336,7 +336,7 @@ class PersistentQueueSpec extends Specification
 
         "when the connection dies" in {
           withTempFolder {
-            val q = new PersistentQueue("things", folderName, new QueueBuilder().apply(), timer)
+            val q = new PersistentQueue("things", folderName, new QueueBuilder().apply(), timer, new FakeTimer)
             q.setup()
 
             var rv: Option[String] = None
@@ -360,7 +360,7 @@ class PersistentQueueSpec extends Specification
         val config = new QueueBuilder {
           maxMemorySize = 1.kilobyte
         }.apply()
-        val q = new PersistentQueue("things", folderName, config, timer)
+        val q = new PersistentQueue("things", folderName, config, timer, timer)
 
         q.setup
         q.add("house".getBytes)
@@ -397,7 +397,7 @@ class PersistentQueueSpec extends Specification
           "add(5:0:house), add(3:0:cat), remove-tentative(1), remove-tentative(2), unremove(1), confirm-remove(2), remove"
 
         // and journal is replayed correctly.
-        val q2 = new PersistentQueue("things", folderName, config, timer)
+        val q2 = new PersistentQueue("things", folderName, config, timer, timer)
         q2.setup
         q2.length mustEqual 0
         q2.bytes mustEqual 0
@@ -406,7 +406,7 @@ class PersistentQueueSpec extends Specification
 
     "recover a journal with open transactions" in {
       withTempFolder {
-        val q = new PersistentQueue("things", folderName, new QueueBuilder().apply(), timer)
+        val q = new PersistentQueue("things", folderName, new QueueBuilder().apply(), timer, timer)
         q.setup
         q.add("one".getBytes)
         q.add("two".getBytes)
@@ -428,7 +428,7 @@ class PersistentQueueSpec extends Specification
         q.confirmRemove(item4.get.xid)
         q.close
 
-        val q2 = new PersistentQueue("things", folderName, new QueueBuilder().apply(), timer)
+        val q2 = new PersistentQueue("things", folderName, new QueueBuilder().apply(), timer, timer)
         q2.setup
         q2.length mustEqual 3
         q2.openTransactionCount mustEqual 0
@@ -441,7 +441,7 @@ class PersistentQueueSpec extends Specification
 
     "continue a queue item" in {
       withTempFolder {
-        val q = new PersistentQueue("things", folderName, new QueueBuilder().apply(), timer)
+        val q = new PersistentQueue("things", folderName, new QueueBuilder().apply(), timer, timer)
         q.setup
         q.add("one".getBytes)
 
@@ -451,7 +451,7 @@ class PersistentQueueSpec extends Specification
         q.continue(item1.get.xid, "two".getBytes)
         q.close
 
-        val q2 = new PersistentQueue("things", folderName, new QueueBuilder().apply(), timer)
+        val q2 = new PersistentQueue("things", folderName, new QueueBuilder().apply(), timer, timer)
         q2.setup
         q2.length mustEqual 1
         q2.openTransactionCount mustEqual 0
@@ -465,7 +465,7 @@ class PersistentQueueSpec extends Specification
         val config = new QueueBuilder {
           maxJournalSize = 3.kilobytes
         }.apply()
-        val q = new PersistentQueue("things", folderName, config, timer)
+        val q = new PersistentQueue("things", folderName, config, timer, timer)
         q.setup
         q.add(new Array[Byte](512))
         // can't roll the journal normally, cuz there's always one item left.
@@ -494,7 +494,7 @@ class PersistentQueueSpec extends Specification
           maxMemorySize = 1.kilobyte
           maxJournalSize = 3.kilobytes
         }.apply()
-        val q = new PersistentQueue("things", folderName, config, timer)
+        val q = new PersistentQueue("things", folderName, config, timer, timer)
         q.setup
         for (i <- 0 until 8) {
           q.add(new Array[Byte](512))
@@ -507,7 +507,7 @@ class PersistentQueueSpec extends Specification
 
     "report an age of zero on an empty queue" in {
       withTempFolder {
-        val q = new PersistentQueue("things", folderName, new QueueBuilder().apply(), timer)
+        val q = new PersistentQueue("things", folderName, new QueueBuilder().apply(), timer, timer)
         q.setup
         put(q, 128, 0)
         Thread.sleep(10)
@@ -527,7 +527,7 @@ class PersistentQueueSpec extends Specification
         val config = new QueueBuilder {
           keepJournal = false
         }.apply()
-        val q = new PersistentQueue("mem", folderName, config, timer)
+        val q = new PersistentQueue("mem", folderName, config, timer, timer)
         q.setup
 
         q.add("coffee".getBytes)
@@ -541,12 +541,12 @@ class PersistentQueueSpec extends Specification
         val config = new QueueBuilder {
           keepJournal = false
         }.apply()
-        val q = new PersistentQueue("mem", folderName, config, timer)
+        val q = new PersistentQueue("mem", folderName, config, timer, timer)
         q.setup
         q.add("coffee".getBytes)
         q.close
 
-        val q2 = new PersistentQueue("mem", folderName, config, timer)
+        val q2 = new PersistentQueue("mem", folderName, config, timer, timer)
         q2.setup
         q2.remove mustEqual None
       }
@@ -562,7 +562,7 @@ class PersistentQueueSpec extends Specification
         val config = new QueueBuilder {
           maxItems = 1
         }.apply()
-        val q = new PersistentQueue("weather_updates", folderName, config, timer)
+        val q = new PersistentQueue("weather_updates", folderName, config, timer, timer)
         q.setup
         q.add("sunny".getBytes) mustEqual true
         q.add("rainy".getBytes) mustEqual false
@@ -576,7 +576,7 @@ class PersistentQueueSpec extends Specification
         val config = new QueueBuilder {
           maxSize = 510.bytes
         }.apply()
-        val q = new PersistentQueue("weather_updates", folderName, config, timer)
+        val q = new PersistentQueue("weather_updates", folderName, config, timer, timer)
         q.setup
         q.add(("a" * 256).getBytes) mustEqual true
         q.add(("b" * 256).getBytes) mustEqual true
@@ -593,7 +593,7 @@ class PersistentQueueSpec extends Specification
           maxItems = 3
           discardOldWhenFull = true
         }.apply()
-        val q = new PersistentQueue("weather_updates", folderName, config, timer)
+        val q = new PersistentQueue("weather_updates", folderName, config, timer, timer)
         q.setup
         q.add("sunny".getBytes) mustEqual true
         q.add("rainy".getBytes) mustEqual true
@@ -614,7 +614,7 @@ class PersistentQueueSpec extends Specification
           val config = new QueueBuilder {
             keepJournal = false
           }.apply()
-          val q = new PersistentQueue("wu_tang", folderName, config, timer)
+          val q = new PersistentQueue("wu_tang", folderName, config, timer, timer)
           q.setup()
           val expiry = Time.now + 1.second
           q.add("rza".getBytes, Some(expiry)) mustEqual true
@@ -635,8 +635,8 @@ class PersistentQueueSpec extends Specification
           val config = new QueueBuilder {
             keepJournal = false
           }.apply()
-          val r = new PersistentQueue("rappers", folderName, config, timer)
-          val q = new PersistentQueue("wu_tang", folderName, config, timer)
+          val r = new PersistentQueue("rappers", folderName, config, timer, new FakeTimer)
+          val q = new PersistentQueue("wu_tang", folderName, config, timer, new FakeTimer)
           r.setup()
           q.setup()
           q.expireQueue = Some(r)

@@ -28,7 +28,7 @@ import config._
 
 class InaccessibleQueuePath extends Exception("Inaccessible queue path: Must be a directory and writable")
 
-class QueueCollection(queueFolder: String, timer: Timer,
+class QueueCollection(queueFolder: String, timer: Timer, journalSyncTimer: Timer,
                       @volatile private var defaultQueueConfig: QueueConfig,
                       @volatile var queueBuilders: List[QueueBuilder]) {
   private val log = Logger.get(getClass.getName)
@@ -49,9 +49,12 @@ class QueueCollection(queueFolder: String, timer: Timer,
   @volatile private var queueConfigMap = Map(queueBuilders.map { builder => (builder.name, builder()) }: _*)
 
   private def buildQueue(name: String, realName: String, path: String) = {
+    if ((name contains ".") || (name contains "/") || (name contains "~")) {
+      throw new Exception("Queue name contains illegal characters (one of: ~ . /).")
+    }
     val config = queueConfigMap.getOrElse(name, defaultQueueConfig)
     log.info("Setting up queue %s: %s", realName, config)
-    new PersistentQueue(realName, path, config, timer, Some(this.apply))
+    new PersistentQueue(realName, path, config, timer, journalSyncTimer, Some(this.apply))
   }
 
   // preload any queues
@@ -108,21 +111,22 @@ class QueueCollection(queueFolder: String, timer: Timer,
    *
    * @return true if the item was added; false if the server is shutting down
    */
-  def add(key: String, item: Array[Byte], expiry: Option[Time]): Boolean = {
+  def add(key: String, item: Array[Byte], expiry: Option[Time], addTime: Time): Boolean = {
     for (fanouts <- fanout_queues.get(key); name <- fanouts) {
-      add(name, item, expiry)
+      add(name, item, expiry, addTime)
     }
 
     queue(key) match {
       case None => false
       case Some(q) =>
-        val result = q.add(item, expiry)
+        val result = q.add(item, expiry, None, addTime)
         if (result) Stats.incr("total_items")
         result
     }
   }
 
-  def add(key: String, item: Array[Byte]): Boolean = add(key, item, None)
+  def add(key: String, item: Array[Byte]): Boolean = add(key, item, None, Time.now)
+  def add(key: String, item: Array[Byte], expiry: Option[Time]): Boolean = add(key, item, expiry, Time.now)
 
   /**
    * Retrieve an item from a queue and pass it to a continuation. If no item is available within

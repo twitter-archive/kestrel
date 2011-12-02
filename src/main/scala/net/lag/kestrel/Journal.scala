@@ -51,7 +51,7 @@ object JournalItem {
 /**
  * Codes for working with the journal file for a PersistentQueue.
  */
-class Journal(queuePath: File, queueName: String, timer: Timer, syncJournal: Duration) {
+class Journal(queuePath: File, queueName: String, syncTimer: Timer, syncJournal: Duration) {
   import Journal._
 
   private val log = Logger.get(getClass)
@@ -97,7 +97,7 @@ class Journal(queuePath: File, queueName: String, timer: Timer, syncJournal: Dur
   def this(fullPath: String) = this(fullPath, Duration.MaxValue)
 
   private def open(file: File) {
-    writer = new PeriodicSyncFile(file, timer, syncJournal)
+    writer = new PeriodicSyncFile(file, syncTimer, syncJournal)
   }
 
   def open() {
