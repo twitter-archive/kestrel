@@ -24,6 +24,8 @@ For more information, check out the [readme](readme.html).
 News
 ----
 
+- **21 Nov 2011** - *kestrel 2.1.4 released*
+
 - **13 Oct 2011** - *kestrel 2.1.3 released*
 
 - **29 Sep 2011** - *kestrel 2.1.2 released*
@@ -46,9 +48,9 @@ Further Reading
 Downloads
 ---------
 
-- [kestrel 2.1.3](download/kestrel-2.1.3.zip)
+- [kestrel 2.1.4](download/kestrel-2.1.4.zip)
 
-- [kestrel 2.1.2](download/kestrel-2.1.2.zip)
+- [kestrel 2.1.3](download/kestrel-2.1.3.zip)
 
 - [kestrel 1.2.2.1](download/kestrel-1.2.2.1.zip)
 
