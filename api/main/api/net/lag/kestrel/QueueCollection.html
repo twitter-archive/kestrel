@@ -66,7 +66,7 @@
       <span class="symbol">
         <span class="name">QueueCollection</span>
         
-        <span class="params">(<span name="queueFolder">queueFolder: String</span>, <span name="timer">timer: <span class="extype" name="com.twitter.util.Timer">Timer</span></span>, <span name="defaultQueueConfig">defaultQueueConfig: <a href="config/QueueConfig.html" class="extype" name="net.lag.kestrel.config.QueueConfig">QueueConfig</a></span>, <span name="queueBuilders">queueBuilders: List[<a href="config/QueueBuilder.html" class="extype" name="net.lag.kestrel.config.QueueBuilder">QueueBuilder</a>]</span>)</span>
+        <span class="params">(<span name="queueFolder">queueFolder: String</span>, <span name="timer">timer: <span class="extype" name="com.twitter.util.Timer">Timer</span></span>, <span name="journalSyncTimer">journalSyncTimer: <span class="extype" name="com.twitter.util.Timer">Timer</span></span>, <span name="defaultQueueConfig">defaultQueueConfig: <a href="config/QueueConfig.html" class="extype" name="net.lag.kestrel.config.QueueConfig">QueueConfig</a></span>, <span name="queueBuilders">queueBuilders: List[<a href="config/QueueBuilder.html" class="extype" name="net.lag.kestrel.config.QueueBuilder">QueueBuilder</a>]</span>)</span>
         
       </span>
       </h4>
@@ -227,6 +227,18 @@
           </div>
           
     </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.QueueCollection#add">
+      <a id="add(String,Array[Byte],Option[Time]):Boolean"></a>
+      <h4 class="signature">
+      <span class="kind">def</span>
+      <span class="symbol">
+        <span class="name">add</span>
+        
+        <span class="params">(<span name="key">key: String</span>, <span name="item">item: <span class="extype" name="scala.Array">Array</span>[<span class="extype" name="scala.Byte">Byte</span>]</span>, <span name="expiry">expiry: <span class="extype" name="scala.Option">Option</span>[<span class="extype" name="com.twitter.util.Time">Time</span>]</span>)</span>
+        <span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      
+    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.QueueCollection#add">
       <a id="add(String,Array[Byte]):Boolean"></a>
       <h4 class="signature">
       <span class="kind">def</span>
@@ -239,13 +251,13 @@
       </h4>
       
     </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.QueueCollection#add">
-      <a id="add(String,Array[Byte],Option[Time]):Boolean"></a>
+      <a id="add(String,Array[Byte],Option[Time],Time):Boolean"></a>
       <h4 class="signature">
       <span class="kind">def</span>
       <span class="symbol">
         <span class="name">add</span>
         
-        <span class="params">(<span name="key">key: String</span>, <span name="item">item: <span class="extype" name="scala.Array">Array</span>[<span class="extype" name="scala.Byte">Byte</span>]</span>, <span name="expiry">expiry: <span class="extype" name="scala.Option">Option</span>[<span class="extype" name="com.twitter.util.Time">Time</span>]</span>)</span>
+        <span class="params">(<span name="key">key: String</span>, <span name="item">item: <span class="extype" name="scala.Array">Array</span>[<span class="extype" name="scala.Byte">Byte</span>]</span>, <span name="expiry">expiry: <span class="extype" name="scala.Option">Option</span>[<span class="extype" name="com.twitter.util.Time">Time</span>]</span>, <span name="addTime">addTime: <span class="extype" name="com.twitter.util.Time">Time</span></span>)</span>
         <span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
       </span>
       </h4>

@@ -333,14 +333,14 @@ period of time will be disconnected.
           </div>
           
     </li><li visbl="pub" data-isabs="false" name="com.twitter.util.Config#computed">
-      <a id="computed[A](⇒ A):Computed[A]"></a>
+      <a id="computed[A](⇒ A):Required[A]"></a>
       <h4 class="signature">
       <span class="kind">def</span>
       <span class="symbol">
         <span class="name">computed</span>
         <span class="tparams">[<span name="A">A</span>]</span>
         <span class="params">(<span name="f">f: ⇒ A</span>)</span>
-        <span class="result">: <span class="extype" name="com.twitter.util.Config.Computed">Computed</span>[A]</span>
+        <span class="result">: <span class="extype" name="com.twitter.util.Config.Required">Required</span>[A]</span>
       </span>
       </h4>
       
@@ -486,25 +486,6 @@ there are no more references to the object.</p><p>The details of when and if the
             
           </div>
           
-    </li><li visbl="pub" data-isabs="false" name="com.twitter.util.Config#fromComputed">
-      <a id="fromComputed[A](Computed[A]):A"></a>
-      <h4 class="signature">
-      <span class="kind">implicit def</span>
-      <span class="symbol">
-        <span class="name">fromComputed</span>
-        <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="params">(<span name="com">com: <span class="extype" name="com.twitter.util.Config.Computed">Computed</span>[A]</span>)</span>
-        <span class="result">: A</span>
-      </span>
-      </h4>
-      
-            
-            <div class="fullcomment"><div class="block">
-          attributes: implicit 
-        </div><div class="block">
-          definition classes: Config
-        </div></div>
-          
     </li><li visbl="pub" data-isabs="false" name="com.twitter.util.Config#fromOption">
       <a id="fromOption[A](Option[A]):A"></a>
       <h4 class="signature">
@@ -532,25 +513,6 @@ there are no more references to the object.</p><p>The details of when and if the
         <span class="name">fromRequired</span>
         <span class="tparams">[<span name="A">A</span>]</span>
         <span class="params">(<span name="req">req: <span class="extype" name="com.twitter.util.Config.Required">Required</span>[A]</span>)</span>
-        <span class="result">: A</span>
-      </span>
-      </h4>
-      
-            
-            <div class="fullcomment"><div class="block">
-          attributes: implicit 
-        </div><div class="block">
-          definition classes: Config
-        </div></div>
-          
-    </li><li visbl="pub" data-isabs="false" name="com.twitter.util.Config#fromRequiredComputed">
-      <a id="fromRequiredComputed[A](Required[Computed[A]]):A"></a>
-      <h4 class="signature">
-      <span class="kind">implicit def</span>
-      <span class="symbol">
-        <span class="name">fromRequiredComputed</span>
-        <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="params">(<span name="req">req: <span class="extype" name="com.twitter.util.Config.Required">Required</span>[<span class="extype" name="com.twitter.util.Config.Computed">Computed</span>[A]]</span>)</span>
         <span class="result">: A</span>
       </span>
       </h4>
@@ -965,6 +927,23 @@ possible to check whether the contents of the list are of the requested typed.
           definition classes: Config
         </div></div>
           
+    </li><li visbl="pub" data-isabs="false" name="com.twitter.util.Config#specified">
+      <a id="specified[A](A):Specified[A]"></a>
+      <h4 class="signature">
+      <span class="kind">def</span>
+      <span class="symbol">
+        <span class="name">specified</span>
+        <span class="tparams">[<span name="A">A</span>]</span>
+        <span class="params">(<span name="value">value: A</span>)</span>
+        <span class="result">: <span class="extype" name="com.twitter.util.Config.Specified">Specified</span>[A]</span>
+      </span>
+      </h4>
+      
+            
+            <div class="fullcomment"><div class="block">
+          definition classes: Config
+        </div></div>
+          
     </li><li visbl="pub" data-isabs="false" name="scala.AnyRef#synchronized">
       <a id="synchronized[T0](T0):T0"></a>
       <h4 class="signature">
@@ -1004,33 +983,14 @@ possible to check whether the contents of the list are of the requested typed.
             
           </div>
           
-    </li><li visbl="pub" data-isabs="false" name="com.twitter.util.Config#toComputed">
-      <a id="toComputed[A](⇒ A):Computed[A]"></a>
-      <h4 class="signature">
-      <span class="kind">implicit def</span>
-      <span class="symbol">
-        <span class="name">toComputed</span>
-        <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="params">(<span name="f">f: ⇒ A</span>)</span>
-        <span class="result">: <span class="extype" name="com.twitter.util.Config.Computed">Computed</span>[A]</span>
-      </span>
-      </h4>
-      
-            
-            <div class="fullcomment"><div class="block">
-          attributes: implicit 
-        </div><div class="block">
-          definition classes: Config
-        </div></div>
-          
     </li><li visbl="pub" data-isabs="false" name="com.twitter.util.Config#toSpecified">
-      <a id="toSpecified[A](A):Specified[A]"></a>
+      <a id="toSpecified[A](⇒ A):Specified[A]"></a>
       <h4 class="signature">
       <span class="kind">implicit def</span>
       <span class="symbol">
         <span class="name">toSpecified</span>
         <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="params">(<span name="value">value: A</span>)</span>
+        <span class="params">(<span name="value">value: ⇒ A</span>)</span>
         <span class="result">: <span class="extype" name="com.twitter.util.Config.Specified">Specified</span>[A]</span>
       </span>
       </h4>
@@ -1042,33 +1002,14 @@ possible to check whether the contents of the list are of the requested typed.
           definition classes: Config
         </div></div>
           
-    </li><li visbl="pub" data-isabs="false" name="com.twitter.util.Config#toSpecifiedComputed">
-      <a id="toSpecifiedComputed[A](⇒ A):Specified[Computed[A]]"></a>
-      <h4 class="signature">
-      <span class="kind">implicit def</span>
-      <span class="symbol">
-        <span class="name">toSpecifiedComputed</span>
-        <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="params">(<span name="f">f: ⇒ A</span>)</span>
-        <span class="result">: <span class="extype" name="com.twitter.util.Config.Specified">Specified</span>[<span class="extype" name="com.twitter.util.Config.Computed">Computed</span>[A]]</span>
-      </span>
-      </h4>
-      
-            
-            <div class="fullcomment"><div class="block">
-          attributes: implicit 
-        </div><div class="block">
-          definition classes: Config
-        </div></div>
-          
     </li><li visbl="pub" data-isabs="false" name="com.twitter.util.Config#toSpecifiedOption">
-      <a id="toSpecifiedOption[A](A):Specified[Some[A]]"></a>
+      <a id="toSpecifiedOption[A](⇒ A):Specified[Some[A]]"></a>
       <h4 class="signature">
       <span class="kind">implicit def</span>
       <span class="symbol">
         <span class="name">toSpecifiedOption</span>
         <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="params">(<span name="value">value: A</span>)</span>
+        <span class="params">(<span name="value">value: ⇒ A</span>)</span>
         <span class="result">: <span class="extype" name="com.twitter.util.Config.Specified">Specified</span>[<span class="extype" name="scala.Some">Some</span>[A]]</span>
       </span>
       </h4>
