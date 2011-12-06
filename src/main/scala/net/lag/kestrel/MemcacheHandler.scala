@@ -105,7 +105,7 @@ class MemcacheHandler(
         Future(new MemcacheResponse("Flushed all queues."))
       case "delete" =>
         handler.delete(request.line(1))
-        Future(new MemcacheResponse("END"))
+        Future(new MemcacheResponse("DELETED"))
       case "flush_expired" =>
         handler.flushExpired(request.line(1))
         Future(new MemcacheResponse("END"))

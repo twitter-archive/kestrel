@@ -18,6 +18,7 @@
 package net.lag.kestrel
 
 import java.io.{File, FileInputStream}
+import java.util.concurrent.ScheduledThreadPoolExecutor
 import scala.util.Sorting
 import com.twitter.util.{TempFolder, Time, Timer}
 import com.twitter.conversions.time._
@@ -41,6 +42,7 @@ class QueueCollectionSpec extends Specification
 
   "QueueCollection" should {
     val timer = new FakeTimer()
+    val scheduler = new ScheduledThreadPoolExecutor(1)
 
     doAfter {
       if (qc ne null) {
@@ -51,7 +53,7 @@ class QueueCollectionSpec extends Specification
     "create a queue" in {
       withTempFolder {
         Stats.clearAll()
-        qc = new QueueCollection(folderName, timer, config, Nil)
+        qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
         qc.queueNames mustEqual Nil
 
         qc.add("work1", "stuff".getBytes)
@@ -83,7 +85,7 @@ class QueueCollectionSpec extends Specification
 
     "load from journal" in {
       withTempFolder {
-        qc = new QueueCollection(folderName, timer, config, Nil)
+        qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
         qc.add("ducklings", "huey".getBytes)
         qc.add("ducklings", "dewey".getBytes)
         qc.add("ducklings", "louie".getBytes)
@@ -92,7 +94,7 @@ class QueueCollectionSpec extends Specification
         qc.currentItems mustEqual 3
         qc.shutdown
 
-        qc = new QueueCollection(folderName, timer, config, Nil)
+        qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
         qc.queueNames mustEqual Nil
         qc.remove("ducklings")() must beSomeQueueItem("huey")
         // now the queue should be suddenly instantiated:
@@ -104,7 +106,7 @@ class QueueCollectionSpec extends Specification
     "queue hit/miss tracking" in {
       withTempFolder {
         Stats.clearAll()
-        qc = new QueueCollection(folderName, timer, config, Nil)
+        qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
         qc.add("ducklings", "ugly1".getBytes)
         qc.add("ducklings", "ugly2".getBytes)
         Stats.getCounter("get_hits")() mustEqual 0
@@ -134,7 +136,7 @@ class QueueCollectionSpec extends Specification
         new File(folderName + "/apples").createNewFile()
         new File(folderName + "/oranges.101").createNewFile()
         new File(folderName + "/oranges.133").createNewFile()
-        qc = new QueueCollection(folderName, timer, config, Nil)
+        qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
         qc.loadQueues()
         qc.queueNames.sorted mustEqual List("apples", "oranges")
       }
@@ -145,7 +147,7 @@ class QueueCollectionSpec extends Specification
         new File(folderName + "/apples").createNewFile()
         new File(folderName + "/oranges").createNewFile()
         new File(folderName + "/oranges~~900").createNewFile()
-        qc = new QueueCollection(folderName, timer, config, Nil)
+        qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
         qc.loadQueues()
         qc.queueNames.sorted mustEqual List("apples", "oranges")
       }
@@ -247,7 +249,7 @@ class QueueCollectionSpec extends Specification
       withTempFolder {
         Time.withCurrentTimeFrozen { time =>
           new File(folderName + "/expired").createNewFile()
-          qc = new QueueCollection(folderName, timer, config, Nil)
+          qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
           qc.loadQueues()
 
           qc.add("expired", "hello".getBytes, Some(5.seconds.fromNow))

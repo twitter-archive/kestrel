@@ -180,12 +180,6 @@ class KestrelHandler(
     waitingFor = Some(future)
     future.map { itemOption =>
       waitingFor = None
-      if (!timeout.isDefined) {
-        val statName = if (itemOption.isDefined) "get_hit_latency_usec" else "get_miss_latency_usec"
-        val usec = (Time.now - startTime).inMicroseconds.toInt
-        Stats.addMetric(statName, usec)
-        Stats.addMetric("q/" + key + "/" + statName, usec)
-      }
       itemOption.foreach { item =>
         log.debug("get <- %s", item)
         if (opening) pendingReads.add(key, item.id)
@@ -209,8 +203,8 @@ class KestrelHandler(
     val (rv, nsec) = Duration.inNanoseconds {
       queues.add(key, data, expiry, Time.now)
     }
-    Stats.addMetric("set_latency_usec", nsec.inMilliseconds.toInt)
-    Stats.addMetric("q/" + key + "/set_latency_usec", nsec.inMilliseconds.toInt)
+    Stats.addMetric("set_latency_usec", nsec.inMicroseconds.toInt)
+    Stats.addMetric("q/" + key + "/set_latency_usec", nsec.inMicroseconds.toInt)
     rv
   }
 

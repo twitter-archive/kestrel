@@ -21,7 +21,7 @@ package oldjournal
 import java.io._
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.channels.FileChannel
-import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.{LinkedBlockingQueue, ScheduledExecutorService}
 import java.util.concurrent.atomic.AtomicInteger
 import scala.annotation.tailrec
 import com.twitter.conversions.storage._
@@ -29,7 +29,7 @@ import com.twitter.conversions.time._
 import com.twitter.libkestrel.PeriodicSyncFile
 import com.twitter.logging.Logger
 import com.twitter.ostrich.admin.BackgroundProcess
-import com.twitter.util.{Future, Duration, Timer, Time}
+import com.twitter.util.{Future, Duration, Time}
 
 case class BrokenItemException(lastValidPosition: Long, cause: Throwable) extends IOException(cause)
 
@@ -53,7 +53,7 @@ object JournalItem {
 /**
  * Codes for working with the journal file for a PersistentQueue.
  */
-class Journal(queuePath: File, queueName: String, timer: Timer, syncJournal: Duration) {
+class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecutorService, syncJournal: Duration) {
   import Journal._
 
   private val log = Logger.get(getClass)
@@ -99,7 +99,7 @@ class Journal(queuePath: File, queueName: String, timer: Timer, syncJournal: Dur
   def this(fullPath: String) = this(fullPath, Duration.MaxValue)
 
   private def open(file: File) {
-    writer = new PeriodicSyncFile(file, timer, syncJournal)
+    writer = new PeriodicSyncFile(file, syncScheduler, syncJournal)
   }
 
   def open() {

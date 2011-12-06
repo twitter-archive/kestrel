@@ -44,7 +44,7 @@ class KestrelProject(info: ProjectInfo)
 
   override def releaseBuild = !(projectVersion.toString contains "SNAPSHOT")
 
-  override def subversionRepository = Some("http://svn.local.twitter.com/maven-public")
+  override def subversionRepository = Some("https://svn.twitter.biz/maven-public")
 
   override def githubRemote = "github"
 
@@ -60,4 +60,22 @@ class KestrelProject(info: ProjectInfo)
     }
   lazy val packageLoadTests = packageLoadTestsAction
   override def packageDistTask = packageLoadTestsAction && super.packageDistTask
+
+  // generate a distribution zip for release.
+  def releaseDistTask = task {
+    val releaseDistPath = "dist-release" / distName ##
+
+    releaseDistPath.asFile.mkdirs()
+    (releaseDistPath / "libs").asFile.mkdirs()
+    (releaseDistPath / "config").asFile.mkdirs()
+
+    FileUtilities.copyFlat(List(jarPath), releaseDistPath, log).left.toOption orElse
+      FileUtilities.copyFlat(List(outputPath / loadTestJarFilename), releaseDistPath, log).left.toOption orElse
+      FileUtilities.copyFlat(dependentJars.get, releaseDistPath / "libs", log).left.toOption orElse
+      FileUtilities.copy(((configPath ***) --- (configPath ** "*.class")).get, releaseDistPath / "config", log).left.toOption orElse
+      FileUtilities.copy((scriptsOutputPath ***).get, releaseDistPath, log).left.toOption orElse
+      FileUtilities.zip((("dist-release" ##) / distName).get, "dist-release" / (distName + ".zip"), true, log)
+  }
+  val ReleaseDistDescription = "Creates a deployable zip file with dependencies, config, and scripts."
+  lazy val releaseDist = releaseDistTask.dependsOn(`package`, makePom, copyScripts).describedAs(ReleaseDistDescription)
 }

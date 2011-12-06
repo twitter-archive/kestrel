@@ -18,9 +18,10 @@
 package net.lag.kestrel
 
 import java.net.InetSocketAddress
-import java.util.concurrent.{Executors, ExecutorService, TimeUnit}
+import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.{immutable, mutable}
+import com.twitter.concurrent.NamedPoolThreadFactory
 import com.twitter.conversions.time._
 import com.twitter.finagle.builder.Server
 import com.twitter.libkestrel.config._
@@ -56,9 +57,10 @@ class Kestrel(defaultQueueBuilder: QueueBuilder, queueBuilders: Seq[QueueBuilder
 
   var queueCollection: QueueCollection = null
   var timer: Timer = null
+  var journalSyncScheduler: ScheduledExecutorService = null
+  var executor: ExecutorService = null
   var memcacheService: Option[FinagleServer] = None
   var textService: Option[FinagleServer] = None
-  var textAcceptor: Option[Channel] = None
   var thriftService: Option[FinagleServer] = None
 
   def thriftCodec = ThriftServerFramedCodec()
@@ -117,11 +119,21 @@ class Kestrel(defaultQueueBuilder: QueueBuilder, queueBuilders: Seq[QueueBuilder
              listenAddress, memcacheListenPort, textListenPort, queuePath,
              expirationTimerFrequency, clientTimeout, maxOpenTransactions)
 
-    // this means no timeout will be at better granularity than 10ms.
-    // FIXME: would make more sense to use the finagle Timer. but they'd have to expose it.
-    timer = new HashedWheelTimer(10, TimeUnit.MILLISECONDS)
-    queueCollection = new QueueCollection(queuePath, new FinagleTimer(timer), defaultQueueBuilder,
-      queueBuilders)
+    // this means no timeout will be at better granularity than 100 ms.
+    timer = new HashedWheelTimer(100, TimeUnit.MILLISECONDS)
+
+    journalSyncScheduler =
+      new ScheduledThreadPoolExecutor(
+        Runtime.getRuntime.availableProcessors,
+        new NamedPoolThreadFactory("journal-sync", true),
+        new RejectedExecutionHandler {
+          override def rejectedExecution(r: Runnable, executor: ThreadPoolExecutor) {
+            log.warning("Rejected journal fsync")
+          }
+        })
+
+    queueCollection = new QueueCollection(queuePath, new FinagleTimer(timer), journalSyncScheduler,
+      defaultQueueBuilder, queueBuilders)
     queueCollection.loadQueues()
 
     Stats.addGauge("items") { queueCollection.currentItems.toDouble }
@@ -179,6 +191,9 @@ class Kestrel(defaultQueueBuilder: QueueBuilder, queueBuilders: Seq[QueueBuilder
 
     timer.stop()
     timer = null
+    journalSyncScheduler.shutdown()
+    journalSyncScheduler.awaitTermination(5, TimeUnit.SECONDS)
+    journalSyncScheduler = null
     log.info("Goodbye.")
   }
 }

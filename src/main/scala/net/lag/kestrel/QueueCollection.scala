@@ -18,7 +18,7 @@
 package net.lag.kestrel
 
 import java.io.File
-import java.util.concurrent.{ConcurrentHashMap, CountDownLatch}
+import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, ScheduledExecutorService}
 import scala.collection.mutable
 import com.twitter.conversions.time._
 import com.twitter.libkestrel._
@@ -30,9 +30,13 @@ import config._
 
 class InaccessibleQueuePath extends Exception("Inaccessible queue path: Must be a directory and writable")
 
-class QueueCollection(queueFolder: String, timer: Timer,
-                      defaultQueueBuilder: QueueBuilder,
-                      queueBuilders: Seq[QueueBuilder]) {
+class QueueCollection(
+  queueFolder: String,
+  timer: Timer,
+  journalSyncScheduler: ScheduledExecutorService,
+  defaultQueueBuilder: QueueBuilder,
+  queueBuilders: Seq[QueueBuilder]
+) {
   private val log = Logger.get(getClass.getName)
 
   private val path = new File(queueFolder)
