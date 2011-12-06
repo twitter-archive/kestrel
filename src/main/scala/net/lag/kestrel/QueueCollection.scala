@@ -60,7 +60,7 @@ class QueueCollection(
     val builder = queueBuilderMap.getOrElse(name, defaultQueueBuilder)
     val config = builder().copy(name = name)
     log.info("Setting up queue %s: %s", realName, config)
-    new JournaledQueue(config, new File(path), timer)
+    new JournaledQueue(config, new File(path), timer, journalSyncScheduler)
   }
 
   // preload any queues

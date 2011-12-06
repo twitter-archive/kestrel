@@ -77,7 +77,7 @@ class QueueCollectionSpec extends Specification
 
     "refuse to create a bad queue" in {
       withTempFolder {
-        qc = new QueueCollection(folderName, timer, config, Nil)
+        qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
         qc.writer("hello.there") must throwA[Exception]
         qc.reader("hello.there") must throwA[Exception]
       }
@@ -156,7 +156,7 @@ class QueueCollectionSpec extends Specification
     "delete a queue when asked" in {
       withTempFolder {
         Time.withCurrentTimeFrozen { timeMutator =>
-          qc = new QueueCollection(folderName, timer, config, Nil)
+          qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
           qc.loadQueues()
           qc.writer("apples")
           qc.writer("oranges")
@@ -181,7 +181,7 @@ class QueueCollectionSpec extends Specification
     "fanout queues" in {
       "generate on the fly" in {
         withTempFolder {
-          qc = new QueueCollection(folderName, timer, config, Nil)
+          qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
           qc.reader("jobs+client1")
           qc.add("jobs", "job1".getBytes)
           qc.remove("jobs+client2")() mustEqual None
@@ -195,13 +195,13 @@ class QueueCollectionSpec extends Specification
 
       "preload existing" in {
         withTempFolder {
-          val setup = new QueueCollection(folderName, timer, config, Nil)
+          val setup = new QueueCollection(folderName, timer, scheduler, config, Nil)
           setup.loadQueues()
           setup.reader("jobs+client1")
           setup.reader("jobs+client2")
           setup.shutdown()
 
-          qc = new QueueCollection(folderName, timer, config, Nil)
+          qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
           qc.loadQueues()
           qc.add("jobs", "job1".getBytes)
           qc.remove("jobs+client1")() must beSomeQueueItem("job1")
@@ -216,13 +216,13 @@ class QueueCollectionSpec extends Specification
       "delete on the fly" in {
         withTempFolder {
           Time.withCurrentTimeFrozen { _ =>
-            val setup = new QueueCollection(folderName, timer, config, Nil)
+            val setup = new QueueCollection(folderName, timer, scheduler, config, Nil)
             setup.loadQueues()
             setup.reader("jobs+client1")
             setup.reader("jobs+client2")
             setup.shutdown()
 
-            qc = new QueueCollection(folderName, timer, config, Nil)
+            qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
             qc.loadQueues()
             qc.add("jobs", "job1".getBytes)
 
@@ -272,7 +272,7 @@ class QueueCollectionSpec extends Specification
             defaultReader.expireToQueue = "expired"
           }
 
-          qc = new QueueCollection(folderName, timer, config, List(expireConfig))
+          qc = new QueueCollection(folderName, timer, scheduler, config, List(expireConfig))
           qc.loadQueues()
           qc.add("jobs", "hello".getBytes, Some(1.second.fromNow))
           qc.reader("jobs").get.items mustEqual 1
