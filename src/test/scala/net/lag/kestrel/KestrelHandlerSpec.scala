@@ -28,7 +28,7 @@ import org.specs.matcher.Matcher
 import config._
 
 class FakeKestrelHandler(queues: QueueCollection, maxOpenTransactions: Int)
-  extends KestrelHandler(queues, maxOpenTransactions, "none", 0)
+  extends KestrelHandler(queues, maxOpenTransactions, () => "none", 0) with SimplePendingReads
 
 class ItemIdListSpec extends Specification with TestLogging {
   "ItemIdList" should {

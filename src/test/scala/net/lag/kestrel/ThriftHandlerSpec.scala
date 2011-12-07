@@ -19,7 +19,7 @@ package net.lag.kestrel
 import com.twitter.conversions.time._
 import com.twitter.finagle.ClientConnection
 import com.twitter.ostrich.admin.RuntimeEnvironment
-import com.twitter.util.{Future, Promise, Time}
+import com.twitter.util.{Future, Promise, Time, MockTimer}
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 import org.jboss.netty.buffer.ChannelBuffers
@@ -33,6 +33,7 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
     val queueCollection = mock[QueueCollection]
     val connection = mock[ClientConnection]
     val address = mock[InetSocketAddress]
+    val timer = new MockTimer()
 
     val item1 = "forty second songs".getBytes
     val item2 = "novox the robot".getBytes
@@ -42,7 +43,7 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
       one(connection).remoteAddress willReturn address
     }
 
-    val thriftHandler = new ThriftHandler(connection, queueCollection, 10)
+    val thriftHandler = new ThriftHandler(connection, queueCollection, 10, timer)
 
     "put" in {
       "one" in {
@@ -100,7 +101,7 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
           one(queueCollection).remove("test", None, false, false) willReturn Future(Some(qitem))
         }
 
-        thriftHandler.get("test", 1, 0, true)() mustEqual List(thrift.Item(ByteBuffer.wrap(item1), 0))
+        thriftHandler.get("test", 1, 0, 0)() mustEqual List(thrift.Item(ByteBuffer.wrap(item1), 0L))
       }
 
       "one, with timeout" in {
@@ -111,7 +112,7 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
             one(queueCollection).remove("test", Some(1.second.fromNow), false, false) willReturn Future(Some(qitem))
           }
 
-          thriftHandler.get("test", 1, 1000, true)() mustEqual List(thrift.Item(ByteBuffer.wrap(item1), 0))
+          thriftHandler.get("test", 1, 1000, 0)() mustEqual List(thrift.Item(ByteBuffer.wrap(item1), 0L))
         }
       }
 
@@ -122,12 +123,12 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
           one(queueCollection).remove("test", None, true, false) willReturn Future(Some(qitem))
         }
 
-        thriftHandler.get("test", 1, 0, false)() mustEqual List(thrift.Item(ByteBuffer.wrap(item1), 1))
+        thriftHandler.get("test", 1, 0, 500)() mustEqual List(thrift.Item(ByteBuffer.wrap(item1), 0x100000001L))
       }
 
       "multiple" in {
-        val qitem1 = QItem(Time.now, None, item1, 0)
-        val qitem2 = QItem(Time.now, None, item2, 0)
+        val qitem1 = QItem(Time.now, None, item1, 1)
+        val qitem2 = QItem(Time.now, None, item2, 2)
 
         expect {
           one(queueCollection).remove("test", None, true, false) willReturn Future(Some(qitem1))
@@ -135,10 +136,38 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
           one(queueCollection).remove("test", None, true, false) willReturn Future(None)
         }
 
-        thriftHandler.get("test", 5, 0, false)() mustEqual List(
-          thrift.Item(ByteBuffer.wrap(item1), 0),
-          thrift.Item(ByteBuffer.wrap(item2), 0)
+        thriftHandler.get("test", 5, 0, 500)() mustEqual List(
+          thrift.Item(ByteBuffer.wrap(item1), 0x100000001L),
+          thrift.Item(ByteBuffer.wrap(item2), 0x100000002L)
         )
+      }
+
+      "multiple queues" in {
+        val qitem1 = QItem(Time.now, None, item1, 1)
+        val qitem2 = QItem(Time.now, None, item2, 1)
+
+        expect {
+          one(queueCollection).remove("test", None, true, false) willReturn Future(Some(qitem1))
+          one(queueCollection).remove("spam", None, true, false) willReturn Future(Some(qitem2))
+        }
+
+        thriftHandler.get("test", 1, 0, 500)() mustEqual List(thrift.Item(ByteBuffer.wrap(item1), 0x100000001L))
+        thriftHandler.get("spam", 1, 0, 500)() mustEqual List(thrift.Item(ByteBuffer.wrap(item2), 0x200000001L))
+      }
+
+      "too many open transations" in {
+        val qitems = (1 to 10).map { i => QItem(Time.now, None, item1, i) }
+        expect {
+          qitems.foreach { qitem =>
+            one(queueCollection).remove("test", None, true, false) willReturn Future(Some(qitem))
+          }
+        }
+
+        thriftHandler.get("test", 10, 0, 500)() mustEqual (1 to 10).map { i =>
+          thrift.Item(ByteBuffer.wrap(item1), 0x100000000L + i)
+        }
+
+        thriftHandler.get("test", 10, 0, 500)() mustEqual List()
       }
     }
 
@@ -148,9 +177,9 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
         one(queueCollection).confirmRemove("test", 3)
       }
 
-      thriftHandler.handler.pendingReads.add("test", 2)
-      thriftHandler.handler.pendingReads.add("test", 3)
-      thriftHandler.confirm("test", Set(2, 3))
+      thriftHandler.handler.addPendingRead("test", 2)
+      thriftHandler.handler.addPendingRead("test", 3)
+      thriftHandler.confirm("test", Set(0x100000002L, 0x100000003L))
     }
 
     "abort" in {
@@ -159,9 +188,108 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
         one(queueCollection).unremove("test", 3)
       }
 
-      thriftHandler.handler.pendingReads.add("test", 2)
-      thriftHandler.handler.pendingReads.add("test", 3)
-      thriftHandler.abort("test", Set(2, 3))
+      thriftHandler.handler.addPendingRead("test", 2)
+      thriftHandler.handler.addPendingRead("test", 3)
+      thriftHandler.abort("test", Set(0x100000002L, 0x100000003L))
+    }
+
+    "auto-abort" in {
+      "one" in {
+        Time.withCurrentTimeFrozen { time =>
+          val qitem = QItem(Time.now, None, item1, 1)
+
+          expect {
+            one(queueCollection).remove("test", None, true, false) willReturn Future(Some(qitem))
+            one(queueCollection).unremove("test", 1)
+          }
+
+          thriftHandler.get("test", 1, 0, 500)() mustEqual List(thrift.Item(ByteBuffer.wrap(item1), 0x100000001L))
+
+          time.advance(501.milliseconds)
+          timer.tick()
+        }
+      }
+
+      "multiple" in {
+        Time.withCurrentTimeFrozen { time =>
+          val qitem1 = QItem(Time.now, None, item1, 1)
+          val qitem2 = QItem(Time.now, None, item2, 2)
+
+          expect {
+            one(queueCollection).remove("test", None, true, false) willReturn Future(Some(qitem1))
+            one(queueCollection).remove("test", None, true, false) willReturn Future(Some(qitem2))
+            one(queueCollection).remove("test", None, true, false) willReturn Future(None)
+            one(queueCollection).unremove("test", 1)
+            one(queueCollection).unremove("test", 2)
+          }
+
+          thriftHandler.get("test", 5, 0, 500)() mustEqual List(thrift.Item(ByteBuffer.wrap(item1), 0x100000001L),
+                                                                thrift.Item(ByteBuffer.wrap(item2), 0x100000002L))
+
+          time.advance(501.milliseconds)
+          timer.tick()
+        }
+      }
+
+      "cleared by manual abort" in {
+        Time.withCurrentTimeFrozen { time =>
+          val qitem = QItem(Time.now, None, item1, 1)
+
+          expect {
+            one(queueCollection).remove("test", None, true, false) willReturn Future(Some(qitem))
+            one(queueCollection).unremove("test", 1)
+          }
+
+          thriftHandler.get("test", 1, 0, 500)() mustEqual List(thrift.Item(ByteBuffer.wrap(item1), 0x100000001L))
+          thriftHandler.abort("test", Set(0x100000001L))() mustEqual 1
+
+          timer.tasks.size mustEqual 0
+        }
+      }
+
+      "cleared by confirm" in {
+        Time.withCurrentTimeFrozen { time =>
+          val qitem = QItem(Time.now, None, item1, 1)
+
+          expect {
+            one(queueCollection).remove("test", None, true, false) willReturn Future(Some(qitem))
+            one(queueCollection).confirmRemove("test", 1)
+          }
+
+          thriftHandler.get("test", 1, 0, 500)() mustEqual List(thrift.Item(ByteBuffer.wrap(item1), 0x100000001L))
+          thriftHandler.confirm("test", Set(0x100000001L))() mustEqual 1
+
+          timer.tasks.size mustEqual 0
+        }
+      }
+
+      "multiple, some confirmed" in {
+        Time.withCurrentTimeFrozen { time =>
+          val qitem1 = QItem(Time.now, None, item1, 1)
+          val qitem2 = QItem(Time.now, None, item2, 2)
+          val qitem3 = QItem(Time.now, None, item3, 3)
+
+          expect {
+            one(queueCollection).remove("test", None, true, false) willReturn Future(Some(qitem1))
+            one(queueCollection).remove("test", None, true, false) willReturn Future(Some(qitem2))
+            one(queueCollection).remove("test", None, true, false) willReturn Future(Some(qitem3))
+            one(queueCollection).remove("test", None, true, false) willReturn Future(None)
+            one(queueCollection).confirmRemove("test", 1)
+            one(queueCollection).unremove("test", 2)
+            one(queueCollection).confirmRemove("test", 3)
+          }
+
+          thriftHandler.get("test", 5, 0, 500)()
+          thriftHandler.confirm("test", Set(0x100000001L, 0x100000003L))() mustEqual 2
+
+          timer.tasks.size mustEqual 1
+
+          time.advance(501.milliseconds)
+          timer.tick()
+
+          timer.tasks.size mustEqual 0
+        }
+      }
     }
 
     "peek" in {

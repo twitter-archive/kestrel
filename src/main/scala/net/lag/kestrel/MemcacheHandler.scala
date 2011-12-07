@@ -39,7 +39,7 @@ class MemcacheHandler(
   val log = Logger.get(getClass.getName)
 
   val sessionId = Kestrel.sessionId.incrementAndGet()
-  protected val handler = new KestrelHandler(queueCollection, maxOpenReads, clientDescription, sessionId)
+  protected val handler = new KestrelHandler(queueCollection, maxOpenReads, clientDescription _, sessionId) with SimplePendingReads
   log.debug("New session %d from %s", sessionId, clientDescription)
 
   override def release() {
@@ -157,7 +157,7 @@ class MemcacheHandler(
         handler.closeRead(key)
       }
       if (opening || !closing) {
-        if (handler.pendingReads.size(key) > 0 && !peeking && !opening) {
+        if (handler.countPendingReads(key) > 0 && !peeking && !opening) {
           log.warning("Attempt to perform a non-transactional fetch with an open transaction on " +
                       " '%s' (sid %d, %s)", key, sessionId, clientDescription)
           return Future(new MemcacheResponse("ERROR") then Codec.Disconnect)
