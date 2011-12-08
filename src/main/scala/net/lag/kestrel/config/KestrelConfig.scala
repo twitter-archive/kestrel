@@ -165,7 +165,15 @@ class QueueReaderBuilder extends Config[JournaledQueueReaderConfig] {
         }
         case None => { _ => () }
       },
-      maxExpireSweep = maxExpireSweep
+      maxExpireSweep = maxExpireSweep,
+      deliveryLatency = { (reader, timing) =>
+        Stats.addMetric("delivery_latency_msec", timing.inMilliseconds.toInt)
+        Stats.addMetric("q/" + reader.fullname + "/delivery_latency_msec", timing.inMilliseconds.toInt)
+      },
+      timeoutLatency = { (reader, timing) =>
+        Stats.addMetric("get_timeout_msec", timing.inMilliseconds.toInt)
+        Stats.addMetric("q/" + reader.fullname + "/get_timeout_msec", timing.inMilliseconds.toInt)
+      }
     )
   }
 }

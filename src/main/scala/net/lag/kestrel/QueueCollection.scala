@@ -65,7 +65,10 @@ class QueueCollection(
 
   // preload any queues
   def loadQueues() {
-    Journal.getQueueNamesFromFolder(path) map { writer(_) }
+    Journal.getQueueNamesFromFolder(path) foreach { name =>
+      val w = writer(name)
+      w foreach { _.readers foreach { r => reader(r.fullname) } }
+    }
   }
 
   def queueNames: List[String] = synchronized {
@@ -85,6 +88,7 @@ class QueueCollection(
       Some(queues.get(name) getOrElse {
         // only happens when creating a queue for the first time.
         val q = buildQueue(name, name, path.getPath)
+        Stats.addGauge("q/" + name + "/journal_size")(q.journalBytes)
         queues(name) = q
         q
       })
@@ -101,12 +105,39 @@ class QueueCollection(
     val rv = writer(writerName).map { _.reader(readerName) }
     rv foreach { reader =>
       if (seenReaders.putIfAbsent(reader.fullname, reader) eq null) {
-        Stats.makeCounter("q/" + reader.fullname + "/total_items", reader.putCount)
-        Stats.makeCounter("q/" + reader.fullname + "/expired_items", reader.expiredCount)
-        Stats.makeCounter("q/" + reader.fullname + "/discarded", reader.discardedCount)
+        val prefix = "q/" + reader.fullname + "/"
+        Stats.makeCounter(prefix + "total_items", reader.putCount)
+        Stats.makeCounter(prefix + "expired_items", reader.expiredCount)
+        Stats.makeCounter(prefix + "discarded", reader.discardedCount)
+        Stats.addGauge(prefix + "items")(reader.items)
+        Stats.addGauge(prefix + "bytes")(reader.bytes)
+        Stats.addGauge(prefix + "mem_items")(reader.memoryItems)
+        Stats.addGauge(prefix + "mem_bytes")(reader.memoryBytes)
+        Stats.addGauge(prefix + "age_msec")(reader.age.inMilliseconds)
+        Stats.addGauge(prefix + "open_transactions")(reader.openItems)
+        Stats.addGauge(prefix + "waiters")(reader.waiterCount)
       }
     }
     rv
+  }
+
+  // Remove various stats related to the queue
+  def removeStats(name: String) {
+    val prefix = "q/" + name + "/"
+    Stats.removeCounter(prefix + "total_items")
+    Stats.removeCounter(prefix + "expired_items")
+    Stats.removeCounter(prefix + "discarded")
+    Stats.clearGauge(prefix + "items")
+    Stats.clearGauge(prefix + "bytes")
+    Stats.clearGauge(prefix + "journal_size")
+    Stats.clearGauge(prefix + "mem_items")
+    Stats.clearGauge(prefix + "mem_bytes")
+    Stats.clearGauge(prefix + "age_msec")
+    Stats.clearGauge(prefix + "waiters")
+    Stats.clearGauge(prefix + "open_transactions")
+    Stats.removeMetric(prefix + "set_latency_usec")
+    Stats.removeMetric(prefix + "delivery_latency_msec")
+    Stats.removeMetric(prefix + "get_timeout_msec")
   }
 
   /**
@@ -173,8 +204,10 @@ class QueueCollection(
       queues.get(name) foreach { q =>
         q.erase()
         queues -= name
+        removeStats(name)
       }
       if (name contains '+') {
+        reader(name) foreach { n => removeStats(n.fullname) }
         val (writerName, readerName) = {
           val names = name.split("\\+", 2)
           (names(0), names(1))
