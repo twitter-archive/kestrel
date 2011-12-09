@@ -198,7 +198,7 @@ class TextHandler(
       case "confirm" =>
         // confirm <queue> <count>
         if (request.args.size < 2) {
-          Future(ErrorResponse("Queue name & timeout required."))
+          Future(ErrorResponse("Queue name & count required."))
         } else {
           val queueName = request.args(0)
           val count = request.args(1).toInt
