@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-package net.lag.kestrel.load
+package net.lag.kestrel
+package load
 
 import java.net._
 import java.nio._
@@ -103,5 +104,28 @@ trait LoadTesting {
         failedConnects.incrementAndGet()
         tryHard(f)
     }
+  }
+
+  def monitorQueue(hostname: String, queueName: String) {
+    val t = new Thread("monitor-queue") {
+      override def run() {
+        val client = new TestClient(hostname, 22133)
+        client.connect()
+        while (true) {
+          val stats = client.stats()
+          val items = stats.getOrElse("queue_" + queueName + "_items", "0").toInt
+          val bytes = stats.getOrElse("queue_" + queueName + "_bytes", "0").toInt
+          val memItems = stats.getOrElse("queue_" + queueName + "_mem_items", "0").toInt
+          val memBytes = stats.getOrElse("queue_" + queueName + "_mem_bytes", "0").toInt
+          val journalBytes = stats.getOrElse("queue_" + queueName + "_logsize", "0").toInt
+          println("%s: items=%d bytes=%d mem_items=%d mem_bytes=%d journal_bytes=%d".format(
+            queueName, items, bytes, memItems, memBytes, journalBytes
+          ))
+          Thread.sleep(1000)
+        }
+      }
+    }
+    t.setDaemon(true)
+    t.start()
   }
 }

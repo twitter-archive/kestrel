@@ -29,7 +29,7 @@ import com.twitter.conversions.string._
  * many clients clamor for each one. This is similar to how queues operate in
  * some typical production environments.
  */
-object ManyClients {
+object ManyClients extends LoadTesting {
   private val LYRIC =
 "crossed off, but never forgotten\n" +
 "misplaced, but never losing hold\n" +
@@ -157,9 +157,14 @@ object ManyClients {
   var count = 100
   var clientCount = 100
   var hostname = "localhost"
+  var port = 22133
+  var queueName = "spam"
   var dropPercent = 0
   var killPercent = 0
   var useTransactions = false
+  var client: Client = MemcacheClient
+  var flushFirst = true
+  var monitor = false
 
   def usage() {
     Console.println("usage: many-clients [options]")
@@ -171,6 +176,8 @@ object ManyClients {
     Console.println("        sleep MILLISECONDS between puts (default: %d)".format(sleep))
     Console.println("    -n ITEMS")
     Console.println("        put ITEMS total items into the queue (default: %d)".format(count))
+    Console.println("    -q NAME")
+    Console.println("        use queue NAME (default: %s)".format(queueName))
     Console.println("    -c CLIENTS")
     Console.println("        use CLIENTS consumers (default: %d)".format(clientCount))
     Console.println("    -h HOSTNAME")
@@ -179,6 +186,10 @@ object ManyClients {
     Console.println("        kill PERCENT %% of clients before they can read the response (default: %d)".format(dropPercent))
     Console.println("    -x")
     Console.println("        use transactional gets")
+    Console.println("    -F")
+    Console.println("        don't flush queue(s) before the test")
+    Console.println("    -M")
+    Console.println("        monitor queue stats during the test")
   }
 
   def parseArgs(args: List[String]): Unit = args match {
@@ -191,6 +202,9 @@ object ManyClients {
       parseArgs(xs)
     case "-n" :: x :: xs =>
       count = x.toInt
+      parseArgs(xs)
+    case "-q" :: x :: xs =>
+      queueName = x
       parseArgs(xs)
     case "-c" :: x :: xs =>
       clientCount = x.toInt
@@ -205,6 +219,12 @@ object ManyClients {
     case "-x" :: xs =>
       useTransactions = true
       parseArgs(xs)
+    case "-F" :: xs =>
+      flushFirst = false
+      parseArgs(xs)
+    case "-M" :: xs =>
+      monitor = true
+      parseArgs(xs)
     case _ =>
       usage()
       System.exit(1)
@@ -215,6 +235,17 @@ object ManyClients {
     println("many-clients: %d items to %s using %d clients, kill rate %d%%, at %d msec/item".format(
       count, hostname, clientCount, killPercent, sleep))
 
+    // flush queues first
+    if (flushFirst) {
+      println("Flushing queues first.")
+      val socket = tryHard { SocketChannel.open(new InetSocketAddress(hostname, port)) }
+      send(socket, client.flush(queueName))
+      expect(socket, client.flushSuccess())
+      socket.close()
+    }
+
+    if (monitor) monitorQueue(hostname, queueName)
+
     var threadList: List[Thread] = Nil
     val startTime = System.currentTimeMillis
 
@@ -222,7 +253,7 @@ object ManyClients {
       val t = new Thread {
         override def run = {
           try {
-            getStuff(count, hostname, 22133, "spam", useTransactions, killPercent)
+            getStuff(count, hostname, port, queueName, useTransactions, killPercent)
           } catch {
             case e: Throwable =>
               e.printStackTrace()
@@ -234,9 +265,9 @@ object ManyClients {
     }
     val t = new Thread {
       override def run = {
-        val socket = SocketChannel.open(new InetSocketAddress(hostname, 22133))
+        val socket = SocketChannel.open(new InetSocketAddress(hostname, port))
         try {
-          put(sleep, socket, "spam", count)
+          put(sleep, socket, queueName, count)
         } catch {
           case e: Throwable =>
             e.printStackTrace()
