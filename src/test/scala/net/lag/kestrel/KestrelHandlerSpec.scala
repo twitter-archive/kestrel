@@ -199,7 +199,7 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
           handler.setItem("red", 0, None, "red1".getBytes)
           handler.setItem("red", 0, None, "red2".getBytes)
           handler.setItem("red", 0, None, "red3".getBytes)
-          handler.monitorUntil("red", Some(1.hour.fromNow), 2, true) { itemOption =>
+          handler.monitorUntil("red", Some(1.hour.fromNow), 2, true) { (itemOption, _) =>
             itemOption.foreach { got += _ }
           }
           got.toList.map { x => new String(x.data) } mustEqual List("red1", "red2")

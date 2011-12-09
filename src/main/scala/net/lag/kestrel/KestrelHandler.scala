@@ -106,7 +106,10 @@ trait SimplePendingReads {
   }
 
   def countPendingReads(key: String) = pendingReads.size(key)
-  def addPendingRead(key: String, xid: Int) { pendingReads.add(key, xid) }
+  def addPendingRead(key: String, xid: Int): Option[Long] = {
+    pendingReads.add(key, xid)
+    None
+  }
   def cancelAllPendingReads() = pendingReads.cancelAll()
 }
 
@@ -143,21 +146,21 @@ abstract class KestrelHandler(
   }
 
   protected def countPendingReads(key: String): Int
-  protected def addPendingRead(key: String, xid: Int): Unit
+  protected def addPendingRead(key: String, xid: Int): Option[Long]
   protected def cancelAllPendingReads(): Int
 
   // will do a continuous fetch on a queue until time runs out or read buffer is full.
-  final def monitorUntil(key: String, timeLimit: Option[Time], maxItems: Int, opening: Boolean)(f: Option[QItem] => Unit) {
+  final def monitorUntil(key: String, timeLimit: Option[Time], maxItems: Int, opening: Boolean)(f: (Option[QItem], Option[Long]) => Unit) {
     log.debug("monitor -> q=%s t=%s max=%d open=%s", key, timeLimit, maxItems, opening)
     if (maxItems == 0 || (timeLimit.isDefined && timeLimit.get <= Time.now) || countPendingReads(key) >= maxOpenReads) {
-      f(None)
+      f(None, None)
     } else {
       queues.remove(key, timeLimit, opening, false).onSuccess {
         case None =>
-          f(None)
+          f(None, None)
         case x @ Some(item) =>
-          if (opening) addPendingRead(key, item.xid)
-          f(x)
+          val xidContext = if (opening) addPendingRead(key, item.xid) else None
+          f(x, xidContext)
           monitorUntil(key, timeLimit, maxItems - 1, opening)(f)
       }
     }

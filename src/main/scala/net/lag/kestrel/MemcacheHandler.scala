@@ -183,12 +183,14 @@ class MemcacheHandler(
 
   private def monitor(key: String, timeout: Int, maxItems: Int): MemcacheResponse = {
     val channel = new LatchedChannelSource[MemcacheResponse]
-    handler.monitorUntil(key, Some(Time.now + timeout.seconds), maxItems, true) {
-      case None =>
-        channel.send(new MemcacheResponse("END"))
-        channel.close()
-      case Some(item) =>
-        channel.send(new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), Some(item.data)))
+    handler.monitorUntil(key, Some(Time.now + timeout.seconds), maxItems, true) { (itemOption, _) =>
+      itemOption match {
+        case None =>
+          channel.send(new MemcacheResponse("END"))
+          channel.close()
+        case Some(item) =>
+          channel.send(new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), Some(item.data)))
+      }
     }
     new MemcacheResponse("") then Codec.Stream(channel)
   }

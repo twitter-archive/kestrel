@@ -23,7 +23,7 @@ import com.twitter.logging.Logger
 import com.twitter.util.{Duration, Future, Promise, Timer, TimerTask}
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 import java.util.concurrent.{ConcurrentHashMap => JConcurrentHashMap}
 import org.apache.thrift.protocol.TProtocolFactory
 import scala.collection.mutable
@@ -59,14 +59,8 @@ class ConcurrentHashMap[K, V] extends JConcurrentHashMap[K, V] {
 case class QueueTransaction(val name: String, val xid: Int, var timerTask: Option[TimerTask])
 object ThriftPendingReads {
   private val reads = new ConcurrentHashMap[Long, QueueTransaction]
-  private val queueIds = new ConcurrentHashMap[String, Int]
-  private val nextQueueId = new AtomicInteger(1)
+  private val nextExternalXid = new AtomicLong(1L)
   private val sessionCounts = new ConcurrentHashMap[Int, ConcurrentHashMap[String, AtomicInteger]]()
-
-  def getExternalXid(queue: String, xid: Int) = {
-    val queueId = queueIds.getOrElseUpdate(queue, { nextQueueId.getAndIncrement })
-    (queueId.toLong << 32) | (xid.toLong & 0xFFFFFFFFL)
-  }
 
   def setTimerTask(externalXid: Long, timerTask: TimerTask) {
     Option(reads.get(externalXid)) match {
@@ -95,10 +89,11 @@ object ThriftPendingReads {
     counter(sessionId, queue, false).map { _.get }.getOrElse(0)
   }
 
-  def addPendingRead(sessionId: Int, queue: String, xid: Int) {
-    val externalXid = getExternalXid(queue, xid)
+  def addPendingRead(sessionId: Int, queue: String, xid: Int): Option[Long] = {
+    val externalXid = nextExternalXid.getAndIncrement
     reads.put(externalXid, QueueTransaction(queue, xid, None))
     counter(sessionId, queue, true).foreach { _.incrementAndGet() }
+    Some(externalXid)
   }
 
   def closePendingReads(sessionId: Int, queue: String, externalXids: Set[Long])(f: (QueueTransaction) => Unit) = {
@@ -115,6 +110,11 @@ object ThriftPendingReads {
   }
 
   def clearPendingReadCounts(sessionId: Int) { sessionCounts.remove(sessionId) }
+
+  // testing only
+  def reset() {
+    nextExternalXid.set(1L)
+  }
 }
 
 trait ThriftPendingReads {
@@ -137,7 +137,7 @@ trait ThriftPendingReads {
   }
 
   def countPendingReads(key: String) = ThriftPendingReads.countPendingReads(sessionId, key)
-  def addPendingRead(key: String, xid: Int) { ThriftPendingReads.addPendingRead(sessionId, key, xid) }
+  def addPendingRead(key: String, xid: Int) = { ThriftPendingReads.addPendingRead(sessionId, key, xid) }
 
   def cancelAllPendingReads() = {
     ThriftPendingReads.clearPendingReadCounts(sessionId)
@@ -178,17 +178,13 @@ class ThriftHandler (
     val expiry = if (timeoutMsec == 0) None else Some(timeoutMsec.milliseconds.fromNow)
     val future = new Promise[Seq[thrift.Item]]()
     val rv = new mutable.ListBuffer[thrift.Item]()
-    handler.monitorUntil(queueName, expiry, maxItems, autoAbortMsec > 0) { itemOption =>
+    handler.monitorUntil(queueName, expiry, maxItems, autoAbortMsec > 0) { (itemOption, externalXidOption) =>
       itemOption match {
         case None => {
           future.setValue(rv.toList)
         }
         case Some(item) => {
-          val externalXid = if (item.xid != 0) {
-            ThriftPendingReads.getExternalXid(queueName, item.xid)
-          } else {
-            0L
-          }
+          val externalXid = externalXidOption.getOrElse(0L)
           rv += new thrift.Item(ByteBuffer.wrap(item.data), externalXid)
         }
       }

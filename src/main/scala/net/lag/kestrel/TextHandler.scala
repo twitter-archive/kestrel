@@ -186,12 +186,14 @@ class TextHandler(
           val timeout = request.args(1).toInt.milliseconds.fromNow
           handler.closeAllReads(queueName)
           val channel = new LatchedChannelSource[TextResponse]
-          handler.monitorUntil(queueName, Some(timeout), maxOpenReads, true) {
-            case None =>
-              channel.send(ItemResponse(None))
-              channel.close()
-            case Some(item) =>
-              channel.send(ItemResponse(Some(item.data)))
+          handler.monitorUntil(queueName, Some(timeout), maxOpenReads, true) { (itemOption, _) =>
+            itemOption match {
+              case None =>
+                channel.send(ItemResponse(None))
+                channel.close()
+              case Some(item) =>
+                channel.send(ItemResponse(Some(item.data)))
+            }
           }
           Future(NoResponse then Codec.Stream(channel))
         }

@@ -39,6 +39,10 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
     val item2 = "novox the robot".getBytes
     val item3 = "danger bus".getBytes
 
+    doBefore {
+      ThriftPendingReads.reset()
+    }
+
     expect {
       one(connection).remoteAddress willReturn address
     }
@@ -123,7 +127,7 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
           one(queueCollection).remove("test", None, true, false) willReturn Future(Some(qitem))
         }
 
-        thriftHandler.get("test", 1, 0, 500)() mustEqual List(thrift.Item(ByteBuffer.wrap(item1), 0x100000001L))
+        thriftHandler.get("test", 1, 0, 500)() mustEqual List(thrift.Item(ByteBuffer.wrap(item1), 1L))
       }
 
       "multiple" in {
@@ -137,8 +141,8 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
         }
 
         thriftHandler.get("test", 5, 0, 500)() mustEqual List(
-          thrift.Item(ByteBuffer.wrap(item1), 0x100000001L),
-          thrift.Item(ByteBuffer.wrap(item2), 0x100000002L)
+          thrift.Item(ByteBuffer.wrap(item1), 1L),
+          thrift.Item(ByteBuffer.wrap(item2), 2L)
         )
       }
 
@@ -151,8 +155,8 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
           one(queueCollection).remove("spam", None, true, false) willReturn Future(Some(qitem2))
         }
 
-        thriftHandler.get("test", 1, 0, 500)() mustEqual List(thrift.Item(ByteBuffer.wrap(item1), 0x100000001L))
-        thriftHandler.get("spam", 1, 0, 500)() mustEqual List(thrift.Item(ByteBuffer.wrap(item2), 0x200000001L))
+        thriftHandler.get("test", 1, 0, 500)() mustEqual List(thrift.Item(ByteBuffer.wrap(item1), 1L))
+        thriftHandler.get("spam", 1, 0, 500)() mustEqual List(thrift.Item(ByteBuffer.wrap(item2), 2L))
       }
 
       "too many open transations" in {
@@ -164,7 +168,7 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
         }
 
         thriftHandler.get("test", 10, 0, 500)() mustEqual (1 to 10).map { i =>
-          thrift.Item(ByteBuffer.wrap(item1), 0x100000000L + i)
+          thrift.Item(ByteBuffer.wrap(item1), i.toLong)
         }
 
         thriftHandler.get("test", 10, 0, 500)() mustEqual List()
@@ -179,7 +183,7 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
 
       thriftHandler.handler.addPendingRead("test", 2)
       thriftHandler.handler.addPendingRead("test", 3)
-      thriftHandler.confirm("test", Set(0x100000002L, 0x100000003L))
+      thriftHandler.confirm("test", Set(1L, 2L))
     }
 
     "abort" in {
@@ -190,7 +194,7 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
 
       thriftHandler.handler.addPendingRead("test", 2)
       thriftHandler.handler.addPendingRead("test", 3)
-      thriftHandler.abort("test", Set(0x100000002L, 0x100000003L))
+      thriftHandler.abort("test", Set(1L, 2L))
     }
 
     "auto-abort" in {
@@ -203,7 +207,7 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
             one(queueCollection).unremove("test", 1)
           }
 
-          thriftHandler.get("test", 1, 0, 500)() mustEqual List(thrift.Item(ByteBuffer.wrap(item1), 0x100000001L))
+          thriftHandler.get("test", 1, 0, 500)() mustEqual List(thrift.Item(ByteBuffer.wrap(item1), 1L))
 
           time.advance(501.milliseconds)
           timer.tick()
@@ -223,8 +227,8 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
             one(queueCollection).unremove("test", 2)
           }
 
-          thriftHandler.get("test", 5, 0, 500)() mustEqual List(thrift.Item(ByteBuffer.wrap(item1), 0x100000001L),
-                                                                thrift.Item(ByteBuffer.wrap(item2), 0x100000002L))
+          thriftHandler.get("test", 5, 0, 500)() mustEqual List(thrift.Item(ByteBuffer.wrap(item1), 1L),
+                                                                thrift.Item(ByteBuffer.wrap(item2), 2L))
 
           time.advance(501.milliseconds)
           timer.tick()
@@ -240,8 +244,8 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
             one(queueCollection).unremove("test", 1)
           }
 
-          thriftHandler.get("test", 1, 0, 500)() mustEqual List(thrift.Item(ByteBuffer.wrap(item1), 0x100000001L))
-          thriftHandler.abort("test", Set(0x100000001L))() mustEqual 1
+          thriftHandler.get("test", 1, 0, 500)() mustEqual List(thrift.Item(ByteBuffer.wrap(item1), 1L))
+          thriftHandler.abort("test", Set(1L))() mustEqual 1
 
           timer.tasks.size mustEqual 0
         }
@@ -256,8 +260,8 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
             one(queueCollection).confirmRemove("test", 1)
           }
 
-          thriftHandler.get("test", 1, 0, 500)() mustEqual List(thrift.Item(ByteBuffer.wrap(item1), 0x100000001L))
-          thriftHandler.confirm("test", Set(0x100000001L))() mustEqual 1
+          thriftHandler.get("test", 1, 0, 500)() mustEqual List(thrift.Item(ByteBuffer.wrap(item1), 1L))
+          thriftHandler.confirm("test", Set(1L))() mustEqual 1
 
           timer.tasks.size mustEqual 0
         }
@@ -280,7 +284,7 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
           }
 
           thriftHandler.get("test", 5, 0, 500)()
-          thriftHandler.confirm("test", Set(0x100000001L, 0x100000003L))() mustEqual 2
+          thriftHandler.confirm("test", Set(1L, 3L))() mustEqual 2
 
           timer.tasks.size mustEqual 1
 
