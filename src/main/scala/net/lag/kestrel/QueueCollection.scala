@@ -68,6 +68,11 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
 
   def currentItems = queues.values.foldLeft(0L) { _ + _.length }
   def currentBytes = queues.values.foldLeft(0L) { _ + _.bytes }
+  def reservedMemoryRatio = {
+    val maxBytes = queues.values.foldLeft(0L) { _ + _.maxMemoryBytes }
+    maxBytes.toDouble / systemMaxHeapBytes.toDouble
+  }
+  lazy val systemMaxHeapBytes = Runtime.getRuntime.maxMemory
 
   def reload(newDefaultQueueConfig: QueueConfig, newQueueBuilders: List[QueueBuilder]) {
     defaultQueueConfig = newDefaultQueueConfig

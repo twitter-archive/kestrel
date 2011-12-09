@@ -22,6 +22,7 @@ import java.util.concurrent.ScheduledThreadPoolExecutor
 import scala.util.Sorting
 import com.twitter.util.{TempFolder, Time, Timer}
 import com.twitter.conversions.time._
+import com.twitter.conversions.storage._
 import com.twitter.ostrich.stats.Stats
 import org.specs.Specification
 import config._
@@ -70,6 +71,21 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
       withTempFolder {
         qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
         qc.queue("hello.there") must throwA[Exception]
+      }
+    }
+
+    "report reserved memory usage as a fraction of max heap" in {
+      withTempFolder {
+        val maxHeapBytes = config.maxMemorySize.inBytes * 4
+        qc = new QueueCollection(folderName, timer, scheduler, config, Nil) {
+          override lazy val systemMaxHeapBytes = maxHeapBytes
+        }
+
+        (1 to 5).foreach { i =>
+          qc.queue("queue" + i)
+
+          qc.reservedMemoryRatio mustEqual (i.toDouble / 4.0)
+        }
       }
     }
 

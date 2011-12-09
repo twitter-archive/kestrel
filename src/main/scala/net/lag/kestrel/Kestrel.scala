@@ -112,6 +112,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
 
     Stats.addGauge("items") { queueCollection.currentItems.toDouble }
     Stats.addGauge("bytes") { queueCollection.currentBytes.toDouble }
+    Stats.addGauge("reserved_memory_ratio") { queueCollection.reservedMemoryRatio }
 
     // netty setup:
     executor = Executors.newCachedThreadPool()

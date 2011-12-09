@@ -82,6 +82,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
 
   def length: Long = synchronized { queueLength }
   def bytes: Long = synchronized { queueSize }
+  def maxMemoryBytes: Long = synchronized { config.maxMemorySize.inBytes }
   def journalSize: Long = synchronized { journal.size }
   def journalTotalSize: Long = journal.archivedSize + journalSize
   def currentAge: Duration = synchronized { if (queueSize == 0) 0.milliseconds else _currentAge }
