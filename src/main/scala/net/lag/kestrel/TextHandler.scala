@@ -108,7 +108,7 @@ class TextHandler(
   val log = Logger.get(getClass)
 
   val sessionId = Kestrel.sessionId.incrementAndGet()
-  val handler = new KestrelHandler(queueCollection, maxOpenReads, clientDescription, sessionId)
+  val handler = new KestrelHandler(queueCollection, maxOpenReads, clientDescription _, sessionId) with SimplePendingReads
   log.debug("New text session %d from %s", sessionId, clientDescription)
 
   protected def clientDescription: String = {
@@ -186,12 +186,14 @@ class TextHandler(
           val timeout = request.args(1).toInt.milliseconds.fromNow
           handler.closeAllReads(queueName)
           val channel = new LatchedChannelSource[TextResponse]
-          handler.monitorUntil(queueName, Some(timeout), maxOpenReads, true) {
-            case None =>
-              channel.send(ItemResponse(None))
-              channel.close()
-            case Some(item) =>
-              channel.send(ItemResponse(Some(item.data)))
+          handler.monitorUntil(queueName, Some(timeout), maxOpenReads, true) { (itemOption, _) =>
+            itemOption match {
+              case None =>
+                channel.send(ItemResponse(None))
+                channel.close()
+              case Some(item) =>
+                channel.send(ItemResponse(Some(item.data)))
+            }
           }
           Future(NoResponse then Codec.Stream(channel))
         }

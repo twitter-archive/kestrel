@@ -53,7 +53,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
   private val log = Logger.get(getClass.getName)
 
   var queueCollection: QueueCollection = null
-  var timer: Timer = null
+  var timer: TTimer = null
   var memcacheService: Option[FinagleServer] = None
   var textService: Option[FinagleServer] = None
   var textAcceptor: Option[Channel] = None
@@ -96,7 +96,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
     clientTimeout.foreach { timeout => builder.readTimeout(timeout) }
     // calling build() is equivalent to calling start() in finagle.
     builder.build(connection => {
-      val handler = new ThriftHandler(connection, queueCollection, maxOpenTransactions)
+      val handler = new ThriftHandler(connection, queueCollection, maxOpenTransactions, timer)
       new ThriftFinagledService(handler, new TBinaryProtocol.Factory())
     })
   }
@@ -117,9 +117,8 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
 
     // this means no timeout will be at better granularity than 10ms.
     // FIXME: would make more sense to use the finagle Timer. but they'd have to expose it.
-    timer = new HashedWheelTimer(10, TimeUnit.MILLISECONDS)
-    queueCollection = new QueueCollection(queuePath, new FinagleTimer(timer), defaultQueueConfig,
-      builders)
+    timer = new FinagleTimer(new HashedWheelTimer(10, TimeUnit.MILLISECONDS))
+    queueCollection = new QueueCollection(queuePath, timer, defaultQueueConfig, builders)
     queueCollection.loadQueues()
 
     Stats.addGauge("items") { queueCollection.currentItems.toDouble }

@@ -72,4 +72,8 @@ class KestrelProject(info: ProjectInfo)
   lazy val packing = task { args =>
     runTask(Some("net.lag.kestrel.load.JournalPacking"), testClasspath, args).dependsOn(testCompile)
   } describedAs "Run a load test on journal packing."
+
+  lazy val leakyReader = task { args =>
+    runTask(Some("net.lag.kestrel.load.LeakyThriftReader"), testClasspath, args).dependsOn(testCompile)
+  } describedAs "Run a load test that fails to confirm some reads."
 }

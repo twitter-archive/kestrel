@@ -18,11 +18,13 @@
 package net.lag.kestrel
 
 import com.twitter.conversions.time._
-import com.twitter.finagle.{ClientConnection}
+import com.twitter.finagle.ClientConnection
 import com.twitter.logging.Logger
-import com.twitter.util.{Future, Promise}
+import com.twitter.util.{Duration, Future, Promise, Timer, TimerTask}
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
+import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
+import java.util.concurrent.{ConcurrentHashMap => JConcurrentHashMap}
 import org.apache.thrift.protocol.TProtocolFactory
 import scala.collection.mutable
 import scala.collection.Set
@@ -36,15 +38,123 @@ class ThriftFinagledService(val handler: ThriftHandler, override val protocolFac
   }
 }
 
+class ConcurrentHashMap[K, V] extends JConcurrentHashMap[K, V] {
+  def getOrElseUpdate(key: K, op: => V): V = {
+    Option(get(key)) match {
+      case Some(value) => value
+      case None =>
+        // We may invoke op and discard the result if another
+        // thread has set a value for key since our call to get
+        val newValue = op
+        val existingValue = putIfAbsent(key, newValue)
+        if (existingValue != null) {
+          existingValue // lost the race, discarding newValue
+        } else {
+          newValue // expect newValue now in the map
+        }
+    }
+  }
+}
+
+case class QueueTransaction(val name: String, val xid: Int, var timerTask: Option[TimerTask])
+object ThriftPendingReads {
+  private val reads = new ConcurrentHashMap[Long, QueueTransaction]
+  private val nextExternalXid = new AtomicLong(1L)
+  private val sessionCounts = new ConcurrentHashMap[Int, ConcurrentHashMap[String, AtomicInteger]]()
+
+  def setTimerTask(externalXid: Long, timerTask: TimerTask) {
+    Option(reads.get(externalXid)) match {
+      case Some(queueTransaction) => queueTransaction.timerTask = Some(timerTask)
+      case None =>
+    }
+  }
+
+  private[this] def counter(sessionId: Int, queue: String, createIfAbsent: Boolean): Option[AtomicInteger] = {
+    val queueCountMap = if (createIfAbsent) {
+      sessionCounts.getOrElseUpdate(sessionId, { new ConcurrentHashMap[String, AtomicInteger] })
+    } else {
+      val map = sessionCounts.get(sessionId)
+      if (map eq null) return None
+      map
+    }
+
+    Option(queueCountMap.get(queue)) match {
+      case s@Some(_) => s
+      case None if createIfAbsent => Some(queueCountMap.getOrElseUpdate(queue, { new AtomicInteger(0) }))
+      case None => None
+    }
+  }
+
+  def countPendingReads(sessionId: Int, queue: String): Int = {
+    counter(sessionId, queue, false).map { _.get }.getOrElse(0)
+  }
+
+  def addPendingRead(sessionId: Int, queue: String, xid: Int): Option[Long] = {
+    val externalXid = nextExternalXid.getAndIncrement
+    reads.put(externalXid, QueueTransaction(queue, xid, None))
+    counter(sessionId, queue, true).foreach { _.incrementAndGet() }
+    Some(externalXid)
+  }
+
+  def closePendingReads(sessionId: Int, queue: String, externalXids: Set[Long])(f: (QueueTransaction) => Unit) = {
+    var size = 0
+    externalXids.foreach { externalXid =>
+      Option(reads.remove(externalXid)).map { queueTrans =>
+        queueTrans.timerTask.foreach { _.cancel() }
+        f(queueTrans)
+        counter(sessionId, queue, false).foreach { _.decrementAndGet() }
+        size += 1
+      }
+    }
+    size
+  }
+
+  def clearPendingReadCounts(sessionId: Int) { sessionCounts.remove(sessionId) }
+
+  // testing only
+  def reset() {
+    nextExternalXid.set(1L)
+  }
+}
+
+trait ThriftPendingReads {
+  def queues: QueueCollection
+  protected def log: Logger
+  def sessionId: Int
+  def clientDescription: () => String
+
+
+  def closeReads(key: String, xids: Set[Long]): Int = {
+    ThriftPendingReads.closePendingReads(sessionId, key, xids) { queueTrans =>
+      queues.confirmRemove(queueTrans.name, queueTrans.xid)
+    }
+  }
+
+  def abortReads(key: String, xids: Set[Long]): Int = {
+    ThriftPendingReads.closePendingReads(sessionId, key, xids) { queueTrans =>
+      queues.unremove(queueTrans.name, queueTrans.xid)
+    }
+  }
+
+  def countPendingReads(key: String) = ThriftPendingReads.countPendingReads(sessionId, key)
+  def addPendingRead(key: String, xid: Int) = { ThriftPendingReads.addPendingRead(sessionId, key, xid) }
+
+  def cancelAllPendingReads() = {
+    ThriftPendingReads.clearPendingReadCounts(sessionId)
+    0 // we do not abort open reads on connection close
+  }
+}
+
 class ThriftHandler (
   connection: ClientConnection,
   queueCollection: QueueCollection,
-  maxOpenReads: Int
+  maxOpenReads: Int,
+  timer: Timer
 ) extends thrift.Kestrel.FutureIface {
   val log = Logger.get(getClass.getName)
 
   val sessionId = Kestrel.sessionId.incrementAndGet()
-  val handler = new KestrelHandler(queueCollection, maxOpenReads, clientDescription, sessionId)
+  val handler = new KestrelHandler(queueCollection, maxOpenReads, clientDescription _, sessionId) with ThriftPendingReads
   log.debug("New thrift session %d from %s", sessionId, clientDescription)
 
   protected def clientDescription: String = {
@@ -64,29 +174,43 @@ class ThriftHandler (
     Future(count)
   }
 
-  def get(queueName: String, maxItems: Int, timeoutMsec: Int, autoConfirm: Boolean): Future[Seq[thrift.Item]] = {
+  def get(queueName: String, maxItems: Int, timeoutMsec: Int, autoAbortMsec: Int): Future[Seq[thrift.Item]] = {
     val expiry = if (timeoutMsec == 0) None else Some(timeoutMsec.milliseconds.fromNow)
     val future = new Promise[Seq[thrift.Item]]()
     val rv = new mutable.ListBuffer[thrift.Item]()
-    handler.monitorUntil(queueName, expiry, maxItems, !autoConfirm) { itemOption =>
+    handler.monitorUntil(queueName, expiry, maxItems, autoAbortMsec > 0) { (itemOption, externalXidOption) =>
       itemOption match {
         case None => {
           future.setValue(rv.toList)
         }
         case Some(item) => {
-          rv += new thrift.Item(ByteBuffer.wrap(item.data), item.xid)
+          val externalXid = externalXidOption.getOrElse(0L)
+          rv += new thrift.Item(ByteBuffer.wrap(item.data), externalXid)
         }
       }
     }
-    future
+
+    if (autoAbortMsec > 0) {
+      val autoAbortTimeout = autoAbortMsec.milliseconds
+      future onSuccess { items =>
+        items.foreach { item =>
+          val task = timer.schedule(autoAbortTimeout.fromNow) {
+            handler.abortReads(queueName, Set(item.xid))
+          }
+          ThriftPendingReads.setTimerTask(item.xid, task)
+        }
+      }
+    } else {
+      future
+    }
   }
 
   def confirm(queueName: String, xids: Set[Long]): Future[Int] = {
-    Future(handler.closeReads(queueName, xids.map { _.toInt }))
+    Future(handler.closeReads(queueName, xids))
   }
 
   def abort(queueName: String, xids: Set[Long]): Future[Int] = {
-    Future(handler.abortReads(queueName, xids.map { _.toInt }))
+    Future(handler.abortReads(queueName, xids))
   }
 
   def peek(queueName: String): Future[thrift.QueueInfo] = {
