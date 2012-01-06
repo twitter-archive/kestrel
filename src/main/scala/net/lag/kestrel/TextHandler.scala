@@ -83,18 +83,24 @@ case class ItemResponse(data: Option[Array[Byte]]) extends TextResponse {
       TextResponse.NO_ITEM
     }
   }
+
+  override def toString = "<ItemResponse: %s>".format(data.map { _.toString })
 }
+
 case class ErrorResponse(message: String) extends TextResponse {
   def toBuffer = Some(ChannelBuffers.wrappedBuffer(("-" + message + "\n").getBytes("ascii")))
+  override def toString = "<ErrorResponse: %s>".format(message)
 }
 case class CountResponse(count: Long) extends TextResponse {
   def toBuffer = Some(ChannelBuffers.wrappedBuffer(("+" + count.toString + "\n").getBytes("ascii")))
+  override def toString = "<CountResponse: %s>".format(count)
 }
-case object NoResponse extends TextResponse {
+case class NoResponse() extends TextResponse {
   def toBuffer = None
 }
 case class StringResponse(message: String) extends TextResponse {
   def toBuffer = Some(ChannelBuffers.wrappedBuffer((":" + message + "\n").getBytes("ascii")))
+  override def toString = "<StringResponse: %s>".format(message)
 }
 
 /**
@@ -193,7 +199,7 @@ class TextHandler(
             case Some(item) =>
               channel.send(ItemResponse(Some(item.data)))
           }
-          Future(NoResponse then Codec.Stream(channel))
+          Future(new NoResponse() then Codec.Stream(channel))
         }
       case "confirm" =>
         // confirm <queue> <count>
