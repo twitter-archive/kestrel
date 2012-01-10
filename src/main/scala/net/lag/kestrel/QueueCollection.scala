@@ -18,7 +18,7 @@
 package net.lag.kestrel
 
 import java.io.File
-import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, ScheduledExecutorService}
+import java.util.concurrent.{CountDownLatch, ScheduledExecutorService}
 import scala.collection.mutable
 import com.twitter.conversions.time._
 import com.twitter.libkestrel._
@@ -77,6 +77,11 @@ class QueueCollection(
 
   def currentItems = queues.values.foldLeft(0L) { _ + _.items }
   def currentBytes = queues.values.foldLeft(0L) { _ + _.bytes }
+  def reservedMemoryRatio = {
+    val maxBytes = queues.values.foldLeft(0L) { _ + _.readers.foldLeft(0L) { _ + _.readerConfig.maxMemorySize.inBytes } }
+    maxBytes.toDouble / systemMaxHeapBytes.toDouble
+  }
+  lazy val systemMaxHeapBytes = Runtime.getRuntime.maxMemory
 
   /**
    * Get a named queue, creating it if necessary.

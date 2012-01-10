@@ -39,7 +39,7 @@ class MemcacheHandler(
   val log = Logger.get(getClass.getName)
 
   val sessionId = Kestrel.sessionId.incrementAndGet()
-  protected val handler = new KestrelHandler(queueCollection, maxOpenReads, clientDescription, sessionId)
+  protected val handler = new KestrelHandler(queueCollection, maxOpenReads, clientDescription _, sessionId) with SimplePendingReads
   log.debug("New session %d from %s", sessionId, clientDescription)
 
   override def release() {
@@ -156,7 +156,7 @@ class MemcacheHandler(
         handler.closeRead(key)
       }
       if (opening || !closing) {
-        if (handler.pendingReads.size(key) > 0 && !peeking && !opening) {
+        if (handler.countPendingReads(key) > 0 && !peeking && !opening) {
           log.warning("Attempt to perform a non-transactional fetch with an open transaction on " +
                       " '%s' (sid %d, %s)", key, sessionId, clientDescription)
           return Future(new MemcacheResponse("ERROR") then Codec.Disconnect)
@@ -182,11 +182,13 @@ class MemcacheHandler(
 
   private def monitor(key: String, timeout: Int, maxItems: Int): MemcacheResponse = {
     val channel = new LatchedChannelSource[MemcacheResponse]
-    handler.monitorUntil(key, Some(Time.now + timeout.seconds), maxItems, true) {
-      case None =>
-        channel.send(new MemcacheResponse("END") then Codec.EndStream)
-      case Some(item) =>
-        channel.send(new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), Some(item.data)))
+    handler.monitorUntil(key, Some(Time.now + timeout.seconds), maxItems, true) { (itemOption, _) =>
+      itemOption match {
+        case None =>
+          channel.send(new MemcacheResponse("END") then Codec.EndStream)
+        case Some(item) =>
+          channel.send(new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), Some(item.data)))
+      }
     }
     new MemcacheResponse("") then Codec.Stream(channel)
   }
@@ -199,6 +201,7 @@ class MemcacheHandler(
     report += (("curr_items", queueCollection.currentItems.toString))
     report += (("total_items", Stats.getCounter("total_items")().toString))
     report += (("bytes", queueCollection.currentBytes.toString))
+    report += (("reservered_memory_ratio", "%.3f".format(queueCollection.reservedMemoryRatio)))
     report += (("curr_connections", Kestrel.sessions.get().toString))
     report += (("total_connections", Stats.getCounter("total_connections")().toString))
     report += (("cmd_get", Stats.getCounter("cmd_get")().toString))

@@ -30,19 +30,11 @@ import scala.collection.Set
 class TooManyOpenReadsException extends Exception("Too many open reads.")
 object TooManyOpenReadsException extends TooManyOpenReadsException
 
-/**
- * Common implementations of kestrel commands that don't depend on which protocol you're using.
- */
-class KestrelHandler(
-  val queues: QueueCollection,
-  val maxOpenReads: Int,
-  clientDescription: => String,
-  sessionId: Int
-) {
-  private val log = Logger.get(getClass.getName)
-
-  val finished = new AtomicBoolean(false)
-  @volatile var waitingFor: Option[Future[Option[QueueItem]]] = None
+trait SimplePendingReads {
+  def queues: QueueCollection
+  protected def log: Logger
+  def sessionId: Int
+  def clientDescription: () => String
 
   object pendingReads {
     private val reads = new mutable.HashMap[String, ItemIdList] {
@@ -74,24 +66,6 @@ class KestrelHandler(
       }
       count
     }
-  }
-
-  Kestrel.sessions.incrementAndGet()
-  Stats.incr("total_connections")
-
-  // called exactly once by finagle when the session ends.
-  def finish() {
-    abortAnyOpenRead()
-    waitingFor.foreach { w =>
-      w.cancel()
-      Stats.incr("cmd_get_timeout_dropped")
-    }
-    log.debug("End of session %d", sessionId)
-    Kestrel.sessions.decrementAndGet()
-  }
-
-  def flushAllQueues() {
-    queues.queueNames.foreach { qName => queues.flush(qName) }
   }
 
   // returns true if a read was actually aborted.
@@ -144,26 +118,72 @@ class KestrelHandler(
     xids.size
   }
 
+  def countPendingReads(key: String) = pendingReads.size(key)
+
+  def addPendingRead(key: String, xid: Long): Option[Long] = {
+    pendingReads.add(key, xid)
+    None
+  }
+
+  def cancelAllPendingReads() = pendingReads.cancelAll()
+}
+
+/**
+ * Common implementations of kestrel commands that don't depend on which protocol you're using.
+ */
+abstract class KestrelHandler(
+  val queues: QueueCollection,
+  val maxOpenReads: Int,
+  val clientDescription: () => String,
+  val sessionId: Int
+) {
+  protected val log = Logger.get(getClass.getName)
+
+  val finished = new AtomicBoolean(false)
+  @volatile var waitingFor: Option[Future[Option[QueueItem]]] = None
+
+  Kestrel.sessions.incrementAndGet()
+  Stats.incr("total_connections")
+
+  // called exactly once by finagle when the session ends.
+  def finish() {
+    abortAnyOpenRead()
+    waitingFor.foreach { w =>
+      w.cancel()
+      Stats.incr("cmd_get_timeout_dropped")
+    }
+    log.debug("End of session %d", sessionId)
+    Kestrel.sessions.decrementAndGet()
+  }
+
+  def flushAllQueues() {
+    queues.queueNames.foreach { qName => queues.flush(qName) }
+  }
+
+  protected def countPendingReads(key: String): Int
+  protected def addPendingRead(key: String, xid: Long): Option[Long]
+  protected def cancelAllPendingReads(): Int
+
   // will do a continuous fetch on a queue until time runs out or read buffer is full.
-  final def monitorUntil(key: String, timeLimit: Option[Time], maxItems: Int, opening: Boolean)(f: Option[QueueItem] => Unit) {
+  final def monitorUntil(key: String, timeLimit: Option[Time], maxItems: Int, opening: Boolean)(f: (Option[QueueItem], Option[Long]) => Unit) {
     log.debug("monitor -> q=%s t=%s max=%d open=%s", key, timeLimit, maxItems, opening)
-    if (maxItems == 0 || (timeLimit.isDefined && timeLimit.get <= Time.now) || pendingReads.size(key) >= maxOpenReads) {
-      log.debug("monitor <- max=%s timeLimit=%s opened=%s", maxItems, timeLimit, pendingReads.size(key))
-      f(None)
+    if (maxItems == 0 || (timeLimit.isDefined && timeLimit.get <= Time.now) || countPendingReads(key) >= maxOpenReads) {
+      log.debug("monitor <- max=%s timeLimit=%s opened=%s", maxItems, timeLimit, countPendingReads(key))
+      f(None, None)
     } else {
       queues.remove(key, timeLimit, opening, false) onSuccess {
         case None =>
-          f(None)
+          f(None, None)
         case x @ Some(item) =>
-          if (opening) pendingReads.add(key, item.id)
-          f(x)
+          val xidContext = if (opening) addPendingRead(key, item.id) else None
+          f(x, xidContext)
           monitorUntil(key, timeLimit, maxItems - 1, opening)(f)
       }
     }
   }
 
   def getItem(key: String, timeout: Option[Time], opening: Boolean, peeking: Boolean): Future[Option[QueueItem]] = {
-    if (opening && pendingReads.size(key) >= maxOpenReads) {
+    if (opening && countPendingReads(key) >= maxOpenReads) {
       log.warning("Attempt to open too many reads on '%s' (sid %d, %s)", key, sessionId,
                   clientDescription)
       throw TooManyOpenReadsException
@@ -182,7 +202,7 @@ class KestrelHandler(
       waitingFor = None
       itemOption.foreach { item =>
         log.debug("get <- %s", item)
-        if (opening) pendingReads.add(key, item.id)
+        if (opening) addPendingRead(key, item.id)
       }
       itemOption
     }
@@ -194,7 +214,7 @@ class KestrelHandler(
   }
 
   def abortAnyOpenRead() {
-    Stats.incr("cmd_get_open_dropped", pendingReads.cancelAll())
+    Stats.incr("cmd_get_open_dropped", cancelAllPendingReads())
   }
 
   def setItem(key: String, flags: Int, expiry: Option[Time], data: Array[Byte]) = {

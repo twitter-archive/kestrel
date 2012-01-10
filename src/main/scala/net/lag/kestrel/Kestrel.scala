@@ -38,14 +38,14 @@ import org.apache.thrift.protocol._
 import com.twitter.finagle.thrift._
 import config._
 
+import com.twitter.finagle.{ClientConnection, Codec => FinagleCodec, Service => FinagleService}
 import com.twitter.finagle.builder.{ServerBuilder, Server => FinagleServer}
 import com.twitter.finagle.stats.OstrichStatsReceiver
 import com.twitter.finagle.util.{Timer => FinagleTimer}
 import com.twitter.libkestrel._
-import com.twitter.util.Future
 import com.twitter.naggati.Codec
 import com.twitter.naggati.codec.{MemcacheResponse, MemcacheRequest, MemcacheCodec}
-import com.twitter.finagle.{ClientConnection, Codec => FinagleCodec, Service => FinagleService}
+import com.twitter.util.Future
 
 class Kestrel(defaultQueueBuilder: QueueBuilder, queueBuilders: Seq[QueueBuilder],
               listenAddress: String, memcacheListenPort: Option[Int], textListenPort: Option[Int],
@@ -100,7 +100,7 @@ class Kestrel(defaultQueueBuilder: QueueBuilder, queueBuilders: Seq[QueueBuilder
     clientTimeout.foreach { timeout => builder = builder.readTimeout(timeout) }
     // calling build() is equivalent to calling start() in finagle.
     builder.build(connection => {
-      val handler = new ThriftHandler(connection, queueCollection, maxOpenTransactions)
+      val handler = new ThriftHandler(connection, queueCollection, maxOpenTransactions, new FinagleTimer(timer))
       new ThriftFinagledService(handler, new TBinaryProtocol.Factory())
     })
   }
@@ -138,6 +138,7 @@ class Kestrel(defaultQueueBuilder: QueueBuilder, queueBuilders: Seq[QueueBuilder
 
     Stats.addGauge("items") { queueCollection.currentItems.toDouble }
     Stats.addGauge("bytes") { queueCollection.currentBytes.toDouble }
+    Stats.addGauge("reserved_memory_ratio") { queueCollection.reservedMemoryRatio }
 
     // finagle setup:
     val memcachePipelineFactoryCodec = finagledCodec[MemcacheRequest, MemcacheResponse] {

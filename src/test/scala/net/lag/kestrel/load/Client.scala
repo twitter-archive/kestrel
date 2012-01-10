@@ -186,7 +186,7 @@ object ThriftClient extends Client {
   def monitor(queueName: String, timeoutMsec: Int, maxItems: Int) = {
     withProtocol { p =>
       p.writeMessageBegin(new TMessage("get", TMessageType.CALL, 0))
-      (new thrift.Kestrel.get_args(queueName, maxItems, timeoutMsec, true)).write(p)
+      (new thrift.Kestrel.get_args(queueName, maxItems, timeoutMsec, 0)).write(p)
     }
   }
 

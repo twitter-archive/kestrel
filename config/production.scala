@@ -20,7 +20,7 @@ new KestrelConfig {
 
   // default queue settings:
   default.journalSize = 16.megabytes
-  default.syncJournal = 20.milliseconds
+  default.syncJournal = 100.milliseconds
   default.defaultReader.maxMemorySize = 128.megabytes
 
   admin.httpPort = 2223

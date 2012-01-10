@@ -54,12 +54,17 @@ service Kestrel {
    * `max_items` have been fetched, or the timeout occurs. If the timeout
    * occurs, this call may return from zero to `max_items` items.
    *
-   * If `auto_confirm` is true (the default), the fetched items will behave
+   * If `auto_abort_msec` is 0 (the default), the fetched items will behave
    * as if a `confirm` call has been made for them already: they will be
    * permanently removed from the queue. The `xid` field in each `Item` will
-   * be zero.
+   * be zero. Otherwise, the client must call `confirm` with the same `xid`
+   * before `auto_abort_msec` milliseconds have elapsed or the item will be
+   * re-enqueued (as if `abort` had been called).
+   *
+   * If you exceed the maxmimum open reads for a connection, `get` will stop
+   * returning items until 1 or more is confirmed or aborted.
    */
-  list<Item> get(1: string queue_name, 2: i32 max_items, 3: i32 timeout_msec = 0, 4: bool auto_confirm = 1)
+  list<Item> get(1: string queue_name, 2: i32 max_items, 3: i32 timeout_msec = 0, 4: i32 auto_abort_msec = 0)
 
   /*
    * Confirm a set of items previously fetched with `get`.
