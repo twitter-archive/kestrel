@@ -18,7 +18,7 @@
 package net.lag.kestrel
 
 import java.io.File
-import java.util.concurrent.CountDownLatch
+import java.util.concurrent.{CountDownLatch, ScheduledExecutorService}
 import scala.collection.mutable
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
@@ -28,7 +28,7 @@ import config._
 
 class InaccessibleQueuePath extends Exception("Inaccessible queue path: Must be a directory and writable")
 
-class QueueCollection(queueFolder: String, timer: Timer,
+class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: ScheduledExecutorService,
                       @volatile private var defaultQueueConfig: QueueConfig,
                       @volatile var queueBuilders: List[QueueBuilder]) {
   private val log = Logger.get(getClass.getName)
@@ -54,7 +54,7 @@ class QueueCollection(queueFolder: String, timer: Timer,
     }
     val config = queueConfigMap.getOrElse(name, defaultQueueConfig)
     log.info("Setting up queue %s: %s", realName, config)
-    new PersistentQueue(realName, path, config, timer, Some(this.apply))
+    new PersistentQueue(realName, path, config, timer, journalSyncScheduler, Some(this.apply))
   }
 
   // preload any queues
@@ -68,6 +68,11 @@ class QueueCollection(queueFolder: String, timer: Timer,
 
   def currentItems = queues.values.foldLeft(0L) { _ + _.length }
   def currentBytes = queues.values.foldLeft(0L) { _ + _.bytes }
+  def reservedMemoryRatio = {
+    val maxBytes = queues.values.foldLeft(0L) { _ + _.maxMemoryBytes }
+    maxBytes.toDouble / systemMaxHeapBytes.toDouble
+  }
+  lazy val systemMaxHeapBytes = Runtime.getRuntime.maxMemory
 
   def reload(newDefaultQueueConfig: QueueConfig, newQueueBuilders: List[QueueBuilder]) {
     defaultQueueConfig = newDefaultQueueConfig

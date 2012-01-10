@@ -107,7 +107,7 @@ class MemcacheHandler(
         Future(dumpStats(request.line.drop(1)))
       case "delete" =>
         handler.delete(request.line(1))
-        Future(new MemcacheResponse("END"))
+        Future(new MemcacheResponse("DELETED"))
       case "flush_expired" =>
         Future(new MemcacheResponse(handler.flushExpired(request.line(1)).toString))
       case "flush_all_expired" =>
@@ -203,6 +203,7 @@ class MemcacheHandler(
     report += (("curr_items", queueCollection.currentItems.toString))
     report += (("total_items", Stats.getCounter("total_items")().toString))
     report += (("bytes", queueCollection.currentBytes.toString))
+    report += (("reservered_memory_ratio", "%.3f".format(queueCollection.reservedMemoryRatio)))
     report += (("curr_connections", Kestrel.sessions.get().toString))
     report += (("total_connections", Stats.getCounter("total_connections")().toString))
     report += (("cmd_get", Stats.getCounter("cmd_get")().toString))
