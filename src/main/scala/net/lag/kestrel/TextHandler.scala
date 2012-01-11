@@ -195,8 +195,7 @@ class TextHandler(
           handler.monitorUntil(queueName, Some(timeout), maxOpenReads, true) { (itemOption, _) =>
             itemOption match {
               case None =>
-                channel.send(ItemResponse(None))
-                channel.close()
+                channel.send(ItemResponse(None) then Codec.EndStream)
               case Some(item) =>
                 channel.send(ItemResponse(Some(item.data)))
             }

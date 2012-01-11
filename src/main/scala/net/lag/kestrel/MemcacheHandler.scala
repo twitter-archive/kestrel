@@ -201,7 +201,7 @@ class MemcacheHandler(
     report += (("curr_items", queueCollection.currentItems.toString))
     report += (("total_items", Stats.getCounter("total_items")().toString))
     report += (("bytes", queueCollection.currentBytes.toString))
-    report += (("reservered_memory_ratio", "%.3f".format(queueCollection.reservedMemoryRatio)))
+    report += (("reserved_memory_ratio", "%.3f".format(queueCollection.reservedMemoryRatio)))
     report += (("curr_connections", Kestrel.sessions.get().toString))
     report += (("total_connections", Stats.getCounter("total_connections")().toString))
     report += (("cmd_get", Stats.getCounter("cmd_get")().toString))
