@@ -8,7 +8,7 @@ offered by actors and the JVM.
 
 Each server handles a set of reliable, ordered message queues. When you put a
 cluster of these servers together, *with no cross communication*, and pick a
-server at random whenever you do a `set` or `get`, you end up with a reliable,
+server at random whenever you do a `put` or `get`, you end up with a reliable,
 *loosely ordered* message queue.
 
 In many situations, loose ordering is sufficient. Dropping the requirement on
@@ -37,9 +37,10 @@ Kestrel is:
 
 - small
 
-    Currently about 2500 lines of scala, because it relies on Netty (a rough
-    equivalent of Danger's ziggurat or Ruby's EventMachine) -- and because
-    Scala is extremely expressive.
+    Currently about 2500 lines of scala, because it relies on
+    [finagle](https://github.com/twitter.finagle) and
+    [netty](http://www.jboss.org/netty), and because Scala is extremely
+    expressive.
 
 - durable
 
@@ -68,8 +69,8 @@ Kestrel is not:
 - transactional
 
     This is not a database. Item ownership is transferred with acknowledgement,
-    but kestrel does not support grouping multiple operations into an atomic
-    unit.
+    so no jobs will be lost, but kestrel does not support grouping multiple
+    operations into an atomic unit.
 
 
 Downloading it
@@ -136,31 +137,32 @@ guide). Scala docs for the config variables are
 [here](http://robey.github.com/kestrel/doc/main/api/net/lag/kestrel/config/KestrelConfig.html).
 
 
-Performance
------------
+Performance / Load
+------------------
 
-Several performance tests are included. To run them, first start up a kestrel instance
-locally.
+Several performance/load tests are included. To run them, first start up a
+kestrel instance locally.
 
     $ sbt clean update package-dist
     $ ./dist/kestrel-VERSION/scripts/devel.sh
+
+All of the tests can be run from scripts in `scripts/load/`, and all of them
+respond to "`--help`".
 
 ## Put-many
 
 This test just spams a kestrel server with "put" operations, to see how
 quickly it can absorb and journal them.
 
-A sample run on a 2010 MacBook Pro:
+A sample run (on a Mac laptop):
 
     $ ./dist/kestrel/scripts/load/put-many -n 100000
-    Put 100000 items of 1024 bytes to localhost:22133 in 1 queues named spam
-      using 100 clients.
-    Finished in 6137 msec (61.4 usec/put throughput).
-    Transactions: min=71.00; max=472279.00 472160.00 469075.00;
-      median=3355.00; average=5494.69 usec
-    Transactions distribution: 5.00%=485.00 10.00%=1123.00 25.00%=2358.00
-      50.00%=3355.00 75.00%=4921.00 90.00%=7291.00 95.00%=9729.00
-      99.00%=50929.00 99.90%=384638.00 99.99%=467899.00
+    Flushing queues first.
+    Put 100000 items of 1024 bytes in bursts of 1 to localhost:22133 in 1
+      queues named spam using 100 clients.
+    Finished in 4410 msec (44.1 usec/put throughput).
+    Distribution in usec: min=0 max=3858 p50=1 p75=1 p90=1 p95=2 p99=10
+      p999=316 p9999=472
 
 ## Many-clients
 
@@ -169,14 +171,15 @@ consumers fighting for each item. It usually takes exactly as long as the
 number of items times the delay, but is useful as a validation test to make
 sure kestrel works as advertised without blowing up.
 
-A sample run on a 2010 MacBook Pro:
+A sample run:
 
-    $ ./dist/kestrel/scripts/load/many-clients 
-    many-clients: 100 items to localhost using 100 clients, kill rate 0%,
-      at 100 msec/item
-    Received 100 items in 11046 msec.
+    $ ./dist/kestrel/scripts/load/many-clients
+    many-clients: 100 items to localhost using 100 clients, kill rate 0%, at
+      100 msec/item
+    Flushing queues first.
+    Received 100 items in 12138 msec.
 
-This test always takes about 11 seconds -- it's a load test instead of a
+This test always takes over 10 seconds -- it's a load test instead of a
 speed test.
 
 ## Flood
@@ -184,12 +187,14 @@ speed test.
 This test starts up one producer and one consumer, and just floods items
 through kestrel as fast as it can.
 
-A sample run on a 2010 MacBook Pro:
+A sample run:
 
     $ ./dist/kestrel/scripts/load/flood
-    flood: 1 threads each sending 10000 items of 1kB through spam
-    Finished in 1563 msec (156.3 usec/put throughput).
-    Consumer(s) spun 0 times in misses.
+    Flushing queues first.
+    flood: producers=1 consumers=1 each sending 10000 items of 1kB through
+      spam
+    Finished in 884 msec (88.4 usec/put throughput).
+    Consumer(s) spun 6 times in misses.
 
 ## Packing
 
@@ -197,26 +202,31 @@ This test starts up one producer and one consumer, seeds the queue with a
 bunch of items to cause it to fall behind, then does cycles of flooding items
 through the queue, separated by pauses. It's meant to test kestrel's behavior
 with a queue that's fallen behind and *stays* behind indefinitely, to make
-sure the journal files are packed periodically without affecting performance
-too badly.
+sure the journal files are cleaned up periodically without affecting
+performance too badly.
 
-A sample run on a 2010 MacBook Pro:
+(In the past, journals were "packed" as they fell behind. These days, the old
+journal files are just erased as their items are read, so the name of this
+test is historic and a bit misleading.)
+
+A sample run:
 
     $ ./dist/kestrel/scripts/load/packing -c 10 -q small
     packing: 25000 items of 1kB with 1 second pauses
+    Flushing queues first.
     Wrote 25000 items starting at 0.
     cycle: 1
     Wrote 25000 items starting at 25000.
-    Read 25000 items in 5279 msec. Consumer spun 0 times in misses.
+    Read 25000 items in 2862 msec. Consumer spun 0 times in misses.
     cycle: 2
     Wrote 25000 items starting at 50000.
-    Read 25000 items in 4931 msec. Consumer spun 0 times in misses.
+    Read 25000 items in 2426 msec. Consumer spun 0 times in misses.
     ...
     cycle: 10
     Wrote 25000 items starting at 250000.
-    Read 25000 items in 5304 msec. Consumer spun 0 times in misses.
-    Read 25000 items in 3370 msec. Consumer spun 0 times in misses.
+    Read 25000 items in 2464 msec. Consumer spun 0 times in misses.
+    Read 25000 items in 2181 msec. Consumer spun 0 times in misses.
 
-You can see the journals being packed in the kestrel log. Like
+You can see the journals being built and erased in the kestrel log. Like
 "many-clients", this test is a load test instead of a speed test.
 
