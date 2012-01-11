@@ -17,34 +17,27 @@
 
 package net.lag.kestrel
 
+import com.twitter.concurrent.NamedPoolThreadFactory
+import com.twitter.conversions.time._
+import com.twitter.finagle.{ClientConnection, Codec => FinagleCodec, Service => FinagleService}
+import com.twitter.finagle.builder.{Server, ServerBuilder}
+import com.twitter.finagle.stats.OstrichStatsReceiver
+import com.twitter.finagle.thrift._
+import com.twitter.finagle.util.{Timer => FinagleTimer}
+import com.twitter.logging.Logger
+import com.twitter.naggati.Codec
+import com.twitter.naggati.codec.{MemcacheResponse, MemcacheRequest, MemcacheCodec}
+import com.twitter.ostrich.admin.{PeriodicBackgroundProcess, RuntimeEnvironment, Service,
+  ServiceTracker}
+import com.twitter.ostrich.stats.Stats
+import com.twitter.util.{Duration, Eval, Future, Time}
 import java.net.InetSocketAddress
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicInteger
+import org.apache.thrift.protocol.TBinaryProtocol
+import org.jboss.netty.util.{HashedWheelTimer, Timer => NettyTimer}
 import scala.collection.{immutable, mutable}
-import com.twitter.concurrent.NamedPoolThreadFactory
-import com.twitter.conversions.time._
-import com.twitter.finagle.builder.Server
-import com.twitter.logging.Logger
-import com.twitter.ostrich.admin.{PeriodicBackgroundProcess, RuntimeEnvironment, Service, ServiceTracker}
-import com.twitter.ostrich.stats.Stats
-import com.twitter.util.{Duration, Eval, Time, Timer => TTimer, TimerTask => TTimerTask}
-import org.jboss.netty.bootstrap.ServerBootstrap
-import org.jboss.netty.channel.{Channel, ChannelFactory, ChannelPipelineFactory, Channels}
-import org.jboss.netty.channel.group.DefaultChannelGroup
-import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory
-import org.jboss.netty.util.{HashedWheelTimer, Timeout, Timer, TimerTask}
-import org.apache.thrift.protocol._
-import com.twitter.finagle.thrift._
 import config._
-
-import com.twitter.finagle.builder.{ServerBuilder, Server => FinagleServer}
-import com.twitter.finagle.stats.OstrichStatsReceiver
-import com.twitter.finagle.util.{Timer => FinagleTimer}
-import com.twitter.util.Future
-import com.twitter.naggati.Codec
-import com.twitter.naggati.codec.{MemcacheResponse, MemcacheRequest, MemcacheCodec}
-import com.twitter.finagle.{ClientConnection, Codec => FinagleCodec, Service => FinagleService}
-import com.twitter.finagle.util.{Timer => FTimer}
 
 class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
               listenAddress: String, memcacheListenPort: Option[Int], textListenPort: Option[Int],
@@ -55,12 +48,11 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
   private val log = Logger.get(getClass.getName)
 
   var queueCollection: QueueCollection = null
-  var timer: Timer = null
+  var timer: NettyTimer = null
   var journalSyncScheduler: ScheduledExecutorService = null
-  var memcacheService: Option[FinagleServer] = None
-  var textService: Option[FinagleServer] = None
-  var textAcceptor: Option[Channel] = None
-  var thriftService: Option[FinagleServer] = None
+  var memcacheService: Option[Server] = None
+  var textService: Option[Server] = None
+  var thriftService: Option[Server] = None
 
   def thriftCodec = ThriftServerFramedCodec()
 
@@ -74,14 +66,14 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
     name: String,
     port: Int,
     finagleCodec: FinagleCodec[Req, Resp]
-  )(factory: ClientConnection => FinagleService[Req, Resp]): FinagleServer = {
+  )(factory: ClientConnection => FinagleService[Req, Resp]): Server = {
     val address = new InetSocketAddress(listenAddress, port)
-    val builder = ServerBuilder()
+    var builder = ServerBuilder()
       .codec(finagleCodec)
       .name(name)
       .reportTo(new OstrichStatsReceiver)
       .bindTo(address)
-    clientTimeout.foreach { timeout => builder.readTimeout(timeout) }
+    clientTimeout.foreach { timeout => builder = builder.readTimeout(timeout) }
     // calling build() is equivalent to calling start() in finagle.
     builder.build(factory)
   }
@@ -89,17 +81,18 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
   def startThriftServer(
     name: String,
     port: Int
-  ): FinagleServer = {
+  ): Server = {
     val address = new InetSocketAddress(listenAddress, port)
-    val builder = ServerBuilder()
+    var builder = ServerBuilder()
       .codec(thriftCodec)
       .name(name)
       .reportTo(new OstrichStatsReceiver)
       .bindTo(address)
-    clientTimeout.foreach { timeout => builder.readTimeout(timeout) }
+    clientTimeout.foreach { timeout => builder = builder.readTimeout(timeout) }
     // calling build() is equivalent to calling start() in finagle.
     builder.build(connection => {
-      val handler = new ThriftHandler(connection, queueCollection, maxOpenTransactions, new FTimer(timer))
+      val handler = new ThriftHandler(connection, queueCollection, maxOpenTransactions,
+        new FinagleTimer(timer))
       new ThriftFinagledService(handler, new TBinaryProtocol.Factory())
     })
   }
@@ -131,7 +124,8 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
           }
         })
 
-    queueCollection = new QueueCollection(queuePath, new FTimer(timer), journalSyncScheduler, defaultQueueConfig, builders)
+    queueCollection = new QueueCollection(queuePath, new FinagleTimer(timer), journalSyncScheduler,
+      defaultQueueConfig, builders)
     queueCollection.loadQueues()
 
     Stats.addGauge("items") { queueCollection.currentItems.toDouble }

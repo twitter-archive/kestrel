@@ -90,7 +90,7 @@ case class ErrorResponse(message: String) extends TextResponse {
 case class CountResponse(count: Long) extends TextResponse {
   def toBuffer = Some(ChannelBuffers.wrappedBuffer(("+" + count.toString + "\n").getBytes("ascii")))
 }
-case object NoResponse extends TextResponse {
+case class NoResponse() extends TextResponse {
   def toBuffer = None
 }
 case class StringResponse(message: String) extends TextResponse {
@@ -189,18 +189,17 @@ class TextHandler(
           handler.monitorUntil(queueName, Some(timeout), maxOpenReads, true) { (itemOption, _) =>
             itemOption match {
               case None =>
-                channel.send(ItemResponse(None))
-                channel.close()
+                channel.send(ItemResponse(None) then Codec.EndStream)
               case Some(item) =>
                 channel.send(ItemResponse(Some(item.data)))
             }
           }
-          Future(NoResponse then Codec.Stream(channel))
+          Future(new NoResponse() then Codec.Stream(channel))
         }
       case "confirm" =>
         // confirm <queue> <count>
         if (request.args.size < 2) {
-          Future(ErrorResponse("Queue name & timeout required."))
+          Future(ErrorResponse("Queue name & count required."))
         } else {
           val queueName = request.args(0)
           val count = request.args(1).toInt
