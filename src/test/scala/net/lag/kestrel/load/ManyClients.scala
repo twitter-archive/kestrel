@@ -92,7 +92,7 @@ object ManyClients extends LoadTesting {
 
     while (got.get < count) {
       if (socket eq null) {
-        socket = SocketChannel.open(new InetSocketAddress(hostname, port))
+        socket = tryHard { SocketChannel.open(new InetSocketAddress(hostname, port)) }
       }
       req.rewind
       while (req.position < req.limit) {
@@ -182,6 +182,8 @@ object ManyClients extends LoadTesting {
     Console.println("        use CLIENTS consumers (default: %d)".format(clientCount))
     Console.println("    -h HOSTNAME")
     Console.println("        use kestrel on HOSTNAME (default: %s)".format(hostname))
+    Console.println("    -p PORT")
+    Console.println("        use kestrel on PORT (default: %d)".format(port))
     Console.println("    -k PERCENT")
     Console.println("        kill PERCENT %% of clients before they can read the response (default: %d)".format(dropPercent))
     Console.println("    -x")
@@ -211,6 +213,9 @@ object ManyClients extends LoadTesting {
       parseArgs(xs)
     case "-h" :: x :: xs =>
       hostname = x
+      parseArgs(xs)
+    case "-p" :: x :: xs =>
+      port = x.toInt
       parseArgs(xs)
     case "-k" :: x :: xs =>
       killPercent = x.toInt

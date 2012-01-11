@@ -31,16 +31,14 @@ import com.twitter.conversions.string._
 object JournalPacking extends LoadTesting {
   private val DATA = "x" * 1024
 
-  private val EXPECT = ByteBuffer.wrap("STORED\r\n".getBytes)
-
   def put(socket: SocketChannel, queueName: String, n: Int, data: String, counter: Long) = {
-    val buffer = ByteBuffer.allocate(EXPECT.limit)
+    val expect = client.putSuccess()
+    val buffer = ByteBuffer.allocate(expect.limit)
 
     for (i <- 0 until n) {
       val counterData = ((counter + i).toString + data).substring(0, data.length)
-      val spam = ByteBuffer.wrap(("set " + queueName + " 0 0 " + data.length + "\r\n" + counterData + "\r\n").getBytes)
-      send(socket, spam)
-      if (receive(socket, buffer) != EXPECT) {
+      send(socket, client.put(queueName, counterData))
+      if (receive(socket, buffer) != expect) {
         // the "!" is important.
         throw new Exception("Unexpected response at " + i + "!")
       }
@@ -48,14 +46,14 @@ object JournalPacking extends LoadTesting {
   }
 
   def get(socket: SocketChannel, queueName: String, n: Int, data: String, counter: Long): Int = {
-    val req = ByteBuffer.wrap(("get " + queueName + (if (useTransactions) "/t=1000/close/open" else "") + "\r\n").getBytes)
-    val expectEnd = ByteBuffer.wrap("END\r\n".getBytes)
+    val req = client.get(queueName, Some(1000))
+    val expectEnd = client.getEmpty(queueName)
 
     var count = 0
     var misses = 0
     while (count < n) {
       val counterData = ((counter + count).toString + data).substring(0, data.length)
-      val expectData = ByteBuffer.wrap(("VALUE " + queueName + " 0 " + data.length + "\r\n" + counterData + "\r\nEND\r\n").getBytes)
+      val expectData = client.getSuccess(queueName, counterData)
       val expecting = new Expecting(expectEnd, expectData)
       send(socket, req)
       val got = expecting(socket)
@@ -65,9 +63,6 @@ object JournalPacking extends LoadTesting {
       } else {
         count += 1
       }
-    }
-    if (useTransactions) {
-      send(socket, ByteBuffer.wrap(("get " + queueName + "/close\r\n").getBytes))
     }
     misses
   }
@@ -82,7 +77,7 @@ object JournalPacking extends LoadTesting {
       producerThread = new Thread {
         override def run() = {
           val socket = SocketChannel.open(new InetSocketAddress(hostname, 22133))
-          put(socket, qName, totalItems, data, writeCounter)
+          put(socket, queueName, totalItems, data, writeCounter)
         }
       }
 
@@ -95,7 +90,7 @@ object JournalPacking extends LoadTesting {
       consumerThread = new Thread {
         override def run() = {
           val socket = SocketChannel.open(new InetSocketAddress(hostname, 22133))
-          misses = get(socket, qName, totalItems, data, readCounter)
+          misses = get(socket, queueName, totalItems, data, readCounter)
         }
       }
       consumerThread.start()
@@ -114,15 +109,18 @@ object JournalPacking extends LoadTesting {
     }
   }
 
-  var qName = "spam"
+  var queueName = "spam"
   var totalItems = 25000
   var kilobytes = 1
   var pause = 1
   var cycles = 100
   var readCounter: Long = 0
   var writeCounter: Long = 0
-  var useTransactions: Boolean = false
   var hostname = "localhost"
+  var port = 22133
+  var client: Client = MemcacheClient
+  var flushFirst = true
+  var monitor = false
 
   def usage() {
     Console.println("usage: packing [options]")
@@ -131,7 +129,7 @@ object JournalPacking extends LoadTesting {
     Console.println()
     Console.println("options:")
     Console.println("    -q NAME")
-    Console.println("        use named queue (default: %s)".format(qName))
+    Console.println("        use named queue (default: %s)".format(queueName))
     Console.println("    -n ITEMS")
     Console.println("        put ITEMS items into the queue (default: %d)".format(totalItems))
     Console.println("    -k KILOBYTES")
@@ -140,10 +138,16 @@ object JournalPacking extends LoadTesting {
     Console.println("        pause SECONDS between cycles (default: %d)".format(pause))
     Console.println("    -c CYCLES")
     Console.println("        do read/writes CYCLES times (default: %d)".format(cycles))
-    Console.println("    -x")
-    Console.println("        use transactions when fetching")
     Console.println("    -h HOSTNAME")
     Console.println("        use kestrel on HOSTNAME (default: %s)".format(hostname))
+    Console.println("    -p PORT")
+    Console.println("        use kestrel on PORT (default: %d)".format(port))
+    Console.println("    --thrift")
+    Console.println("        use thrift RPC")
+    Console.println("    -F")
+    Console.println("        don't flush queue(s) before the test")
+    Console.println("    -M")
+    Console.println("        monitor queue stats during the test")
   }
 
   @tailrec
@@ -153,7 +157,7 @@ object JournalPacking extends LoadTesting {
       usage()
       System.exit(0)
     case "-q" :: x :: xs =>
-      qName = x
+      queueName = x
       parseArgs(xs)
     case "-n" :: x :: xs =>
       totalItems = x.toInt
@@ -167,11 +171,21 @@ object JournalPacking extends LoadTesting {
     case "-c" :: x :: xs =>
       cycles = x.toInt
       parseArgs(xs)
-    case "-x" :: xs =>
-      useTransactions = true
-      parseArgs(xs)
     case "-h" :: x :: xs =>
       hostname = x
+      parseArgs(xs)
+    case "-p" :: x :: xs =>
+      port = x.toInt
+      parseArgs(xs)
+    case "--thrift" :: xs =>
+      client = ThriftClient
+      port = 2229
+      parseArgs(xs)
+    case "-F" :: xs =>
+      flushFirst = false
+      parseArgs(xs)
+    case "-M" :: xs =>
+      monitor = true
       parseArgs(xs)
     case _ =>
       usage()
@@ -182,6 +196,18 @@ object JournalPacking extends LoadTesting {
     parseArgs(args.toList)
 
     println("packing: " + totalItems + " items of " + kilobytes + "kB with " + pause + " second pauses")
+
+    // flush queues first
+    if (flushFirst) {
+      println("Flushing queues first.")
+      val socket = tryHard { SocketChannel.open(new InetSocketAddress(hostname, port)) }
+      send(socket, client.flush(queueName))
+      expect(socket, client.flushSuccess())
+      socket.close()
+    }
+
+    if (monitor) monitorQueue(hostname, queueName)
+
     cycle(false, true)
     for (i <- 0 until cycles) {
       println("cycle: " + (i + 1))
