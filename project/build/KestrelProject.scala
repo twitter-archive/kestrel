@@ -10,7 +10,7 @@ class KestrelProject(info: ProjectInfo)
   with PublishSite
 {
   val ostrich = "com.twitter" % "ostrich" % "4.10.0"
-  val naggati = "com.twitter" % "naggati" % "2.2.0" intransitive() // allow custom netty
+  val naggati = "com.twitter" % "naggati" % "2.2.1" intransitive() // allow custom netty
   val netty   = "org.jboss.netty" % "netty" % "3.2.6.Final"
   val finagle = "com.twitter" % "finagle-core" % "1.9.5"
   val finagle_ostrich4 = "com.twitter" % "finagle-ostrich4" % "1.9.5"

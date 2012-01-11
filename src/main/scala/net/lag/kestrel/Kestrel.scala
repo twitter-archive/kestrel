@@ -44,7 +44,6 @@ import com.twitter.util.Future
 import com.twitter.naggati.Codec
 import com.twitter.naggati.codec.{MemcacheResponse, MemcacheRequest, MemcacheCodec}
 import com.twitter.finagle.{ClientConnection, Codec => FinagleCodec, Service => FinagleService}
-import com.twitter.finagle.util.{Timer => FTimer}
 
 class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
               listenAddress: String, memcacheListenPort: Option[Int], textListenPort: Option[Int],
@@ -76,12 +75,12 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
     finagleCodec: FinagleCodec[Req, Resp]
   )(factory: ClientConnection => FinagleService[Req, Resp]): FinagleServer = {
     val address = new InetSocketAddress(listenAddress, port)
-    val builder = ServerBuilder()
+    var builder = ServerBuilder()
       .codec(finagleCodec)
       .name(name)
       .reportTo(new OstrichStatsReceiver)
       .bindTo(address)
-    clientTimeout.foreach { timeout => builder.readTimeout(timeout) }
+    clientTimeout.foreach { timeout => builder = builder.readTimeout(timeout) }
     // calling build() is equivalent to calling start() in finagle.
     builder.build(factory)
   }
@@ -91,15 +90,16 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
     port: Int
   ): FinagleServer = {
     val address = new InetSocketAddress(listenAddress, port)
-    val builder = ServerBuilder()
+    var builder = ServerBuilder()
       .codec(thriftCodec)
       .name(name)
       .reportTo(new OstrichStatsReceiver)
       .bindTo(address)
-    clientTimeout.foreach { timeout => builder.readTimeout(timeout) }
+    clientTimeout.foreach { timeout => builder = builder.readTimeout(timeout) }
     // calling build() is equivalent to calling start() in finagle.
     builder.build(connection => {
-      val handler = new ThriftHandler(connection, queueCollection, maxOpenTransactions, new FTimer(timer))
+      val handler = new ThriftHandler(connection, queueCollection, maxOpenTransactions,
+        new FinagleTimer(timer))
       new ThriftFinagledService(handler, new TBinaryProtocol.Factory())
     })
   }

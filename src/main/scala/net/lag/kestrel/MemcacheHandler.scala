@@ -186,8 +186,7 @@ class MemcacheHandler(
     handler.monitorUntil(key, Some(Time.now + timeout.seconds), maxItems, true) { (itemOption, _) =>
       itemOption match {
         case None =>
-          channel.send(new MemcacheResponse("END"))
-          channel.close()
+          channel.send(new MemcacheResponse("END") then Codec.EndStream)
         case Some(item) =>
           channel.send(new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), Some(item.data)))
       }
