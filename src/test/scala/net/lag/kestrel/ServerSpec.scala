@@ -278,7 +278,7 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
         client.startGet("slow/open/t=3599000")
         Thread.sleep(10)
         client.disconnect()
-        kestrel.queueCollection.reader("slow").get.waiterCount mustEqual 0
+        kestrel.queueCollection.reader("slow").get.waiterCount must eventually(be_==(0))
       }
     }
 
