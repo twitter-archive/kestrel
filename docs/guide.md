@@ -74,13 +74,15 @@ syntax is described here:
 
 Per-queue configuration is documented here:
 [QueueBuilder.html](http://robey.github.com/kestrel/doc/main/api/net/lag/kestrel/config/QueueBuilder.html)
+and here:
+[QueueReaderBuilder.html](http://robey.github.com/kestrel/doc/main/api/net/lag/kestrel/config/QueueReaderBuilder.html)
 
 Starting in kestrel 3.0, fanout queues (see the "Fanout Queues" section below)
 can be configured independently. A side effect of this is that the reader &
 writer side of a queue are now configured separately too. The writer
 configuration relates mostly to the journal (which all readers share), and is
-in `JournaledQueueConfig`. The reader configuration relates to the in-memory
-representation of a queue, and is in `JournaledQueueReaderConfig`.
+in `QueueBuilder`. The reader configuration relates to the in-memory
+representation of a queue, and is in `QueueReaderBuilder`.
 
 
 Full queues
@@ -191,11 +193,11 @@ A fanout queue can be deleted to stop it from receiving new items. Deleting
 all fanout queues will cause the default reader to be re-created, effectively
 allowing you to read from the queue named "orders" again.
 
-All of the configuration in `JournaledQueueReaderConfig` can be specified for
-each reader independently (which is new in 3.0), so for example, one fanout
-reader could be limited to keeping only the most recent 100 items, while
-another could enforce a default expiration time. The `defaultReaderConfig` is
-used for all readers that aren't configured by name.
+All of the configuration in `QueueReaderBuilder` can be specified for each
+reader independently (which is new in 3.0), so for example, one fanout reader
+could be limited to keeping only the most recent 100 items, while another
+could enforce a default expiration time. The `defaultReader` is used for all
+readers that aren't configured by name.
 
 
 Memcache commands
