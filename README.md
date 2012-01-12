@@ -220,3 +220,22 @@ A sample run on a 2010 MacBook Pro:
 You can see the journals being packed in the kestrel log. Like
 "many-clients", this test is a load test instead of a speed test.
 
+## Leaky-reader
+
+This test starts a producer and several consumers, with the consumers
+occasionally "forgetting" to acknowledge an item that they've read. It
+verifies that the un-acknowledged items are eventually handed off to another
+consmer.
+
+A sample run:
+
+    $ ./dist/kestrel/scripts/load/leaky-reader -n 100000 -t 10
+    leaky-reader: 10 threads each sending 100000 items through spam
+    Flushing queues first.
+    1000
+    2000
+    100000
+    Finished in 40220 msec (40.2 usec/put throughput).
+    Completed all reads
+
+Like "many-clients", it's just a load test.
