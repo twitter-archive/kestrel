@@ -169,6 +169,13 @@ Existing items are not copied over. A fanout queue can be deleted to stop it
 from receiving new items.
 
 
+Thrift protocol
+---------------
+
+The thrift protocol is documented in the thrift file here:
+[kestrel.thrift](https://github.com/robey/kestrel/blob/master/src/main/thrift/kestrel.thrift)
+
+
 Memcache commands
 -----------------
 

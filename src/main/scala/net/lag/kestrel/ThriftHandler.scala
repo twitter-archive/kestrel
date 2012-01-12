@@ -195,9 +195,9 @@ class ThriftHandler (
       future onSuccess { items =>
         items.foreach { item =>
           val task = timer.schedule(autoAbortTimeout.fromNow) {
-            handler.abortReads(queueName, Set(item.xid))
+            handler.abortReads(queueName, Set(item.id))
           }
-          ThriftPendingReads.setTimerTask(item.xid, task)
+          ThriftPendingReads.setTimerTask(item.id, task)
         }
       }
     } else {
@@ -205,12 +205,12 @@ class ThriftHandler (
     }
   }
 
-  def confirm(queueName: String, xids: Set[Long]): Future[Int] = {
-    Future(handler.closeReads(queueName, xids))
+  def confirm(queueName: String, ids: Set[Long]): Future[Int] = {
+    Future(handler.closeReads(queueName, ids))
   }
 
-  def abort(queueName: String, xids: Set[Long]): Future[Int] = {
-    Future(handler.abortReads(queueName, xids))
+  def abort(queueName: String, ids: Set[Long]): Future[Int] = {
+    Future(handler.abortReads(queueName, ids))
   }
 
   def peek(queueName: String): Future[thrift.QueueInfo] = {

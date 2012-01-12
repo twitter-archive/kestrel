@@ -5,7 +5,7 @@ struct Item {
   1: binary data
 
   /* transaction ID, to be used in the `confirm` call */
-  2: i64 xid
+  2: i64 id
 }
 
 struct QueueInfo {
@@ -54,10 +54,13 @@ service Kestrel {
    * `max_items` have been fetched, or the timeout occurs. If the timeout
    * occurs, this call may return from zero to `max_items` items.
    *
+   * With no timeout, the call will block until `max_items` have been
+   * fetched.
+   *
    * If `auto_abort_msec` is 0 (the default), the fetched items will behave
    * as if a `confirm` call has been made for them already: they will be
-   * permanently removed from the queue. The `xid` field in each `Item` will
-   * be zero. Otherwise, the client must call `confirm` with the same `xid`
+   * permanently removed from the queue. The `id` field in each `Item` will
+   * be zero. Otherwise, the client must call `confirm` with the same `id`
    * before `auto_abort_msec` milliseconds have elapsed or the item will be
    * re-enqueued (as if `abort` had been called).
    *
@@ -70,13 +73,13 @@ service Kestrel {
    * Confirm a set of items previously fetched with `get`.
    * Returns the count of confirmed items.
    */
-  i32 confirm(1: string queue_name, 2: set<i64> xids)
+  i32 confirm(1: string queue_name, 2: set<i64> ids)
 
   /*
    * Abort a set of items previously fetched with `get`.
    * Returns the count of aborted items.
    */
-  i32 abort(1: string queue_name, 2: set<i64> xids)
+  i32 abort(1: string queue_name, 2: set<i64> ids)
 
   /*
    * Return some basic info about a queue, and the head item if there is
