@@ -48,7 +48,7 @@ class QueueCollection(
     throw new InaccessibleQueuePath
   }
 
-  private[this] val queueBuilderMap = queueBuilders.map { b => (b.name, b) }.toMap
+  private[this] val queueBuilderMap = queueBuilders.map { b => (b.name.value, b) }.toMap
   private[this] val queues = new mutable.HashMap[String, JournaledQueue]
   private[this] val seenReaders = new ConcurrentHashMap[String, JournaledQueue#Reader]
   @volatile private var shuttingDown = false

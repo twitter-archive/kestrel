@@ -34,7 +34,7 @@ class QueueBuilder extends Config[JournaledQueueConfig] {
   /**
    * Name of the queue being configured.
    */
-  var name: String = null//required[String]
+  var name = required[String]
 
   /**
    * Set a hard limit on the number of bytes a single queued item can contain.
@@ -85,8 +85,9 @@ class QueueBuilder extends Config[JournaledQueueConfig] {
   var readers: Map[String, QueueReaderBuilder] = Map()
 
   def apply() = {
+    validate()
     JournaledQueueConfig(
-      name = name,
+      name = name.value,
       maxItemSize = maxItemSize,
       journaled = journaled,
       journalSize = journalSize,

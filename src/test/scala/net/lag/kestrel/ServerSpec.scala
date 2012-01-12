@@ -38,18 +38,20 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
   Kestrel.runtime = runtime
 
   def makeServer() {
-    val defaultConfig = new QueueBuilder {
-      name = "test"
-      journalSize = 16.kilobytes
+    val config = new KestrelConfig {
+      default.journalSize = 16.kilobytes
+      queues = new QueueBuilder {
+        name = "weather_updates"
+        defaultReader.maxItems = 1500000
+        defaultReader.maxAge = 1800.seconds
+      }
+      listenAddress = "localhost"
+      memcacheListenPort = PORT
+      textListenPort = None
+      thriftListenPort = None
+      queuePath = canonicalFolderName
     }
-    // make a queue specify max_items and max_age
-    val weatherUpdatesConfig = new QueueBuilder {
-      name = "weather_updates"
-      defaultReader.maxItems = 1500000
-      defaultReader.maxAge = 1800.seconds
-    }
-    kestrel = new Kestrel(defaultConfig, List(weatherUpdatesConfig), "localhost",
-      Some(PORT), None, None, canonicalFolderName, None, None, 1)
+    kestrel = config(runtime)
     kestrel.start()
   }
 
