@@ -64,19 +64,19 @@ object LeakyThriftReader {
       val bytes = new Array[Byte](item.data.remaining)
       item.data.get(bytes)
       val bitId = java.lang.Integer.parseInt(new String(bytes), 16)
-      if (verbose) println("%s: open %016x = %08x".format(Time.now, item.xid, bitId))
-      Some((item.xid, bitId))
+      if (verbose) println("%s: open %016x = %08x".format(Time.now, item.id, bitId))
+      Some((item.id, bitId))
     }
   }
 
-  def confirm(client: Kestrel.FinagledClient, queueName: String, xid: Long) = {
-    if (verbose) println("%s: confirm %016x".format(Time.now, xid))
-    val confirmRequest = client.confirm(queueName, Set(xid))
+  def confirm(client: Kestrel.FinagledClient, queueName: String, id: Long) = {
+    if (verbose) println("%s: confirm %016x".format(Time.now, id))
+    val confirmRequest = client.confirm(queueName, Set(id))
     val confirmedCount = confirmRequest()
 
     if (confirmedCount != 1) {
-        // the "!" is important.
-        throw new Exception("Unexpected number of items confirmed: %d (%d)!".format(confirmedCount, xid))
+      // the "!" is important.
+      throw new Exception("Unexpected number of items confirmed: %d (%d)!".format(confirmedCount, id))
     }
   }
 

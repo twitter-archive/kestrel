@@ -200,6 +200,13 @@ could enforce a default expiration time. The `defaultReader` is used for all
 readers that aren't configured by name.
 
 
+Thrift protocol
+---------------
+
+The thrift protocol is documented in the thrift file here:
+[kestrel.thrift](https://github.com/robey/kestrel/blob/master/src/main/thrift/kestrel.thrift)
+
+
 Memcache commands
 -----------------
 
