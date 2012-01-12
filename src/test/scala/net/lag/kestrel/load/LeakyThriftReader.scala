@@ -33,8 +33,8 @@ import org.apache.thrift.protocol.TBinaryProtocol
 
 /**
   * Have one producer generate data at a steady rate, while several clients
-  * consume them with reliaable reads, occassionally failing to confirm an
-  * item.  Verify that all items are eventually read with confirmation.
+  * consume them with reliable reads, occassionally failing to confirm an
+  * item. Verify that all items are eventually read with confirmation.
   */
 object LeakyThriftReader {
   private val DATA_TEMPLATE = "%08x"
@@ -91,7 +91,7 @@ object LeakyThriftReader {
 
   def usage() {
     Console.println("usage: leaky-reader [options]")
-    Console.println("    spin up a producer and consumer and deliver N items through kestrel, with occassional drops")
+    Console.println("    spin up a producer and consumer(s) and deliver N items through kestrel, with occassional drops")
     Console.println()
     Console.println("options:")
     Console.println("    -n ITEMS")
@@ -101,7 +101,7 @@ object LeakyThriftReader {
     Console.println("    -q NAME")
     Console.println("        use queue NAME (default: %s)".format(queueName))
     Console.println("    -t THREADS")
-    Console.println("        create THREADS producers and THREADS consumers (default: %d)".format(threads))
+    Console.println("        create THREADS consumers (default: %d)".format(threads))
     Console.println("    -h HOSTNAME")
     Console.println("        use kestrel on HOSTNAME (default: %s)".format(hostname))
     Console.println("    -p PORT")
@@ -159,14 +159,14 @@ object LeakyThriftReader {
 
     val client = new Kestrel.FinagledClient(service, new TBinaryProtocol.Factory())
 
+    println("leaky-reader: %d threads each sending %d items through %s".format(
+      threads, totalItems, queueName))
+
     // flush queues first
     if (flushFirst) {
       println("Flushing queues first.")
       client.flushQueue(queueName)()
     }
-
-    println("leaky-reader: %d threads each sending %d items through %s".format(
-      threads, totalItems, queueName))
 
     val producerThread = new Thread {
       override def run = {
@@ -222,5 +222,4 @@ object LeakyThriftReader {
       println("Completed all reads")
     }
   }
-
 }
