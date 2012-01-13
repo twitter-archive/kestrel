@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-package net.lag.kestrel.load
+package net.lag.kestrel
+package load
 
 import java.net._
 import java.nio._
@@ -79,6 +80,7 @@ object Flood extends LoadTesting {
         if (got == expectNoData) {
           // nothing yet. poop. :(
           misses += 1
+          leftInCycle = 0
         } else {
           count += 1
           leftInCycle -= 1
@@ -110,10 +112,12 @@ object Flood extends LoadTesting {
   var rollup = 1
   var hostname = "localhost"
   var port = 22133
-  var threads = 1
+  var producerThreadCount = 1
+  var consumerThreadCount = 1
   var blockingReads = false
   var client: Client = MemcacheClient
   var flushFirst = true
+  var monitor = false
 
   def usage() {
     Console.println("usage: flood [options]")
@@ -128,8 +132,10 @@ object Flood extends LoadTesting {
     Console.println("        use queue NAME (default: %s)".format(queueName))
     Console.println("    -P ITEMS")
     Console.println("        prefill ITEMS items into the queue before the test (default: %d)".format(prefillItems))
-    Console.println("    -t THREADS")
-    Console.println("        create THREADS producers and THREADS consumers (default: %d)".format(threads))
+    Console.println("    -R THREADS")
+    Console.println("        create THREADS producers (default: %d)".format(producerThreadCount))
+    Console.println("    -C THREADS")
+    Console.println("        create THREADS consumers (default: %d)".format(consumerThreadCount))
     Console.println("    -r ITEMS")
     Console.println("        roll up ITEMS items into a single multi-put request (default: %d)".format(rollup))
     Console.println("    -h HOSTNAME")
@@ -142,6 +148,8 @@ object Flood extends LoadTesting {
     Console.println("        use thrift RPC")
     Console.println("    -F")
     Console.println("        don't flush queue(s) before the test")
+    Console.println("    -M")
+    Console.println("        monitor queue stats during the test")
   }
 
   def parseArgs(args: List[String]): Unit = args match {
@@ -161,8 +169,11 @@ object Flood extends LoadTesting {
     case "-P" :: x :: xs =>
       prefillItems = x.toInt
       parseArgs(xs)
-    case "-t" :: x :: xs =>
-      threads = x.toInt
+    case "-R" :: x :: xs =>
+      producerThreadCount = x.toInt
+      parseArgs(xs)
+    case "-C" :: x :: xs =>
+      consumerThreadCount = x.toInt
       parseArgs(xs)
     case "-r" :: x :: xs =>
       rollup = x.toInt
@@ -182,6 +193,9 @@ object Flood extends LoadTesting {
       parseArgs(xs)
     case "-F" :: xs =>
       flushFirst = false
+      parseArgs(xs)
+    case "-M" :: xs =>
+      monitor = true
       parseArgs(xs)
     case _ =>
       usage()
@@ -207,37 +221,43 @@ object Flood extends LoadTesting {
       put(socket, queueName, prefillItems, data)
     }
 
-    println("flood: %d threads each sending %d items of %dkB through %s".format(
-      threads, totalItems, kilobytes, queueName))
+    println("flood: producers=%d consumers=%d each sending %d items of %dkB through %s".format(
+      producerThreadCount, consumerThreadCount, totalItems, kilobytes, queueName))
 
     var threadList: List[Thread] = Nil
     val misses = new AtomicInteger
 
-    for (i <- 0 until threads) {
+    for (i <- 0 until producerThreadCount) {
       val producerThread = new Thread {
         override def run = {
           val socket = tryHard { SocketChannel.open(new InetSocketAddress(hostname, port)) }
           put(socket, queueName, totalItems, data)
         }
       }
+      threadList = producerThread :: threadList
+    }
 
+    for (i <- 0 until consumerThreadCount) {
       val consumerThread = new Thread {
         override def run = {
           val socket = tryHard { SocketChannel.open(new InetSocketAddress(hostname, port)) }
           val n = get(socket, queueName, totalItems, data)
+          socket.close()
           misses.addAndGet(n)
         }
       }
 
-      threadList = producerThread :: consumerThread :: threadList
+      threadList = consumerThread :: threadList
     }
+
+    if (monitor) monitorQueue(hostname, queueName)
 
     val startTime = System.currentTimeMillis
     threadList.foreach { _.start() }
     threadList.foreach { _.join() }
     val duration = System.currentTimeMillis - startTime
 
-    println("Finished in %d msec (%.1f usec/put throughput).".format(duration, duration * 1000.0 / (totalItems * threads)))
+    println("Finished in %d msec (%.1f usec/put throughput).".format(duration, duration * 1000.0 / (totalItems * consumerThreadCount)))
     println("Consumer(s) spun %d times in misses.".format(misses.get))
   }
 }

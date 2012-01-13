@@ -18,9 +18,11 @@
 package net.lag.kestrel
 
 import java.io.File
-import java.util.concurrent.CountDownLatch
+import java.util.concurrent.{CountDownLatch, ScheduledExecutorService}
 import scala.collection.mutable
 import com.twitter.conversions.time._
+import com.twitter.libkestrel._
+import com.twitter.libkestrel.config._
 import com.twitter.logging.Logger
 import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{Duration, Future, Time, Timer}
@@ -28,9 +30,13 @@ import config._
 
 class InaccessibleQueuePath extends Exception("Inaccessible queue path: Must be a directory and writable")
 
-class QueueCollection(queueFolder: String, timer: Timer,
-                      @volatile private var defaultQueueConfig: QueueConfig,
-                      @volatile var queueBuilders: List[QueueBuilder]) {
+class QueueCollection(
+  queueFolder: String,
+  timer: Timer,
+  journalSyncScheduler: ScheduledExecutorService,
+  defaultQueueBuilder: QueueBuilder,
+  queueBuilders: Seq[QueueBuilder]
+) {
   private val log = Logger.get(getClass.getName)
 
   private val path = new File(queueFolder)
@@ -42,68 +48,105 @@ class QueueCollection(queueFolder: String, timer: Timer,
     throw new InaccessibleQueuePath
   }
 
-  private val queues = new mutable.HashMap[String, PersistentQueue]
-  private val fanout_queues = new mutable.HashMap[String, mutable.HashSet[String]]
+  private[this] val queueBuilderMap = queueBuilders.map { b => (b.name.value, b) }.toMap
+  private[this] val queues = new mutable.HashMap[String, JournaledQueue]
+  private[this] val seenReaders = new ConcurrentHashMap[String, JournaledQueue#Reader]
   @volatile private var shuttingDown = false
-
-  @volatile private var queueConfigMap = Map(queueBuilders.map { builder => (builder.name, builder()) }: _*)
 
   private def buildQueue(name: String, realName: String, path: String) = {
     if ((name contains ".") || (name contains "/") || (name contains "~")) {
       throw new Exception("Queue name contains illegal characters (one of: ~ . /).")
     }
-    val config = queueConfigMap.getOrElse(name, defaultQueueConfig)
+    val builder = queueBuilderMap.getOrElse(name, defaultQueueBuilder)
+    val config = builder().copy(name = name)
     log.info("Setting up queue %s: %s", realName, config)
-    new PersistentQueue(realName, path, config, timer, Some(this.apply))
+    config.readersToStrings().foreach { s =>
+      log.info("Queue %s reader %s", realName, s)
+    }
+    new JournaledQueue(config, new File(path), timer, journalSyncScheduler)
   }
 
   // preload any queues
   def loadQueues() {
-    Journal.getQueueNamesFromFolder(path) map { queue(_) }
+    Journal.getQueueNamesFromFolder(path) foreach { name =>
+      val w = writer(name)
+      w foreach { _.readers foreach { r => reader(r.fullname) } }
+    }
   }
 
   def queueNames: List[String] = synchronized {
     queues.keys.toList
   }
 
-  def currentItems = queues.values.foldLeft(0L) { _ + _.length }
+  def currentItems = queues.values.foldLeft(0L) { _ + _.items }
   def currentBytes = queues.values.foldLeft(0L) { _ + _.bytes }
-
-  def reload(newDefaultQueueConfig: QueueConfig, newQueueBuilders: List[QueueBuilder]) {
-    defaultQueueConfig = newDefaultQueueConfig
-    queueBuilders = newQueueBuilders
-    queueConfigMap = Map(queueBuilders.map { builder => (builder.name, builder()) }: _*)
-    queues.foreach { case (name, queue) =>
-      val configName = if (name contains '+') name.split('+')(0) else name
-      queue.config = queueConfigMap.get(configName).getOrElse(defaultQueueConfig)
-    }
+  def reservedMemoryRatio = {
+    val maxBytes = queues.values.foldLeft(0L) { _ + _.readers.foldLeft(0L) { _ + _.readerConfig.maxMemorySize.inBytes } }
+    maxBytes.toDouble / systemMaxHeapBytes.toDouble
   }
+  lazy val systemMaxHeapBytes = Runtime.getRuntime.maxMemory
 
   /**
    * Get a named queue, creating it if necessary.
    */
-  def queue(name: String): Option[PersistentQueue] = synchronized {
+  def writer(name: String): Option[JournaledQueue] = synchronized {
     if (shuttingDown) {
       None
     } else {
       Some(queues.get(name) getOrElse {
         // only happens when creating a queue for the first time.
-        val q = if (name contains '+') {
-          val master = name.split('+')(0)
-          fanout_queues.getOrElseUpdate(master, new mutable.HashSet[String]) += name
-          log.info("Fanout queue %s added to %s", name, master)
-          buildQueue(master, name, path.getPath)
-        } else {
-          buildQueue(name, name, path.getPath)
-        }
-        q.setup
+        val q = buildQueue(name, name, path.getPath)
+        Stats.addGauge("q/" + name + "/journal_size")(q.journalBytes)
         queues(name) = q
         q
       })
     }
   }
 
-  def apply(name: String) = queue(name)
+  def reader(name: String): Option[JournaledQueue#Reader] = {
+    val (writerName, readerName) = if (name contains '+') {
+      val names = name.split("\\+", 2)
+      (names(0), names(1))
+    } else {
+      (name, "")
+    }
+    val rv = writer(writerName).map { _.reader(readerName) }
+    rv foreach { reader =>
+      if (seenReaders.putIfAbsent(reader.fullname, reader) eq null) {
+        val prefix = "q/" + reader.fullname + "/"
+        Stats.makeCounter(prefix + "total_items", reader.putCount)
+        Stats.makeCounter(prefix + "expired_items", reader.expiredCount)
+        Stats.makeCounter(prefix + "discarded", reader.discardedCount)
+        Stats.addGauge(prefix + "items")(reader.items)
+        Stats.addGauge(prefix + "bytes")(reader.bytes)
+        Stats.addGauge(prefix + "mem_items")(reader.memoryItems)
+        Stats.addGauge(prefix + "mem_bytes")(reader.memoryBytes)
+        Stats.addGauge(prefix + "age_msec")(reader.age.inMilliseconds)
+        Stats.addGauge(prefix + "open_transactions")(reader.openItems)
+        Stats.addGauge(prefix + "waiters")(reader.waiterCount)
+      }
+    }
+    rv
+  }
+
+  // Remove various stats related to the queue
+  def removeStats(name: String) {
+    val prefix = "q/" + name + "/"
+    Stats.removeCounter(prefix + "total_items")
+    Stats.removeCounter(prefix + "expired_items")
+    Stats.removeCounter(prefix + "discarded")
+    Stats.clearGauge(prefix + "items")
+    Stats.clearGauge(prefix + "bytes")
+    Stats.clearGauge(prefix + "journal_size")
+    Stats.clearGauge(prefix + "mem_items")
+    Stats.clearGauge(prefix + "mem_bytes")
+    Stats.clearGauge(prefix + "age_msec")
+    Stats.clearGauge(prefix + "waiters")
+    Stats.clearGauge(prefix + "open_transactions")
+    Stats.removeMetric(prefix + "set_latency_usec")
+    Stats.removeMetric(prefix + "delivery_latency_msec")
+    Stats.removeMetric(prefix + "get_timeout_msec")
+  }
 
   /**
    * Add an item to a named queue. Will not return until the item has been synchronously added
@@ -111,18 +154,13 @@ class QueueCollection(queueFolder: String, timer: Timer,
    *
    * @return true if the item was added; false if the server is shutting down
    */
-  def add(key: String, item: Array[Byte], expiry: Option[Time], addTime: Time): Boolean = {
-    for (fanouts <- fanout_queues.get(key); name <- fanouts) {
-      add(name, item, expiry, addTime)
-    }
-
-    queue(key) match {
-      case None => false
-      case Some(q) =>
-        val result = q.add(item, expiry, None, addTime)
-        if (result) Stats.incr("total_items")
-        result
-    }
+  def add(key: String, data: Array[Byte], expiry: Option[Time], addTime: Time): Boolean = {
+    writer(key) flatMap { q =>
+      q.put(data, addTime, expiry) map { future =>
+        future map { _ => Stats.incr("total_items") }
+        true
+      }
+    } getOrElse(false)
   }
 
   def add(key: String, item: Array[Byte]): Boolean = add(key, item, None, Time.now)
@@ -132,73 +170,97 @@ class QueueCollection(queueFolder: String, timer: Timer,
    * Retrieve an item from a queue and pass it to a continuation. If no item is available within
    * the requested time, or the server is shutting down, None is passed.
    */
-  def remove(key: String, deadline: Option[Time] = None, transaction: Boolean = false, peek: Boolean = false): Future[Option[QItem]] = {
-    queue(key) match {
+  def remove(key: String, deadline: Option[Time] = None, transaction: Boolean = false, peek: Boolean = false): Future[Option[QueueItem]] = {
+    reader(key) match {
       case None =>
         Future.value(None)
       case Some(q) =>
         val future = if (peek) {
-          q.waitPeek(deadline)
+          q.peek(deadline)
         } else {
-          q.waitRemove(deadline, transaction)
+          q.get(deadline)
         }
-        future.map { item =>
-          item match {
-            case None =>
+        future.map { itemOption =>
+          itemOption match {
+            case None => {
               Stats.incr("get_misses")
-            case Some(_) =>
+            }
+            case Some(item) => {
               Stats.incr("get_hits")
+              if (!transaction && !peek) q.commit(item.id)
+            }
           }
-          item
+          itemOption
         }
     }
   }
 
-  def unremove(key: String, xid: Int) {
-    queue(key) map { q => q.unremove(xid) }
+  def unremove(key: String, xid: Long) {
+    reader(key) map { q => q.unget(xid) }
   }
 
-  def confirmRemove(key: String, xid: Int) {
-    queue(key) map { q => q.confirmRemove(xid) }
+  def confirmRemove(key: String, xid: Long) {
+    reader(key) map { q => q.commit(xid) }
   }
 
   def flush(key: String) {
-    queue(key) map { q => q.flush() }
+    reader(key) map { q => q.flush()() }
   }
 
   def delete(name: String): Unit = synchronized {
     if (!shuttingDown) {
-      queues.get(name) map { q =>
-        q.close()
-        q.destroyJournal()
-        q.removeStats()
-        queues.remove(name)
+      queues.get(name) foreach { q =>
+        q.erase()
+        queues -= name
+        removeStats(name)
       }
       if (name contains '+') {
-        val master = name.split('+')(0)
-        fanout_queues.getOrElseUpdate(master, new mutable.HashSet[String]) -= name
-        log.info("Fanout queue %s dropped from %s", name, master)
+        reader(name) foreach { n => removeStats(n.fullname) }
+        val (writerName, readerName) = {
+          val names = name.split("\\+", 2)
+          (names(0), names(1))
+        }
+        queues(writerName).dropReader(readerName)
       }
     }
   }
 
-  def flushExpired(name: String): Int = {
-    if (shuttingDown) {
-      0
-    } else {
-      queue(name) map { q => q.discardExpired(q.config.maxExpireSweep) } getOrElse(0)
+  def flushExpired(name: String) {
+    if (!shuttingDown) {
+      writer(name) foreach { _.discardExpired() }
     }
   }
 
-  def flushAllExpired(): Int = {
-    queueNames.foldLeft(0) { (sum, qName) => sum + flushExpired(qName) }
+  def flushAllExpired() {
+    queueNames foreach { queueName => flushExpired(queueName) }
   }
 
-  def stats(key: String): Array[(String, String)] = queue(key) match {
+  def stats(key: String): Array[(String, String)] = reader(key) match {
     case None => Array[(String, String)]()
-    case Some(q) =>
-      q.dumpStats() ++
-        fanout_queues.get(key).map { qset => ("children", qset.mkString(",")) }.toList
+    case Some(q) => {
+      Array(
+        ("items", (q.items - q.openItems).toString),
+        ("bytes", (q.bytes - q.openBytes).toString),
+        ("total_items", q.putCount.toString),
+        ("logsize", q.writer.journalBytes.toString),
+        ("expired_items", q.expiredCount.toString),
+        ("mem_items", (q.memoryItems - q.openItems).toString),
+        ("mem_bytes", (q.memoryBytes - q.openBytes).toString),
+        ("age", q.age.inMilliseconds.toString),
+        ("discarded", q.discardedCount.toString),
+        ("waiters", q.waiterCount.toString),
+        ("open_transactions", q.openItems.toString)
+      )
+    }
+  }
+
+  def debugLog(queueName: String) {
+    reader(queueName) foreach { reader =>
+      log.info("%s: items=%d bytes=%d mem_items=%d mem_bytes=%d age=%s waiters=%d journal_size=%d",
+        queueName,
+        reader.items, reader.bytes, reader.memoryItems, reader.memoryBytes, reader.age,
+        reader.waiterCount, reader.writer.journalBytes)
+    }
   }
 
   /**

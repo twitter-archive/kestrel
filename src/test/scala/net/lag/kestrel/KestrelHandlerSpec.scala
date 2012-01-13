@@ -18,9 +18,12 @@
 package net.lag.kestrel
 
 import java.io.{File, FileInputStream}
+import java.util.concurrent.ScheduledThreadPoolExecutor
 import scala.collection.mutable
 import scala.util.Sorting
 import com.twitter.conversions.time._
+import com.twitter.libkestrel.{ItemIdList, QueueItem}
+import com.twitter.libkestrel.config.JournaledQueueConfig
 import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{TempFolder, Time, Timer}
 import org.specs.Specification
@@ -28,43 +31,13 @@ import org.specs.matcher.Matcher
 import config._
 
 class FakeKestrelHandler(queues: QueueCollection, maxOpenTransactions: Int)
-  extends KestrelHandler(queues, maxOpenTransactions, "none", 0)
-
-class ItemIdListSpec extends Specification with TestLogging {
-  "ItemIdList" should {
-    "add and pop" in {
-      val x = new ItemIdList()
-      x.add(Seq(5, 4))
-      x.size mustEqual 2
-      x.pop() mustEqual Some(5)
-      x.pop() mustEqual Some(4)
-      x.pop() mustEqual None
-    }
-
-    "remove from the middle" in {
-      val x = new ItemIdList()
-      x.add(Seq(7, 6, 5, 4, 3, 2))
-      x.pop() mustEqual Some(7)
-      x.remove(Set(5, 4, 2)) mustEqual Set(5, 4, 2)
-      x.popAll() mustEqual Seq(6, 3)
-    }
-
-    "remove and pop combined" in {
-      val x = new ItemIdList()
-      x.add(Seq(7, 6, 5, 4, 3, 2))
-      x.remove(Set(6)) mustEqual Set(6)
-      x.pop() mustEqual Some(7)
-      x.pop() mustEqual Some(5)
-      x.popAll() mustEqual Seq(4, 3, 2)
-    }
-  }
-}
+  extends KestrelHandler(queues, maxOpenTransactions, () => "none", 0) with SimplePendingReads
 
 class KestrelHandlerSpec extends Specification with TempFolder with TestLogging {
-  val config = new QueueBuilder().apply()
+  val config = new QueueBuilder { name = "test" }
 
-  case class beString(expected: String) extends Matcher[Option[QItem]]() {
-    def apply(v: => Option[QItem]) = {
+  case class beString(expected: String) extends Matcher[Option[QueueItem]]() {
+    def apply(v: => Option[QueueItem]) = {
       val actual = v.map { item => new String(item.data) }
       (actual == Some(expected), "ok", "item " + actual + " != " + expected)
     }
@@ -73,6 +46,7 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
   "KestrelHandler" should {
     var queues: QueueCollection = null
     val timer = new FakeTimer()
+    val scheduler = new ScheduledThreadPoolExecutor(1)
 
     doAfter {
       queues.shutdown()
@@ -80,7 +54,7 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
 
     "set and get" in {
       withTempFolder {
-        queues = new QueueCollection(folderName, timer, config, Nil)
+        queues = new QueueCollection(folderName, timer, scheduler, config, Nil)
         val handler = new FakeKestrelHandler(queues, 10)
         handler.setItem("test", 0, None, "one".getBytes)
         handler.setItem("test", 0, None, "two".getBytes)
@@ -92,7 +66,7 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
     "track stats" in {
       withTempFolder {
         Stats.clearAll()
-        queues = new QueueCollection(folderName, timer, config, Nil)
+        queues = new QueueCollection(folderName, timer, scheduler, config, Nil)
         val handler = new FakeKestrelHandler(queues, 10)
 
         Stats.getCounter("cmd_get")() mustEqual 0
@@ -120,7 +94,7 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
 
     "abort and confirm a read" in {
       withTempFolder {
-        queues = new QueueCollection(folderName, timer, config, Nil)
+        queues = new QueueCollection(folderName, timer, scheduler, config, Nil)
         val handler = new FakeKestrelHandler(queues, 10)
         handler.setItem("test", 0, None, "one".getBytes)
         handler.getItem("test", None, true, false)() must beString("one")
@@ -135,7 +109,7 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
     "open several reads" in {
       "on one queue" in {
         withTempFolder {
-          queues = new QueueCollection(folderName, timer, config, Nil)
+          queues = new QueueCollection(folderName, timer, scheduler, config, Nil)
           val handler = new FakeKestrelHandler(queues, 10)
           handler.setItem("test", 0, None, "one".getBytes)
           handler.setItem("test", 0, None, "two".getBytes)
@@ -153,7 +127,7 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
 
       "on several queues" in {
         withTempFolder {
-          queues = new QueueCollection(folderName, timer, config, Nil)
+          queues = new QueueCollection(folderName, timer, scheduler, config, Nil)
           val handler = new FakeKestrelHandler(queues, 10)
           handler.setItem("red", 0, None, "red1".getBytes)
           handler.setItem("red", 0, None, "red2".getBytes)
@@ -182,7 +156,7 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
 
       "but not if open reads are limited" in {
         withTempFolder {
-          queues = new QueueCollection(folderName, timer, config, Nil)
+          queues = new QueueCollection(folderName, timer, scheduler, config, Nil)
           val handler = new FakeKestrelHandler(queues, 1)
           handler.setItem("red", 0, None, "red1".getBytes)
           handler.setItem("red", 0, None, "red2".getBytes)
@@ -193,13 +167,13 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
 
       "obey maxItems" in {
         withTempFolder {
-          queues = new QueueCollection(folderName, timer, config, Nil)
+          queues = new QueueCollection(folderName, timer, scheduler, config, Nil)
           val handler = new FakeKestrelHandler(queues, 5)
-          val got = new mutable.ListBuffer[QItem]()
+          val got = new mutable.ListBuffer[QueueItem]()
           handler.setItem("red", 0, None, "red1".getBytes)
           handler.setItem("red", 0, None, "red2".getBytes)
           handler.setItem("red", 0, None, "red3".getBytes)
-          handler.monitorUntil("red", Some(1.hour.fromNow), 2, true) { itemOption =>
+          handler.monitorUntil("red", Some(1.hour.fromNow), 2, true) { (itemOption, _) =>
             itemOption.foreach { got += _ }
           }
           got.toList.map { x => new String(x.data) } mustEqual List("red1", "red2")
@@ -208,7 +182,7 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
 
       "close all reads" in {
         withTempFolder {
-          queues = new QueueCollection(folderName, timer, config, Nil)
+          queues = new QueueCollection(folderName, timer, scheduler, config, Nil)
           val handler = new FakeKestrelHandler(queues, 2)
           handler.setItem("red", 0, None, "red1".getBytes)
           handler.setItem("red", 0, None, "red2".getBytes)

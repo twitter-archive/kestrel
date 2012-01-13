@@ -5,7 +5,7 @@ struct Item {
   1: binary data
 
   /* transaction ID, to be used in the `confirm` call */
-  2: i32 xid
+  2: i64 id
 }
 
 struct QueueInfo {
@@ -54,24 +54,32 @@ service Kestrel {
    * `max_items` have been fetched, or the timeout occurs. If the timeout
    * occurs, this call may return from zero to `max_items` items.
    *
-   * If `auto_confirm` is true (the default), the fetched items will behave
+   * With no timeout, the call will block until `max_items` have been
+   * fetched.
+   *
+   * If `auto_abort_msec` is 0 (the default), the fetched items will behave
    * as if a `confirm` call has been made for them already: they will be
-   * permanently removed from the queue. The `xid` field in each `Item` will
-   * be zero.
+   * permanently removed from the queue. The `id` field in each `Item` will
+   * be zero. Otherwise, the client must call `confirm` with the same `id`
+   * before `auto_abort_msec` milliseconds have elapsed or the item will be
+   * re-enqueued (as if `abort` had been called).
+   *
+   * If you exceed the maxmimum open reads for a connection, `get` will stop
+   * returning items until 1 or more is confirmed or aborted.
    */
-  list<Item> get(1: string queue_name, 2: i32 max_items, 3: i32 timeout_msec = 0, 4: bool auto_confirm = 1)
+  list<Item> get(1: string queue_name, 2: i32 max_items, 3: i32 timeout_msec = 0, 4: i32 auto_abort_msec = 0)
 
   /*
    * Confirm a set of items previously fetched with `get`.
    * Returns the count of confirmed items.
    */
-  i32 confirm(1: string queue_name, 2: set<i32> xids)
+  i32 confirm(1: string queue_name, 2: set<i64> ids)
 
   /*
    * Abort a set of items previously fetched with `get`.
    * Returns the count of aborted items.
    */
-  i32 abort(1: string queue_name, 2: set<i32> xids)
+  i32 abort(1: string queue_name, 2: set<i64> ids)
 
   /*
    * Return some basic info about a queue, and the head item if there is
@@ -84,7 +92,13 @@ service Kestrel {
   /*
    * Flush (clear out) a queue. All unfetched items are lost.
    */
-  void flush(1: string queue_name)
+  void flush_queue(1: string queue_name)
+
+  /*
+   * Flush (clear out) ALL QUEUES. All unfetched items from all queues are
+   * lost.
+   */
+  void flush_all_queues()
 
   /*
    * Delete a queue, removing any journal. All unfetched items are lost.
@@ -96,16 +110,5 @@ service Kestrel {
    * Return a string form of the version of this kestrel server.
    */
   string get_version()
-
-  /*
-   * Flush (clear out) ALL QUEUES. All unfetched items from all queues are
-   * lost.
-   */
-  void flush_all()
-
-  /*
-   * Delete ALL QUEUES, removing all journals. All unfetched items from all
-   * queues are lost.
-   */
-  i32 flush_all_expired()
 }
+

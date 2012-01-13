@@ -20,42 +20,87 @@ package config
 
 import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
+import com.twitter.libkestrel.ConcurrentBlockingQueue
+import com.twitter.libkestrel.config._
 import com.twitter.logging.Logger
 import com.twitter.logging.config._
 import com.twitter.ostrich.admin.{RuntimeEnvironment, ServiceTracker}
 import com.twitter.ostrich.admin.config._
-import com.twitter.util.{Config, Duration, StorageUnit}
+import com.twitter.ostrich.stats.Stats
+import com.twitter.util.{Config, Duration, StorageUnit, Time}
+import java.io.File
 
-case class QueueConfig(
-  maxItems: Int,
-  maxSize: StorageUnit,
-  maxItemSize: StorageUnit,
-  maxAge: Option[Duration],
-  defaultJournalSize: StorageUnit,
-  maxMemorySize: StorageUnit,
-  maxJournalSize: StorageUnit,
-  discardOldWhenFull: Boolean,
-  keepJournal: Boolean,
-  syncJournal: Duration,
-  expireToQueue: Option[String],
-  maxExpireSweep: Int,
-  fanoutOnly: Boolean
-) {
-  override def toString() = {
-    ("maxItems=%d maxSize=%s maxItemSize=%s maxAge=%s defaultJournalSize=%s maxMemorySize=%s " +
-     "maxJournalSize=%s discardOldWhenFull=%s keepJournal=%s syncJournal=%s " +
-     "expireToQueue=%s maxExpireSweep=%d fanoutOnly=%s").format(maxItems, maxSize,
-     maxItemSize, maxAge, defaultJournalSize, maxMemorySize, maxJournalSize, discardOldWhenFull,
-     keepJournal, syncJournal, expireToQueue, maxExpireSweep, fanoutOnly)
-  }
-}
-
-class QueueBuilder extends Config[QueueConfig] {
+class QueueBuilder extends Config[JournaledQueueConfig] {
   /**
    * Name of the queue being configured.
    */
-  var name: String = null
+  var name = required[String]
 
+  /**
+   * Set a hard limit on the number of bytes a single queued item can contain.
+   * An add request for an item larger than this will be rejected.
+   */
+  var maxItemSize: StorageUnit = Long.MaxValue.bytes
+
+  /**
+   * If false, don't keep a journal file for this queue. When kestrel exits, any remaining contents
+   * in the queue will be lost.
+   */
+  var journaled: Boolean = true
+
+  /**
+   * Maximum size of an individual journal file before libkestrel moves to a new file. In the
+   * (normal) state where a queue is usually empty, this is the amount of disk space a queue
+   * should consume before moving to a new file and erasing the old one.
+   */
+  var journalSize: StorageUnit = 16.megabytes
+
+  /**
+   * How often to sync the journal file. To sync after every write, set this to `0.milliseconds`.
+   * To never sync, set it to `Duration.MaxValue`. Syncing the journal will reduce the maximum
+   * throughput of the server in exchange for a lower chance of losing data.
+   */
+  var syncJournal: Duration = Duration.MaxValue
+
+  /**
+   * Optionally move "retired" journal files to this folder. Normally, once a journal file only
+   * refers to items that have all been removed, it's erased.
+   */
+  var saveArchivedJournals: Option[File] = None
+
+  /**
+   * How often to check this queue for expired items and proactively remove them. This prevents
+   * rarely-used queues from filling up with expired items.
+   */
+  var checkpointTimer: Duration = 1.second
+
+  /**
+   * Builder to use for readers of this queue that aren't named in readerBuilders.
+   */
+  val defaultReader: QueueReaderBuilder = new QueueReaderBuilder()
+
+  /**
+   * Builders to use for specific readers of this queue.
+   */
+  var readers: Map[String, QueueReaderBuilder] = Map()
+
+  def apply() = {
+    validate()
+    JournaledQueueConfig(
+      name = name.value,
+      maxItemSize = maxItemSize,
+      journaled = journaled,
+      journalSize = journalSize,
+      syncJournal = syncJournal,
+      saveArchivedJournals = saveArchivedJournals,
+      checkpointTimer = checkpointTimer,
+      readerConfigs = readers.map { case (k, v) => (k, v()) }.toMap,
+      defaultReaderConfig = defaultReader()
+    )
+  }
+}
+
+class QueueReaderBuilder extends Config[JournaledQueueReaderConfig] {
   /**
    * Set a hard limit on the number of items this queue can hold. When the queue is full,
    * `discardOldWhenFull` dictates the behavior when a client attempts to add another item.
@@ -70,10 +115,11 @@ class QueueBuilder extends Config[QueueConfig] {
   var maxSize: StorageUnit = Long.MaxValue.bytes
 
   /**
-   * Set a hard limit on the number of bytes a single queued item can contain.
-   * An add request for an item larger than this will be rejected.
+   * Keep only this much of the queue in memory. The journal will be used to store backlogged
+   * items, and they'll be read back into memory as the queue is drained. This setting is a release
+   * valve to keep a backed-up queue from consuming all memory.
    */
-  var maxItemSize: StorageUnit = Long.MaxValue.bytes
+  var maxMemorySize: StorageUnit = 128.megabytes
 
   /**
    * Expiration time for items on this queue. Any item that has been sitting on the queue longer
@@ -84,43 +130,12 @@ class QueueBuilder extends Config[QueueConfig] {
   var maxAge: Option[Duration] = None
 
   /**
-   * If the queue is empty, truncate the journal when it reaches this size.
-   */
-  var defaultJournalSize: StorageUnit = 16.megabytes
-
-  /**
-   * Keep only this much of the queue in memory. The journal will be used to store backlogged
-   * items, and they'll be read back into memory as the queue is drained. This setting is a release
-   * valve to keep a backed-up queue from consuming all memory.
-   */
-  var maxMemorySize: StorageUnit = 128.megabytes
-
-  /**
-   * If the queue fits entirely in memory (see maxMemorySize) and the journal files get larger than
-   * this, rebuild the journal.
-   */
-  var maxJournalSize: StorageUnit = 1.gigabyte
-
-  /**
    * If this is false, when a queue is full, clients attempting to add another item will get an
    * error. No new items will be accepted. If this is true, old items will be discarded to make
    * room for the new one. This settting has no effect unless at least one of `maxItems` or
    * `maxSize` is set.
    */
   var discardOldWhenFull: Boolean = false
-
-  /**
-   * If false, don't keep a journal file for this queue. When kestrel exits, any remaining contents
-   * in the queue will be lost.
-   */
-  var keepJournal: Boolean = true
-
-  /**
-   * How often to sync the journal file. To sync after every write, set this to `0.milliseconds`.
-   * To never sync, set it to `Duration.MaxValue`. Syncing the journal will reduce the maximum
-   * throughput of the server in exchange for a lower chance of losing data.
-   */
-  var syncJournal: Duration = Duration.MaxValue
 
   /**
    * Name of a queue to add expired items to. If set, expired items are added to the requested
@@ -134,16 +149,33 @@ class QueueBuilder extends Config[QueueConfig] {
    */
   var maxExpireSweep: Int = Int.MaxValue
 
-  /**
-   * If true, don't actually store any items in this queue. Only deliver them to fanout client
-   * queues.
-   */
-  var fanoutOnly: Boolean = false
-
   def apply() = {
-    QueueConfig(maxItems, maxSize, maxItemSize, maxAge, defaultJournalSize, maxMemorySize,
-                maxJournalSize, discardOldWhenFull, keepJournal, syncJournal,
-                expireToQueue, maxExpireSweep, fanoutOnly)
+    JournaledQueueReaderConfig(
+      maxItems = maxItems,
+      maxSize = maxSize,
+      maxMemorySize = maxMemorySize,
+      maxAge = maxAge,
+      fullPolicy = if (discardOldWhenFull) {
+        ConcurrentBlockingQueue.FullPolicy.DropOldest
+      } else {
+        ConcurrentBlockingQueue.FullPolicy.RefusePuts
+      },
+      processExpiredItem = expireToQueue match {
+        case Some(queueName) => { queueItem =>
+          Kestrel.kestrel.queueCollection.writer(queueName).foreach { _.put(queueItem.data, Time.now, None) }
+        }
+        case None => { _ => () }
+      },
+      maxExpireSweep = maxExpireSweep,
+      deliveryLatency = { (reader, timing) =>
+        Stats.addMetric("delivery_latency_msec", timing.inMilliseconds.toInt)
+        Stats.addMetric("q/" + reader.fullname + "/delivery_latency_msec", timing.inMilliseconds.toInt)
+      },
+      timeoutLatency = { (reader, timing) =>
+        Stats.addMetric("get_timeout_msec", timing.inMilliseconds.toInt)
+        Stats.addMetric("q/" + reader.fullname + "/get_timeout_msec", timing.inMilliseconds.toInt)
+      }
+    )
   }
 }
 
@@ -151,7 +183,7 @@ trait KestrelConfig extends ServerConfig[Kestrel] {
   /**
    * Settings for a queue that isn't explicitly listed in `queues`.
    */
-  val default: QueueBuilder = new QueueBuilder
+  val default: QueueBuilder = new QueueBuilder() { name = "" }
 
   /**
    * Specific per-queue config.
@@ -201,16 +233,15 @@ trait KestrelConfig extends ServerConfig[Kestrel] {
    */
   var maxOpenTransactions: Int = 1
 
+  /**
+   * For debugging: Every second, log relevant stats about these named queues.
+   */
+  var debugLogQueues: List[String] = Nil
+
   def apply(runtime: RuntimeEnvironment) = {
     new Kestrel(
-      default(), queues, listenAddress, memcacheListenPort, textListenPort, thriftListenPort,
-      queuePath, expirationTimerFrequency, clientTimeout, maxOpenTransactions
+      default, queues, listenAddress, memcacheListenPort, textListenPort, thriftListenPort,
+      queuePath, expirationTimerFrequency, clientTimeout, maxOpenTransactions, debugLogQueues
     )
-  }
-
-  def reload(kestrel: Kestrel) {
-    Logger.configure(loggers)
-    // only the queue configs can be changed.
-    kestrel.reload(default(), queues)
   }
 }

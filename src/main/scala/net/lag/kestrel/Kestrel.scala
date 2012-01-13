@@ -17,47 +17,45 @@
 
 package net.lag.kestrel
 
-import java.net.InetSocketAddress
-import java.util.concurrent.{Executors, ExecutorService, TimeUnit}
-import java.util.concurrent.atomic.AtomicInteger
-import scala.collection.{immutable, mutable}
+import com.twitter.concurrent.NamedPoolThreadFactory
 import com.twitter.conversions.time._
-import com.twitter.finagle.builder.Server
-import com.twitter.logging.Logger
-import com.twitter.ostrich.admin.{PeriodicBackgroundProcess, RuntimeEnvironment, Service, ServiceTracker}
-import com.twitter.ostrich.stats.Stats
-import com.twitter.util.{Duration, Eval, Time, Timer => TTimer, TimerTask => TTimerTask}
-import org.jboss.netty.bootstrap.ServerBootstrap
-import org.jboss.netty.channel.{Channel, ChannelFactory, ChannelPipelineFactory, Channels}
-import org.jboss.netty.channel.group.DefaultChannelGroup
-import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory
-import org.jboss.netty.util.{HashedWheelTimer, Timeout, Timer, TimerTask}
-import org.apache.thrift.protocol._
-import com.twitter.finagle.thrift._
-import config._
-
-import com.twitter.finagle.builder.{ServerBuilder, Server => FinagleServer}
+import com.twitter.finagle.{ClientConnection, Codec => FinagleCodec, Service => FinagleService}
+import com.twitter.finagle.builder.{Server, ServerBuilder}
 import com.twitter.finagle.stats.OstrichStatsReceiver
+import com.twitter.finagle.thrift._
 import com.twitter.finagle.util.{Timer => FinagleTimer}
-import com.twitter.util.Future
+import com.twitter.libkestrel._
+import com.twitter.libkestrel.config._
+import com.twitter.logging.Logger
 import com.twitter.naggati.Codec
 import com.twitter.naggati.codec.{MemcacheResponse, MemcacheRequest, MemcacheCodec}
-import com.twitter.finagle.{ClientConnection, Codec => FinagleCodec, Service => FinagleService}
+import com.twitter.ostrich.admin.{PeriodicBackgroundProcess, RuntimeEnvironment, Service,
+  ServiceTracker}
+import com.twitter.ostrich.stats.Stats
+import com.twitter.util.{Duration, Eval, Future, Time}
+import java.net.InetSocketAddress
+import java.util.concurrent._
+import java.util.concurrent.atomic.AtomicInteger
+import org.apache.thrift.protocol.TBinaryProtocol
+import org.jboss.netty.util.{HashedWheelTimer, Timer => NettyTimer}
+import scala.collection.{immutable, mutable}
+import config._
 
-class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
+class Kestrel(defaultQueueBuilder: QueueBuilder, queueBuilders: Seq[QueueBuilder],
               listenAddress: String, memcacheListenPort: Option[Int], textListenPort: Option[Int],
               thriftListenPort: Option[Int], queuePath: String,
               expirationTimerFrequency: Option[Duration], clientTimeout: Option[Duration],
-              maxOpenTransactions: Int)
+              maxOpenTransactions: Int, debugLogQueues: List[String] = Nil)
       extends Service {
   private val log = Logger.get(getClass.getName)
 
   var queueCollection: QueueCollection = null
-  var timer: Timer = null
-  var memcacheService: Option[FinagleServer] = None
-  var textService: Option[FinagleServer] = None
-  var textAcceptor: Option[Channel] = None
-  var thriftService: Option[FinagleServer] = None
+  var timer: NettyTimer = null
+  var journalSyncScheduler: ScheduledExecutorService = null
+  var executor: ExecutorService = null
+  var memcacheService: Option[Server] = None
+  var textService: Option[Server] = None
+  var thriftService: Option[Server] = None
 
   def thriftCodec = ThriftServerFramedCodec()
 
@@ -71,14 +69,14 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
     name: String,
     port: Int,
     finagleCodec: FinagleCodec[Req, Resp]
-  )(factory: ClientConnection => FinagleService[Req, Resp]): FinagleServer = {
+  )(factory: ClientConnection => FinagleService[Req, Resp]): Server = {
     val address = new InetSocketAddress(listenAddress, port)
-    val builder = ServerBuilder()
+    var builder = ServerBuilder()
       .codec(finagleCodec)
       .name(name)
       .reportTo(new OstrichStatsReceiver)
       .bindTo(address)
-    clientTimeout.foreach { timeout => builder.readTimeout(timeout) }
+    clientTimeout.foreach { timeout => builder = builder.readTimeout(timeout) }
     // calling build() is equivalent to calling start() in finagle.
     builder.build(factory)
   }
@@ -86,17 +84,18 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
   def startThriftServer(
     name: String,
     port: Int
-  ): FinagleServer = {
+  ): Server = {
     val address = new InetSocketAddress(listenAddress, port)
-    val builder = ServerBuilder()
+    var builder = ServerBuilder()
       .codec(thriftCodec)
       .name(name)
       .reportTo(new OstrichStatsReceiver)
       .bindTo(address)
-    clientTimeout.foreach { timeout => builder.readTimeout(timeout) }
+    clientTimeout.foreach { timeout => builder = builder.readTimeout(timeout) }
     // calling build() is equivalent to calling start() in finagle.
     builder.build(connection => {
-      val handler = new ThriftHandler(connection, queueCollection, maxOpenTransactions)
+      val handler = new ThriftHandler(connection, queueCollection, maxOpenTransactions,
+        new FinagleTimer(timer))
       new ThriftFinagledService(handler, new TBinaryProtocol.Factory())
     })
   }
@@ -115,15 +114,26 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
              listenAddress, memcacheListenPort, textListenPort, queuePath,
              expirationTimerFrequency, clientTimeout, maxOpenTransactions)
 
-    // this means no timeout will be at better granularity than 10ms.
-    // FIXME: would make more sense to use the finagle Timer. but they'd have to expose it.
-    timer = new HashedWheelTimer(10, TimeUnit.MILLISECONDS)
-    queueCollection = new QueueCollection(queuePath, new FinagleTimer(timer), defaultQueueConfig,
-      builders)
+    // this means no timeout will be at better granularity than 100 ms.
+    timer = new HashedWheelTimer(100, TimeUnit.MILLISECONDS)
+
+    journalSyncScheduler =
+      new ScheduledThreadPoolExecutor(
+        Runtime.getRuntime.availableProcessors,
+        new NamedPoolThreadFactory("journal-sync", true),
+        new RejectedExecutionHandler {
+          override def rejectedExecution(r: Runnable, executor: ThreadPoolExecutor) {
+            log.warning("Rejected journal fsync")
+          }
+        })
+
+    queueCollection = new QueueCollection(queuePath, new FinagleTimer(timer), journalSyncScheduler,
+      defaultQueueBuilder, queueBuilders)
     queueCollection.loadQueues()
 
     Stats.addGauge("items") { queueCollection.currentItems.toDouble }
     Stats.addGauge("bytes") { queueCollection.currentBytes.toDouble }
+    Stats.addGauge("reserved_memory_ratio") { queueCollection.reservedMemoryRatio }
 
     // finagle setup:
     val memcachePipelineFactoryCodec = finagledCodec[MemcacheRequest, MemcacheResponse] {
@@ -151,9 +161,16 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
       log.info("Starting up background expiration task.")
       new PeriodicBackgroundProcess("background-expiration", expirationTimerFrequency.get) {
         def periodic() {
-          val expired = Kestrel.this.queueCollection.flushAllExpired()
-          if (expired > 0) {
-            log.info("Expired %d item(s) from queues automatically.", expired)
+          Kestrel.this.queueCollection.flushAllExpired()
+        }
+      }.start()
+    }
+
+    if (!debugLogQueues.isEmpty) {
+      new PeriodicBackgroundProcess("debug-logger", 1.second) {
+        def periodic() {
+          debugLogQueues.foreach { queueName =>
+            Kestrel.this.queueCollection.debugLog(queueName)
           }
         }
       }.start()
@@ -170,22 +187,10 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
 
     timer.stop()
     timer = null
+    journalSyncScheduler.shutdown()
+    journalSyncScheduler.awaitTermination(5, TimeUnit.SECONDS)
+    journalSyncScheduler = null
     log.info("Goodbye.")
-  }
-
-  override def reload() {
-    try {
-      log.info("Reloading %s ...", Kestrel.runtime.configFile)
-      new Eval().apply[KestrelConfig](Kestrel.runtime.configFile).reload(this)
-    } catch {
-      case e: Eval.CompilerException =>
-        log.error(e, "Error in config: %s", e)
-        log.error(e.messages.flatten.mkString("\n"))
-    }
-  }
-
-  def reload(newDefaultQueueConfig: QueueConfig, newQueueBuilders: List[QueueBuilder]) {
-    queueCollection.reload(newDefaultQueueConfig, newQueueBuilders)
   }
 }
 

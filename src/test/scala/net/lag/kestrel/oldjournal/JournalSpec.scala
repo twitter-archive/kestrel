@@ -16,10 +16,11 @@
  */
 
 package net.lag.kestrel
+package oldjournal
 
+import com.twitter.util.{Duration, TempFolder, Time}
 import java.io._
 import org.specs.Specification
-import com.twitter.util.{Duration, TempFolder, Time}
 
 class JournalSpec extends Specification with TempFolder with TestLogging with DumpJournal {
   "Journal" should {

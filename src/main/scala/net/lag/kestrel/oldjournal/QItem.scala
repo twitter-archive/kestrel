@@ -16,6 +16,7 @@
  */
 
 package net.lag.kestrel
+package oldjournal
 
 import java.nio.{ByteBuffer, ByteOrder}
 import com.twitter.util.Time

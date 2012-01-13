@@ -16,12 +16,14 @@
  */
 
 package net.lag.kestrel
-package tools
+package oldjournal
 
 import java.io.{FileNotFoundException, IOException}
 import scala.collection.mutable
+import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
 import com.twitter.util.{Duration, Time}
+import net.lag.kestrel.oldjournal._
 
 class QueueDumper(filename: String, quiet: Boolean, dump: Boolean, dumpRaw: Boolean) {
   var offset = 0L
@@ -47,7 +49,7 @@ class QueueDumper(filename: String, quiet: Boolean, dump: Boolean, dumpRaw: Bool
         dumpItem(item)
         offset += itemsize
         if (quiet && !dumpRaw && offset - lastDisplay > 1024 * 1024) {
-          print("\rReading journal: %-6s".format(Util.bytesToHuman(offset, 0)))
+          print("\rReading journal: %-6s".format(offset.bytes.toHuman))
           Console.flush()
           lastDisplay = offset
         }
@@ -109,14 +111,25 @@ class QueueDumper(filename: String, quiet: Boolean, dump: Boolean, dumpRaw: Bool
         } else {
           xid
         }
-        openTransactions(xxid) = queue.dequeue()
-        verbose("RSV %d\n", xxid)
+        if (queue.size > 0) {
+          openTransactions(xxid) = queue.dequeue()
+          verbose("RSV %d\n", xxid)
+        } else {
+          verbose("RSV %d INVALID\n", xxid)
+        }
       case JournalItem.SavedXid(xid) =>
         verbose("XID %d\n", xid)
         currentXid = xid
       case JournalItem.Unremove(xid) =>
-        openTransactions.remove(xid).get +=: queue
-        verbose("CAN %d\n", xid)
+        openTransactions.remove(xid) match {
+          case None => {
+            verbose("CAN %d INVALID\n", xid)
+          }
+          case Some(item) => {
+            verbose("CAN %d\n", xid)
+            item +=: queue
+          }
+        }
       case JournalItem.ConfirmRemove(xid) =>
         verbose("ACK %d\n", xid)
         openTransactions.remove(xid)
@@ -158,7 +171,7 @@ object QDumper {
   def usage() {
     println()
     println("usage: qdump.sh <journal-files...>")
-    println("    describe the contents of a kestrel journal file")
+    println("    describe the contents of an old (2.x) kestrel journal file")
     println()
     println("options:")
     println("    -q      quiet: don't describe every line, just the summary")

@@ -16,10 +16,10 @@ Generally queue names should be limited to alphanumerics `[A-Za-z0-9]`, dash
 restrictions other than the name can't contain slash (`/`) because that can't
 be used in filenames, squiggle (`~`) because it's used for temporary files,
 plus (`+`) because it's used for fanout queues, and dot (`.`) because it's
-reserved for future use. Queue names are case-sensitive, but if you're running
-kestrel on OS X or Windows, you will want to refrain from taking advantage of
-this, since the journal filenames on those two platforms are *not*
-case-sensitive.
+used to distinguish multiple files for the same queue. Queue names are case-
+sensitive, but if you're running kestrel on OS X or Windows, you will want to
+refrain from taking advantage of this, since the journal filenames on those
+two platforms are *not* case-sensitive.
 
 A cluster of kestrel servers is like a memcache cluster: the servers don't
 know about each other, and don't do any cross-communication, so you can add as
@@ -47,13 +47,26 @@ queues. The fields on `KestrelConfig` are documented here with their default
 values:
 [KestrelConfig.html](http://robey.github.com/kestrel/doc/main/api/net/lag/kestrel/config/KestrelConfig.html)
 
-To confirm the current configuration of each queue, send "dump_config" to
-a server (which can be done over telnet).
+When the server starts up, it logs its configuration, and the configuration of
+each queue it finds:
 
-To reload the config file on a running server, send "reload" the same way.
-You should immediately see the changes in "dump_config", to confirm. Reloading
-will only affect queue configuration, not global server configuration. To
-change the server configuration, restart the server.
+    INF [20120111-16:43:21.878] kestrel: Kestrel config: listenAddress=0.0.0.0
+      memcachePort=Some(22133) textPort=Some(2222)
+      queuePath=/Users/robey/queues expirationTimerFrequency=Some(1.seconds)
+      clientTimeout=Some(30.seconds) maxOpenTransactions=100
+    INF [20120111-16:43:22.053] kestrel: Setting up queue spam: name=spam
+      maxItemSize=9223372036854775807.bytes journaled=true
+      journalSize=16777216.bytes syncJournal=never saveArchivedJournals=None
+      checkpointTimer=1.seconds
+    INF [20120111-18:32:34.021] kestrel: Queue spam reader <default>:
+      maxItems=2147483647 maxSize=9223372036854775807.bytes
+      maxMemorySize=134217728.bytes maxAge=None fullPolicy=RefusePuts
+      maxExpireSweep=2147483647
+
+In previous versions, you could change the configuration and ask the server to
+reload. This was difficult to test, hard to keep working, and apparently not
+widely used, so the feature was removed. To use a new configuration, just
+restart the server.
 
 Logging is configured according to `util-logging`. The logging configuration
 syntax is described here:
@@ -61,70 +74,74 @@ syntax is described here:
 
 Per-queue configuration is documented here:
 [QueueBuilder.html](http://robey.github.com/kestrel/doc/main/api/net/lag/kestrel/config/QueueBuilder.html)
+and here:
+[QueueReaderBuilder.html](http://robey.github.com/kestrel/doc/main/api/net/lag/kestrel/config/QueueReaderBuilder.html)
+
+Starting in kestrel 3.0, fanout queues (see the "Fanout Queues" section below)
+can be configured independently. A side effect of this is that the reader &
+writer side of a queue are now configured separately too. The writer
+configuration relates mostly to the journal (which all readers share), and is
+in `QueueBuilder`. The reader configuration relates to the in-memory
+representation of a queue, and is in `QueueReaderBuilder`.
 
 
 Full queues
 -----------
 
-A queue can have the following limits set on it:
+A queue reader can have the following limits set on it:
 
 - `maxItems` - total items in the queue
 - `maxSize` - total bytes of data in the items in the queue
 
 If either of these limits is reached, no new items can be added to the queue.
-(Clients will receive an error when trying to add.) If you set
-`discardOldWhenFull` to true, then all adds will succeed, and the oldest
-item(s) will be silently discarded until the queue is back within the item
-and size limits.
+(Clients will receive an error when trying to add.) If you set `fullPolicy` to
+`DropOldest`, then all puts will succeed, and the oldest item(s) will be
+silently discarded until the queue is back within the item and size limits.
 
-`maxItemSize` limits the size of any individual item. If an add is attempted
-with an item larger than this limit, it always fails.
+`maxItemSize` (on the writer side) limits the size of any individual item. If
+an add is attempted with an item larger than this limit, it always fails.
 
 
-The journal file
-----------------
+Journal files
+-------------
 
-The journal file is the only on-disk storage of a queue's contents, and it's
-just a sequential record of each add or remove operation that's happened on
-that queue. When kestrel starts up, it replays each queue's journal to build
-up the in-memory queue that it uses for client queries.
+Each queue has at least two on-disk journal files, unless it's been configured
+to not journal: a write-only journal, and one read journal for each reader.
+(Normal queues have exactly one writer and one reader, but fanout queues may
+have multiple readers. See "Fanout Queues" below for more details.)
 
-The journal file is rotated in one of two conditions:
+The write-only journal is just a sequential record of each item added to the
+queue. The journal is broken up into multiple files, so that as items are
+read, old journal files can be erased to save disk space. Kestrel will move to
+a new file whenever the current file reaches `journalSize` (16MB by default).
 
-1. the queue is empty and the journal is larger than `defaultJournalSize`
+The reader journal files contain info about where the head of the queue is.
+When kestrel starts up, it replays each queue's write-only journal from this
+head, in order to build up the in-memory representation of the queue that it
+uses for client queries.
 
-2. the journal is larger than `maxJournalSize`
-
-For example, if `defaultJournalSize` is 16MB (the default), then if the queue
-is empty and the journal is larger than 16MB, it will be truncated into a new
-(empty) file. If the journal is larger than `maxJournalSize` (1GB by default),
-the journal will be rewritten periodically to contain just the live items.
-
-You can turn the journal off for a queue (`keepJournal` = false) and the queue
+You can turn the journal off for a queue (`journaled = false`) and the queue
 will exist only in memory. If the server restarts, all enqueued items are
 lost. You can also force a queue's journal to be sync'd to disk periodically,
 or even after every write operation, at a performance cost, using
 `syncJournal`.
 
-If a queue grows past `maxMemorySize` bytes (128MB by default), only the
-first 128MB is kept in memory. The journal is used to track later items, and
-as items are removed, the journal is played forward to keep 128MB in memory.
-This is usually known as "read-behind" mode, but Twitter engineers sometimes
-refer to it as the "square snake" because of the diagram used to brainstorm
-the implementation. When a queue is in read-behind mode, removing an item will
-often cause 2 disk operations instead of one: one to record the remove, and
-one to read an item in from disk to keep 128MB in memory. This is the
-trade-off to avoid filling memory and crashing the JVM.
+If a queue grows past `maxMemorySize` bytes (128MB by default), only the first
+128MB is kept in memory. The journal is used to track later items, and as
+items are removed, the journal is played forward to keep 128MB in memory. This
+is known as "read-behind" mode. When a queue is in read-behind mode, removing
+an item will often cause a disk operation to read an item in from disk. This
+is the trade-off to avoid filling memory and crashing the JVM.
 
 
 Item expiration
 ---------------
 
-When they come from a client, expiration times are handled in the same way as
-memcache: if the number is small (less than one million), it's interpreted as
-a relative number of seconds from now. Otherwise it's interpreted as an
-absolute unix epoch time, in seconds since the beginning of 1 January 1970
-GMT.
+When they come from a memcache client, expiration times are handled in the
+same way as memcache: if the number is small (less than one million), it's
+interpreted as a relative number of seconds from now. Otherwise it's
+interpreted as an absolute unix epoch time, in seconds since the beginning of
+1 January 1970 GMT.
 
 Expiration times are immediately translated into an absolute time, in
 *milliseconds*, and if it's further in the future than the queue's `maxAge`,
@@ -152,21 +169,42 @@ useful as a throttling mechanism when using a queue as a way to delay work.
 Fanout Queues
 -------------
 
-If a queue name has a `+` in it (like "`orders+audit`"), it's treated as a
-fanout queue, using the format `<parent>+<child>`. These queues belong to a
-parent queue -- in this example, the "orders" queue. Every item written into
-a parent queue will also be written into each of its children.
+Each queue is conceptually a "writer" (a journal of added items) and at least
+one "reader" (an in-memory representation of a queue). Normally, each queue
+has one reader, the "default reader", and every item put into the queue is
+given to one consumer. This is a standard FIFO queue.
 
-Fanout queues each have their own journal file (if the parent queue has a
-journal file) and otherwise behave exactly like any other queue. You can get
-and peek and even add items directly to a child queue if you want. It uses the
-parent queue's configuration instead of having independent child queue
-configuration blocks.
+Fanout queues have multiple readers, and behave as if every item put into the
+queue was duplicated for each reader. The readers share one (write-only)
+journal, but each has a different in-memory queue and a different head
+pointer. In this case, the readers each have their own name, which is the
+primary queue name followed by a `+` and the reader name. For example, the
+"audit" reader of the "orders" queue would be named "`orders+audit`".
+
+Once a queue has at least one named reader, the "default reader" is destroyed.
+This means that once you create the "orders+audit" fanout reader, you can no
+longer read from the primary "orders" queue. 
 
 When a fanout queue is first referenced by a client, the journal file (if any)
 is created, and it will start receiving new items written to the parent queue.
-Existing items are not copied over. A fanout queue can be deleted to stop it
-from receiving new items.
+Existing items are not copied over.
+
+A fanout queue can be deleted to stop it from receiving new items. Deleting
+all fanout queues will cause the default reader to be re-created, effectively
+allowing you to read from the queue named "orders" again.
+
+All of the configuration in `QueueReaderBuilder` can be specified for each
+reader independently (which is new in 3.0), so for example, one fanout reader
+could be limited to keeping only the most recent 100 items, while another
+could enforce a default expiration time. The `defaultReader` is used for all
+readers that aren't configured by name.
+
+
+Thrift protocol
+---------------
+
+The thrift protocol is documented in the thrift file here:
+[kestrel.thrift](https://github.com/robey/kestrel/blob/master/src/main/thrift/kestrel.thrift)
 
 
 Memcache commands
@@ -242,39 +280,9 @@ Memcache commands
 
   Cleanly shutdown the server and exit.
 
-- `RELOAD`
-
-  Reload the config file and reconfigure all queues. This should have no
-  noticable effect on the server's responsiveness.
-
-- `DUMP_CONFIG`
-
-  Dump a list of each queue currently known to the server, and list the config
-  values for each queue. The format is:
-
-        queue 'master' {
-          max_items=2147483647
-          max_size=9223372036854775807
-          max_age=0
-          max_journal_size=16277216
-          max_memory_size=134217728
-          max_journal_overflow=10
-          max_journal_size_absolute=9223372036854775807
-          discard_old_when_full=false
-          journal=true
-          sync_journal=false
-        }
-
-  The last queue will be followed by `END` on a line by itself.
-
 - `STATS`
 
   Display server stats in memcache style. They're described below.
-
-- `DUMP_STATS`
-
-  Display server stats in a more readable style, grouped by queue. They're
-  described below.
 
 - `MONITOR <queue-name> <seconds> [max-items]`
 
@@ -290,6 +298,9 @@ Memcache commands
   Confirm receipt of `count` items from a queue. Usually this is the response
   to a `MONITOR` command, to confirm the items that arrived during the monitor
   period.
+
+`DUMP_CONFIG`, `DUMP_STATS`, and `RELOAD` have been removed in 3.0. Please use
+the ostrich web port (2223) for formatted server stats.
 
 
 Reliable reads
@@ -336,7 +347,7 @@ Example:
 Server stats
 ------------
 
-Global stats reported by kestrel are:
+Global stats reported by kestrel (via the memcache `STATS` command) are:
 
 - `uptime` - seconds the server has been online
 - `time` - current time in unix epoch
@@ -377,78 +388,21 @@ For each queue, the following stats are also reported:
   `GET/t`)
 - `open_transactions` - items read with `/open` but not yet confirmed
 
+More detailed statistics, including latency timing measurements, are available
+via the ostrich web port. To see them in human-readable form, use:
+
+    $ curl localhost:2223/stats.txt
+
+Similarly, in json, with the counters delta'd every minute:
+
+    $ curl localhost:2223/stats.json\?period=60
+
+See the ostrich documentation for more details.
+
 
 Kestrel as a library
 --------------------
 
-You can use kestrel as a library by just sticking the jar on your classpath.
-It's a cheap way to get a durable work queue for inter-process or inter-thread
-communication. Each queue is represented by a `PersistentQueue` object:
+The reusable parts of kestrel have been pulled out into a separate library -- check it out!
 
-    class PersistentQueue(val name: String, persistencePath: String,
-                          @volatile var config: QueueConfig, timer: Timer,
-                          queueLookup: Option[(String => Option[PersistentQueue])]) {
-
-and must be initialized before using:
-
-    def setup(): Unit
-
-specifying the path for the journal files (if the queue will be journaled),
-the name of the queue, a `QueueConfig` object (derived from `QueueBuilder`),
-a timer for handling timeout reads, and optionally a way to find other named
-queues (for `expireToQueue` support).
-
-To add an item to a queue:
-
-    def add(value: Array[Byte], expiry: Option[Time]): Boolean
-
-It will return `false` if the item was rejected because the queue was full.
-
-Queue items are represented by a case class:
-
-    case class QItem(addTime: Time, expiry: Option[Time], data: Array[Byte], var xid: Int)
-
-and several operations exist to remove or peek at the head item:
-
-    def peek(): Option[QItem]
-    def remove(): Option[QItem]
-
-To open a reliable read, set `transaction` true, and later confirm or unremove
-the item by its `xid`:
-
-    def remove(transaction: Boolean): Option[QItem]
-    def unremove(xid: Int)
-    def confirmRemove(xid: Int)
-
-You can also asynchronously remove or peek at items using futures.
-
-    def waitRemove(deadline: Option[Time], transaction: Boolean): Future[Option[QItem]]
-    def waitPeek(deadline: Option[Time]): Future[Option[QItem]]
-
-When done, you should close the queue:
-
-    def close(): Unit
-    def isClosed: Boolean
-
-Here's a short example:
-
-    var queue = new PersistentQueue("work", "/var/spool/kestrel", config, timer, None)
-    queue.setup()
-
-    // add an item with no expiration:
-    queue.add("hello".getBytes, 0)
-
-    // start to remove it, then back out:
-    val item = queue.remove(true)
-    queue.unremove(item.xid)
-
-    // remove an item with a 500msec timeout, and confirm it:
-    queue.waitRemove(500.milliseconds.fromNow, true)() match {
-      case None =>
-        println("nothing. :(")
-      case Some(item) =>
-        println("got: " + new String(item.data))
-        queue.confirmRemove(item.xid)
-    }
-
-    queue.close()
+https://github.com/robey/libkestrel

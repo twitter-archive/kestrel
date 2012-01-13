@@ -16,9 +16,12 @@
  */
 
 package net.lag.kestrel
-package tools
+package oldjournal
 
+import com.twitter.conversions.storage._
+import com.twitter.util.Duration
 import java.io.{FileNotFoundException, IOException}
+import net.lag.kestrel.oldjournal._
 import scala.collection.mutable
 
 
@@ -30,9 +33,10 @@ object QPacker {
   def usage() {
     println()
     println("usage: qpack.sh <journal-files...>")
-    println("    pack one or more kestrel journal file into a single new one")
+    println("    pack one or more old (2.x) kestrel journal file(s) into a single new one")
     println()
     println("options:")
+    println("    -q              quiet mode")
     println("    -f filename     new packed journal file")
     println()
   }
@@ -60,17 +64,28 @@ object QPacker {
       System.exit(0)
     }
 
-    println("Packing journals...")
-    val packer = new JournalPacker(filenames, newFilename)
-    val journal = packer { (bytes1, bytes2) =>
-      if (bytes1 == 0 && bytes2 == 0) {
-        println("\rWriting new journal..." + (" " * 40))
-      } else {
-        print("\rPacking: %-6s %-6s".format(Util.bytesToHuman(bytes1, 0), Util.bytesToHuman(bytes2, 0)))
+    if (!quiet) println("Packing journals...")
+    val packer = new JournalPacker(filenames)
+    val journalState = packer { (bytes1, bytes2) =>
+      if (!quiet) {
+        print("\rPacking: %-6s %-6s".format(bytes1.bytes.toHuman, bytes2.bytes.toHuman))
+        Console.flush()
       }
+    }
+
+    if (!quiet) {
+      println("\rWriting new journal..." + (" " * 40))
       Console.flush()
     }
-    println("\r" + (" " * 40))
-    println("Done. New journal size: %d".format(journal.size))
+
+    val out = new Journal(newFilename, Duration.MaxValue)
+    out.open()
+    out.dump(journalState.openTransactions, journalState.items)
+    out.close()
+
+    if (!quiet) {
+      print("\r" + (" " * 40) + "\r")
+      println("Done. New journal size: %d".format(out.size))
+    }
   }
 }

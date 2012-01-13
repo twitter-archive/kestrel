@@ -83,18 +83,24 @@ case class ItemResponse(data: Option[Array[Byte]]) extends TextResponse {
       TextResponse.NO_ITEM
     }
   }
+
+  override def toString = "<ItemResponse: %s>".format(data.map { _.toString })
 }
+
 case class ErrorResponse(message: String) extends TextResponse {
   def toBuffer = Some(ChannelBuffers.wrappedBuffer(("-" + message + "\n").getBytes("ascii")))
+  override def toString = "<ErrorResponse: %s>".format(message)
 }
 case class CountResponse(count: Long) extends TextResponse {
   def toBuffer = Some(ChannelBuffers.wrappedBuffer(("+" + count.toString + "\n").getBytes("ascii")))
+  override def toString = "<CountResponse: %s>".format(count)
 }
-case object NoResponse extends TextResponse {
+case class NoResponse() extends TextResponse {
   def toBuffer = None
 }
 case class StringResponse(message: String) extends TextResponse {
   def toBuffer = Some(ChannelBuffers.wrappedBuffer((":" + message + "\n").getBytes("ascii")))
+  override def toString = "<StringResponse: %s>".format(message)
 }
 
 /**
@@ -108,7 +114,7 @@ class TextHandler(
   val log = Logger.get(getClass)
 
   val sessionId = Kestrel.sessionId.incrementAndGet()
-  val handler = new KestrelHandler(queueCollection, maxOpenReads, clientDescription, sessionId)
+  val handler = new KestrelHandler(queueCollection, maxOpenReads, clientDescription _, sessionId) with SimplePendingReads
   log.debug("New text session %d from %s", sessionId, clientDescription)
 
   protected def clientDescription: String = {
@@ -186,19 +192,20 @@ class TextHandler(
           val timeout = request.args(1).toInt.milliseconds.fromNow
           handler.closeAllReads(queueName)
           val channel = new LatchedChannelSource[TextResponse]
-          handler.monitorUntil(queueName, Some(timeout), maxOpenReads, true) {
-            case None =>
-              channel.send(ItemResponse(None))
-              channel.close()
-            case Some(item) =>
-              channel.send(ItemResponse(Some(item.data)))
+          handler.monitorUntil(queueName, Some(timeout), maxOpenReads, true) { (itemOption, _) =>
+            itemOption match {
+              case None =>
+                channel.send(ItemResponse(None) then Codec.EndStream)
+              case Some(item) =>
+                channel.send(ItemResponse(Some(item.data)))
+            }
           }
-          Future(NoResponse then Codec.Stream(channel))
+          Future(new NoResponse() then Codec.Stream(channel))
         }
       case "confirm" =>
         // confirm <queue> <count>
         if (request.args.size < 2) {
-          Future(ErrorResponse("Queue name & timeout required."))
+          Future(ErrorResponse("Queue name & count required."))
         } else {
           val queueName = request.args(0)
           val count = request.args(1).toInt
