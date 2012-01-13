@@ -94,9 +94,6 @@ class MemcacheHandler(
       case "shutdown" =>
         handler.shutdown()
         disconnect()
-      case "reload" =>
-        Kestrel.kestrel.reload()
-        Future(new MemcacheResponse("Reloaded config."))
       case "flush" =>
         handler.flush(request.line(1))
         Future(new MemcacheResponse("END"))

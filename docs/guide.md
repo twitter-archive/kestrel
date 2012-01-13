@@ -280,11 +280,6 @@ Memcache commands
 
   Cleanly shutdown the server and exit.
 
-- `RELOAD`
-
-  Reload the config file and reconfigure all queues. This should have no
-  noticable effect on the server's responsiveness.
-
 - `STATS`
 
   Display server stats in memcache style. They're described below.
@@ -304,8 +299,8 @@ Memcache commands
   to a `MONITOR` command, to confirm the items that arrived during the monitor
   period.
 
-`DUMP_CONFIG and DUMP_STATS have been removed in 3.0. Please use the ostrich
-`web port (2223) for formatted server stats.
+`DUMP_CONFIG`, `DUMP_STATS`, and `RELOAD` have been removed in 3.0. Please use
+the ostrich web port (2223) for formatted server stats.
 
 
 Reliable reads
