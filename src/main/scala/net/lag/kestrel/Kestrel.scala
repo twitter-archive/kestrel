@@ -18,9 +18,10 @@
 package net.lag.kestrel
 
 import java.net.InetSocketAddress
-import java.util.concurrent.{Executors, ExecutorService, TimeUnit}
+import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.{immutable, mutable}
+import com.twitter.concurrent.NamedPoolThreadFactory
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.naggati.codec.MemcacheCodec
@@ -72,7 +73,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
 
   var queueCollection: QueueCollection = null
   var timer: Timer = null
-  var journalSyncTimer: Timer = null
+  var journalSyncScheduler: ScheduledExecutorService = null
   var executor: ExecutorService = null
   var channelFactory: ChannelFactory = null
   var memcacheAcceptor: Option[Channel] = None
@@ -93,15 +94,25 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
              listenAddress, memcacheListenPort, textListenPort, queuePath, protocol,
              expirationTimerFrequency, clientTimeout, maxOpenTransactions)
 
-    // this means no timeout will be at better granularity than N ms.
-    journalSyncTimer = new HashedWheelTimer(10, TimeUnit.MILLISECONDS)
+    // this means no timeout will be at better granularity than 100 ms.
     timer = new HashedWheelTimer(100, TimeUnit.MILLISECONDS)
 
-    queueCollection = new QueueCollection(queuePath, new NettyTimer(timer), new NettyTimer(journalSyncTimer), defaultQueueConfig, builders)
+    journalSyncScheduler =
+      new ScheduledThreadPoolExecutor(
+        Runtime.getRuntime.availableProcessors,
+        new NamedPoolThreadFactory("journal-sync", true),
+        new RejectedExecutionHandler {
+          override def rejectedExecution(r: Runnable, executor: ThreadPoolExecutor) {
+            log.warning("Rejected journal fsync")
+          }
+        })
+
+    queueCollection = new QueueCollection(queuePath, new NettyTimer(timer), journalSyncScheduler, defaultQueueConfig, builders)
     queueCollection.loadQueues()
 
     Stats.addGauge("items") { queueCollection.currentItems.toDouble }
     Stats.addGauge("bytes") { queueCollection.currentBytes.toDouble }
+    Stats.addGauge("reserved_memory_ratio") { queueCollection.reservedMemoryRatio }
 
     // netty setup:
     executor = Executors.newCachedThreadPool()
@@ -161,8 +172,9 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
     executor.awaitTermination(5, TimeUnit.SECONDS)
     timer.stop()
     timer = null
-    journalSyncTimer.stop()
-    journalSyncTimer = null
+    journalSyncScheduler.shutdown()
+    journalSyncScheduler.awaitTermination(5, TimeUnit.SECONDS)
+    journalSyncScheduler = null
     log.info("Goodbye.")
   }
 

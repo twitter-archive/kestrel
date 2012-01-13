@@ -20,7 +20,7 @@ package net.lag.kestrel
 import java.io._
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.channels.FileChannel
-import java.util.concurrent.{CountDownLatch, Executor}
+import java.util.concurrent.{CountDownLatch, Executor, ScheduledExecutorService}
 import scala.collection.mutable
 import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
@@ -30,10 +30,10 @@ import com.twitter.util._
 import config._
 
 class PersistentQueue(val name: String, persistencePath: String, @volatile var config: QueueConfig,
-                      timer: Timer, journalSyncTimer: Timer,
+                      timer: Timer, journalSyncScheduler: ScheduledExecutorService,
                       queueLookup: Option[(String => Option[PersistentQueue])]) {
-  def this(name: String, persistencePath: String, config: QueueConfig, timer: Timer, journalSyncTimer: Timer) =
-    this(name, persistencePath, config, timer, journalSyncTimer, None)
+  def this(name: String, persistencePath: String, config: QueueConfig, timer: Timer, journalSyncScheduler: ScheduledExecutorService) =
+    this(name, persistencePath, config, timer, journalSyncScheduler, None)
 
   private val log = Logger.get(getClass.getName)
 
@@ -70,7 +70,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   private var paused = false
 
   private var journal =
-    new Journal(new File(persistencePath).getCanonicalFile, name, journalSyncTimer, config.syncJournal)
+    new Journal(new File(persistencePath).getCanonicalFile, name, journalSyncScheduler, config.syncJournal)
 
   private val waiters = new DeadlineWaitQueue(timer)
 
@@ -82,6 +82,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
 
   def length: Long = synchronized { queueLength }
   def bytes: Long = synchronized { queueSize }
+  def maxMemoryBytes: Long = synchronized { config.maxMemorySize.inBytes }
   def journalSize: Long = synchronized { journal.size }
   def journalTotalSize: Long = journal.archivedSize + journalSize
   def currentAge: Duration = synchronized { if (queueSize == 0) 0.milliseconds else _currentAge }
@@ -231,7 +232,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
    *     head of the queue)
    */
   def remove(transaction: Boolean): Option[QItem] = {
-    synchronized {
+    val removedItem = synchronized {
       if (closed || paused || queueLength == 0) {
         None
       } else {
@@ -240,9 +241,17 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
           if (transaction) journal.removeTentative(item.get.xid) else journal.remove()
           checkRotateJournal()
         }
+
         item
       }
     }
+
+    removedItem.foreach { qItem =>
+      val usec = (Time.now - qItem.addTime).inMilliseconds.toInt max 0
+      Stats.addMetric("delivery_latency_msec", usec)
+      Stats.addMetric("q/" + name + "/delivery_latency_msec", usec)
+    }
+    removedItem
   }
 
   /**
@@ -250,12 +259,20 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
    */
   def remove(): Option[QItem] = remove(false)
 
-  private def waitOperation(op: => Option[QItem], deadline: Option[Time], future: Promise[Option[QItem]]) {
+  private def waitOperation(op: => Option[QItem], startTime: Time, deadline: Option[Time],
+                            future: Promise[Option[QItem]]) {
     val item = op
     if (synchronized {
       if (!item.isDefined && !closed && !paused && deadline.isDefined && deadline.get > Time.now) {
         // if we get woken up, try again with the same deadline.
-        val w = waiters.add(deadline.get, { () => waitOperation(op, deadline, future) }, { () => future.setValue(None) })
+        def onTrigger() = waitOperation(op, startTime, deadline, future)
+        def onTimeout() {
+          val msec = (Time.now - startTime).inMilliseconds.toInt
+          Stats.addMetric("get_timeout_msec", msec)
+          Stats.addMetric("q/" + name + "/get_timeout_msec", msec)
+          future.setValue(None)
+        }
+        val w = waiters.add(deadline.get, onTrigger, onTimeout)
         // FIXME: use onCancellation when util-core is bumped.
         future.linkTo(new CancellableSink({ waiters.remove(w) }))
         false
@@ -266,20 +283,22 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   }
 
   final def waitRemove(deadline: Option[Time], transaction: Boolean): Future[Option[QItem]] = {
+    val startTime = Time.now
     val promise = new Promise[Option[QItem]]()
-    waitOperation(remove(transaction), deadline, promise)
-    // if an item was handed off immediately, track latency from the "put" to "get".
-    if (promise.isDefined && promise().isDefined) {
-      val usec = (Time.now - promise().get.addTime).inMicroseconds.toInt max 0
-      Stats.addMetric("get_hit_latency_usec", usec)
-      Stats.addMetric("q/" + name + "/get_hit_latency_usec", usec)
+    waitOperation(remove(transaction), startTime, deadline, promise)
+    // if an item was handed off immediately, track latency of the "get" operation
+    if (promise.isDefined) {
+      val statName = if (promise().isDefined) "get_hit_latency_usec" else "get_miss_latency_usec"
+      val usec = (Time.now - startTime).inMicroseconds.toInt max 0
+      Stats.addMetric(statName, usec)
+      Stats.addMetric("q/" + name + "/" + statName, usec)
     }
     promise
   }
 
   final def waitPeek(deadline: Option[Time]): Future[Option[QItem]] = {
     val promise = new Promise[Option[QItem]]()
-    waitOperation(peek(), deadline, promise)
+    waitOperation(peek(), Time.now, deadline, promise)
     promise
   }
 

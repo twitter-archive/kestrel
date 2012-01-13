@@ -85,7 +85,7 @@ extends NettyHandler[MemcacheRequest](channelGroup, queueCollection, maxOpenTran
         dumpStats(request.line.drop(1))
       case "delete" =>
         delete(request.line(1))
-        channel.write(new MemcacheResponse("END"))
+        channel.write(new MemcacheResponse("DELETED"))
       case "flush_expired" =>
         channel.write(new MemcacheResponse(flushExpired(request.line(1)).toString))
       case "flush_all_expired" =>
@@ -189,6 +189,7 @@ extends NettyHandler[MemcacheRequest](channelGroup, queueCollection, maxOpenTran
     report += (("curr_items", queues.currentItems.toString))
     report += (("total_items", Stats.getCounter("total_items")().toString))
     report += (("bytes", queues.currentBytes.toString))
+    report += (("reserved_memory_ratio", "%.3f".format(queues.reservedMemoryRatio)))
     report += (("curr_connections", Kestrel.sessions.get().toString))
     report += (("total_connections", Stats.getCounter("total_connections")().toString))
     report += (("cmd_get", Stats.getCounter("cmd_get")().toString))
