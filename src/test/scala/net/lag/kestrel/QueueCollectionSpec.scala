@@ -308,5 +308,96 @@ class QueueCollectionSpec extends Specification
         }
       }
     }
+
+    "punt excessively erroring items to another queue" in {
+      withTempFolder {
+        val jobsConfig = new QueueBuilder {
+          name = "jobs"
+          defaultReader.puntManyErrorsToQueue = "errors"
+          defaultReader.puntManyErrorCount = 1
+        }
+
+        qc = new QueueCollection(folderName, timer, scheduler, config, List(jobsConfig))
+        qc.loadQueues()
+        qc.add("jobs", "hello".getBytes, None)
+
+        Kestrel.kestrel = mock[Kestrel]
+        expect {
+          one(Kestrel.kestrel).queueCollection willReturn qc
+        }
+
+        val item = qc.remove("jobs", transaction = true)().get
+        new String(item.data) mustEqual "hello"
+        qc.unremove("jobs", item.id)
+
+        qc.reader("jobs").get.items mustEqual 0
+        qc.reader("errors").get.items mustEqual 1
+        qc.remove("errors")() must beSomeQueueItem("hello")
+      }
+    }
+
+    "punt excessively erroring items to another queue, then try again" in {
+      withTempFolder {
+        Time.withCurrentTimeFrozen { time =>
+          val jobsConfig = new QueueBuilder {
+            name = "jobs"
+            defaultReader.puntErrorToQueue = "retry"
+            defaultReader.puntManyErrorsToQueue = "errors"
+            defaultReader.puntManyErrorCount = 2
+          }
+          val retryConfig = new QueueBuilder {
+            name = "retry"
+            defaultReader.expireToQueue = "jobs"
+            defaultReader.maxAge = 1.minute
+          }
+
+          qc = new QueueCollection(folderName, timer, scheduler, config,
+            List(jobsConfig, retryConfig))
+          qc.loadQueues()
+          qc.add("jobs", "hello".getBytes, None)
+
+          Kestrel.kestrel = mock[Kestrel]
+          expect {
+            one(Kestrel.kestrel).queueCollection willReturn qc
+          }
+
+          val item = qc.remove("jobs", transaction = true)().get
+          new String(item.data) mustEqual "hello"
+          item.errorCount mustEqual 0
+          qc.unremove("jobs", item.id)
+
+          qc.reader("jobs").get.items mustEqual 0
+          qc.reader("retry").get.items mustEqual 1
+          qc.reader("errors").get.items mustEqual 0
+
+          expect {
+            one(Kestrel.kestrel).queueCollection willReturn qc
+          }
+
+          time.advance(2.minutes)
+          qc.remove("retry")() mustEqual None
+          qc.reader("jobs").get.items mustEqual 1
+          qc.reader("retry").get.items mustEqual 0
+          qc.reader("errors").get.items mustEqual 0
+
+          expect {
+            one(Kestrel.kestrel).queueCollection willReturn qc
+          }
+
+          val item2 = qc.remove("jobs", transaction = true)().get
+          new String(item2.data) mustEqual "hello"
+          item2.errorCount mustEqual 1
+          qc.unremove("jobs", item2.id)
+
+          qc.reader("jobs").get.items mustEqual 0
+          qc.reader("retry").get.items mustEqual 0
+          qc.reader("errors").get.items mustEqual 1
+
+          val item3 = qc.remove("errors")().get
+          new String(item3.data) mustEqual "hello"
+          item3.errorCount mustEqual 2
+        }
+      }
+    }
   }
 }
