@@ -182,16 +182,24 @@ class QueueReaderBuilder extends Config[JournaledQueueReaderConfig] {
    */
   var puntManyErrorCount = 100
 
-  private[this] def checkPunt(queueItem: QueueItem): Boolean = {
-    puntErrorToQueue match {
-      case Some(queueName) => {
-        Kestrel.kestrel.queueCollection.writer(queueName).foreach {
-          _.put(queueItem.data, Time.now, None, queueItem.errorCount)
-        }
-        true
-      }
-      case None => false
+  private[this] def put(queueName: String)(item: QueueItem) {
+    Kestrel.kestrel.queueCollection.writer(queueName).foreach {
+      _.put(item.data, Time.now, None, item.errorCount)
     }
+  }
+
+  private[this] def moveManyErrors(queueName: String)(item: QueueItem): Boolean = {
+    if (item.errorCount >= puntManyErrorCount) {
+      put(queueName)(item)
+      true
+    } else {
+      puntErrorToQueue.map { moveError(_)(item) }.getOrElse(false)
+    }
+  }
+
+  private[this] def moveError(queueName: String)(item: QueueItem): Boolean = {
+    put(queueName)(item)
+    true
   }
 
   def apply() = {
@@ -205,27 +213,12 @@ class QueueReaderBuilder extends Config[JournaledQueueReaderConfig] {
       } else {
         ConcurrentBlockingQueue.FullPolicy.RefusePuts
       },
-      processExpiredItem = expireToQueue match {
-        case Some(queueName) => { queueItem =>
-          Kestrel.kestrel.queueCollection.writer(queueName).foreach {
-            _.put(queueItem.data, Time.now, None, queueItem.errorCount)
-          }
-        }
-        case None => { _ => () }
-      },
-      errorHandler = puntManyErrorsToQueue match {
-        case Some(queueName) => { queueItem =>
-          if (queueItem.errorCount >= puntManyErrorCount) {
-            Kestrel.kestrel.queueCollection.writer(queueName).foreach {
-              _.put(queueItem.data, Time.now, None, queueItem.errorCount)
-            }
-            true
-          } else {
-            checkPunt(queueItem)
-          }
-        }
-        case None => { queueItem => checkPunt(queueItem) }
-      },
+      processExpiredItem = expireToQueue.map { put(_) _ }.getOrElse { _ => () },
+      errorHandler = puntManyErrorsToQueue.map {
+        moveManyErrors(_) _
+      }.orElse {
+        puntErrorToQueue.map { moveError(_) _ }
+      }.getOrElse { _ => false },
       maxExpireSweep = maxExpireSweep,
       deliveryLatency = { (reader, timing) =>
         Stats.addMetric("delivery_latency_msec", timing.inMilliseconds.toInt)
