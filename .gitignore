@@ -19,3 +19,4 @@ ignore/
 .scala_dependencies
 .settings/
 go
+Gemfile.lock
