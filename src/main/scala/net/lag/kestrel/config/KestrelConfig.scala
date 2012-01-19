@@ -176,7 +176,7 @@ trait KestrelConfig extends ServerConfig[Kestrel] {
   /**
    * Port for accepting thrift protocol connections.
    */
-  var thriftListenPort: Option[Int] = Some(9999)
+  var thriftListenPort: Option[Int] = Some(2221)
 
   /**
    * Where queue journals should be stored. Each queue will have its own files in this folder.

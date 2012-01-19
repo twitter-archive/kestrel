@@ -8,7 +8,7 @@ new KestrelConfig {
   listenAddress = "0.0.0.0"
   memcacheListenPort = 22133
   textListenPort = 2222
-  thriftListenPort = 9999
+  thriftListenPort = 2229
 
   queuePath = "/var/spool/kestrel"
 
