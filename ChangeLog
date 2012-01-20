@@ -1,5 +1,18 @@
+
+2.1.5
+-----
+release: 12 January 2012
+
+- Only sync to disk when there's data to be written. [Stephan Zuercher]
+- Track latency measurements better, and track the percentage of java heap
+  reserved for in-memory queues. [Stephan Zuercher]
+- Fix the startup script to work in "dash". [Matt Parlane]
+- Send the correct reponse back for the memcached protocol for delete. [Matt
+  Erkkila]
+
 2.1.4
 -----
+release: 21 November 2011
 
 - Separate timers for journal fsync operations from those used for request
   timeouts and queue expiry
@@ -8,7 +21,6 @@
 - Upgrade to latest Netty, Ostrich and Util libraries (fixes for Netty timer
   bugs)
 - Creating a queue with an illegal name causes an error
-
 
 2.1.3
 -----
