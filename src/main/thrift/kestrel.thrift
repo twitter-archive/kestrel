@@ -54,8 +54,8 @@ service Kestrel {
    * `max_items` have been fetched, or the timeout occurs. If the timeout
    * occurs, this call may return from zero to `max_items` items.
    *
-   * With no timeout, the call will block until `max_items` have been
-   * fetched.
+   * With no timeout, the call will return only with items that are
+   * immediately available.
    *
    * If `auto_abort_msec` is 0 (the default), the fetched items will behave
    * as if a `confirm` call has been made for them already: they will be

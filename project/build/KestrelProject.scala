@@ -5,7 +5,8 @@ class KestrelProject(info: ProjectInfo)
   extends StandardServiceProject(info)
   with NoisyDependencies
   with DefaultRepos
-  with CompileThriftScrooge
+  with CompileThriftRuby
+  with CompileThriftScroogeMixin
   with SubversionPublisher
   with PublishSite
 {
