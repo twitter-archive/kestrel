@@ -20,7 +20,7 @@ package config
 
 import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
-import com.twitter.libkestrel.ConcurrentBlockingQueue
+import com.twitter.libkestrel.{ConcurrentBlockingQueue, QueueItem}
 import com.twitter.libkestrel.config._
 import com.twitter.logging.Logger
 import com.twitter.logging.config._
@@ -149,6 +149,59 @@ class QueueReaderBuilder extends Config[JournaledQueueReaderConfig] {
    */
   var maxExpireSweep: Int = Int.MaxValue
 
+  /**
+   * Name of a queue to send an item to if a client fetches the item and aborts it. Normally an
+   * aborted item is just given to another client to try, but if this is set, any aborted item is
+   * moved to another queue.
+   *
+   * This can be used to send items to a temporary "holding queue" in case they are being aborted
+   * due to some temporary failure. If the "holding queue" has a `maxAge` and `expireToQueue` set,
+   * it will hold the item out of circulation for a while and then put the item back.
+   *
+   * This can also be used in combination with `puntManyErrorsToQueue`. Items with
+   * `puntManyErrorCount` errors will be punted according to that rule, and others with smaller
+   * error counts will follow this rule.
+   */
+  var puntErrorToQueue: Option[String] = None
+
+  /**
+   * Name of a queue to send "excessively erroring" items to. Each time an item is fetched but
+   * aborted, that item's error count is incremented and it's given to the next client. If an item
+   * is aborted `puntManyErrorCount` consecutive times, and `puntManyErrorsToQueue` is set, the
+   * item will be moved to that queue.
+   *
+   * This can be used to take items out of circulation and put them in an error queue for later
+   * investigation, in case the item is causing clients to crash. It can also be used to move items
+   * aside for retry later, in case the items are being aborted due to some temporary failure.
+   */
+  var puntManyErrorsToQueue: Option[String] = None
+
+  /**
+   * Number of times an item can be aborted before it's sent to the `puntErrorsToQueue` queue (if
+   * one is set).
+   */
+  var puntManyErrorsCount = 100
+
+  private[this] def put(queueName: String)(item: QueueItem) {
+    Kestrel.kestrel.queueCollection.writer(queueName).foreach {
+      _.put(item.data, Time.now, None, item.errorCount)
+    }
+  }
+
+  private[this] def moveManyErrors(queueName: String)(item: QueueItem): Boolean = {
+    if (item.errorCount >= puntManyErrorsCount) {
+      put(queueName)(item)
+      true
+    } else {
+      puntErrorToQueue.map { moveError(_)(item) }.getOrElse(false)
+    }
+  }
+
+  private[this] def moveError(queueName: String)(item: QueueItem): Boolean = {
+    put(queueName)(item)
+    true
+  }
+
   def apply() = {
     JournaledQueueReaderConfig(
       maxItems = maxItems,
@@ -160,12 +213,12 @@ class QueueReaderBuilder extends Config[JournaledQueueReaderConfig] {
       } else {
         ConcurrentBlockingQueue.FullPolicy.RefusePuts
       },
-      processExpiredItem = expireToQueue match {
-        case Some(queueName) => { queueItem =>
-          Kestrel.kestrel.queueCollection.writer(queueName).foreach { _.put(queueItem.data, Time.now, None) }
-        }
-        case None => { _ => () }
-      },
+      processExpiredItem = expireToQueue.map { put(_) _ }.getOrElse { _ => () },
+      errorHandler = puntManyErrorsToQueue.map {
+        moveManyErrors(_) _
+      }.orElse {
+        puntErrorToQueue.map { moveError(_) _ }
+      }.getOrElse { _ => false },
       maxExpireSweep = maxExpireSweep,
       deliveryLatency = { (reader, timing) =>
         Stats.addMetric("delivery_latency_msec", timing.inMilliseconds.toInt)
