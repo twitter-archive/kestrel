@@ -180,7 +180,7 @@ class QueueReaderBuilder extends Config[JournaledQueueReaderConfig] {
    * Number of times an item can be aborted before it's sent to the `puntErrorsToQueue` queue (if
    * one is set).
    */
-  var puntManyErrorCount = 100
+  var puntManyErrorsCount = 100
 
   private[this] def put(queueName: String)(item: QueueItem) {
     Kestrel.kestrel.queueCollection.writer(queueName).foreach {
@@ -189,7 +189,7 @@ class QueueReaderBuilder extends Config[JournaledQueueReaderConfig] {
   }
 
   private[this] def moveManyErrors(queueName: String)(item: QueueItem): Boolean = {
-    if (item.errorCount >= puntManyErrorCount) {
+    if (item.errorCount >= puntManyErrorsCount) {
       put(queueName)(item)
       true
     } else {

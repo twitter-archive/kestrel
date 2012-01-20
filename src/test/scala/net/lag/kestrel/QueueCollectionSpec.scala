@@ -314,7 +314,7 @@ class QueueCollectionSpec extends Specification
         val jobsConfig = new QueueBuilder {
           name = "jobs"
           defaultReader.puntManyErrorsToQueue = "errors"
-          defaultReader.puntManyErrorCount = 1
+          defaultReader.puntManyErrorsCount = 1
         }
 
         qc = new QueueCollection(folderName, timer, scheduler, config, List(jobsConfig))
@@ -343,7 +343,7 @@ class QueueCollectionSpec extends Specification
             name = "jobs"
             defaultReader.puntErrorToQueue = "retry"
             defaultReader.puntManyErrorsToQueue = "errors"
-            defaultReader.puntManyErrorCount = 2
+            defaultReader.puntManyErrorsCount = 2
           }
           val retryConfig = new QueueBuilder {
             name = "retry"

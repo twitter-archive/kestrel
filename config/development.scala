@@ -46,6 +46,9 @@ new KestrelConfig {
   } :: new QueueBuilder {
     name = "jobs_ready"
     syncJournal = 0.seconds
+    defaultReader.puntErrorToQueue = "jobs_pending"
+    defaultReader.puntManyErrorsCount = 10
+    defaultReader.puntManyErrorsToQueue = "spam"
   } :: new QueueBuilder {
     name = "spam"
   } :: new QueueBuilder {
