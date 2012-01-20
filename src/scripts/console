@@ -1,0 +1,13 @@
+#!/usr/bin/env ruby
+$: << File.dirname(__FILE__) + "/../../../target/gen-rb"
+$: << File.dirname(__FILE__) + "/../../../src/main/ruby"
+
+require "rubygems"
+require "bundler/setup"
+require "kestrel_client"
+require "irb"
+
+puts "Hint: the client is in the variable `$client`"
+$client = KestrelClient.new ARGV.shift
+
+IRB.start
