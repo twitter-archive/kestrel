@@ -99,7 +99,7 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
   def this(fullPath: String) = this(fullPath, Duration.MaxValue)
 
   private def open(file: File) {
-    writer = new PeriodicSyncFile(file, syncScheduler, syncJournal)
+    writer = new PeriodicSyncFile(file, syncScheduler, syncJournal, None)
   }
 
   def open() {

@@ -23,6 +23,7 @@ import com.twitter.logging.Logger
 import com.twitter.ostrich.admin.{BackgroundProcess, ServiceTracker}
 import com.twitter.ostrich.stats.Stats
 import com.twitter.util._
+import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable
 import scala.collection.Set
@@ -217,8 +218,8 @@ abstract class KestrelHandler(
     Stats.incr("cmd_get_open_dropped", cancelAllPendingReads())
   }
 
-  def setItem(key: String, flags: Int, expiry: Option[Time], data: Array[Byte]) = {
-    log.debug("set -> q=%s flags=%d expiry=%s size=%d", key, flags, expiry, data.length)
+  def setItem(key: String, flags: Int, expiry: Option[Time], data: ByteBuffer) = {
+    log.debug("set -> q=%s flags=%d expiry=%s size=%d", key, flags, expiry, data.remaining)
     Stats.incr("cmd_set")
     val (rv, nsec) = Duration.inNanoseconds {
       queues.add(key, data, expiry, Time.now)

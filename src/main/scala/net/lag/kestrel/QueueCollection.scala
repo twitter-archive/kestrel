@@ -18,6 +18,7 @@
 package net.lag.kestrel
 
 import java.io.File
+import java.nio.ByteBuffer
 import java.util.concurrent.{CountDownLatch, ScheduledExecutorService}
 import scala.collection.mutable
 import com.twitter.conversions.time._
@@ -154,7 +155,7 @@ class QueueCollection(
    *
    * @return true if the item was added; false if the server is shutting down
    */
-  def add(key: String, data: Array[Byte], expiry: Option[Time], addTime: Time): Boolean = {
+  def add(key: String, data: ByteBuffer, expiry: Option[Time], addTime: Time): Boolean = {
     writer(key) flatMap { q =>
       q.put(data, addTime, expiry) map { future =>
         future map { _ => Stats.incr("total_items") }
@@ -163,8 +164,8 @@ class QueueCollection(
     } getOrElse(false)
   }
 
-  def add(key: String, item: Array[Byte]): Boolean = add(key, item, None, Time.now)
-  def add(key: String, item: Array[Byte], expiry: Option[Time]): Boolean = add(key, item, expiry, Time.now)
+  def add(key: String, item: ByteBuffer): Boolean = add(key, item, None, Time.now)
+  def add(key: String, item: ByteBuffer, expiry: Option[Time]): Boolean = add(key, item, expiry, Time.now)
 
   /**
    * Retrieve an item from a queue and pass it to a continuation. If no item is available within

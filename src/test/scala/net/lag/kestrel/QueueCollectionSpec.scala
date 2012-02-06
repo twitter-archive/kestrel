@@ -37,6 +37,8 @@ class QueueCollectionSpec extends Specification
   with JMocker
   with ClassMocker
 {
+  import TestBuffers.{stringToBuffer, bufferToString}
+
   private var qc: QueueCollection = null
 
   val config = new QueueBuilder { name = "test" }
@@ -57,8 +59,8 @@ class QueueCollectionSpec extends Specification
         qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
         qc.queueNames mustEqual Nil
 
-        qc.add("work1", "stuff".getBytes)
-        qc.add("work2", "other stuff".getBytes)
+        qc.add("work1", stringToBuffer("stuff"))
+        qc.add("work2", stringToBuffer("other stuff"))
 
         qc.queueNames.sorted mustEqual List("work1", "work2")
         qc.currentBytes mustEqual 16
@@ -101,9 +103,9 @@ class QueueCollectionSpec extends Specification
     "load from journal" in {
       withTempFolder {
         qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
-        qc.add("ducklings", "huey".getBytes)
-        qc.add("ducklings", "dewey".getBytes)
-        qc.add("ducklings", "louie".getBytes)
+        qc.add("ducklings", stringToBuffer("huey"))
+        qc.add("ducklings", stringToBuffer("dewey"))
+        qc.add("ducklings", stringToBuffer("louie"))
         qc.queueNames mustEqual List("ducklings")
         qc.currentBytes mustEqual 14
         qc.currentItems mustEqual 3
@@ -122,8 +124,8 @@ class QueueCollectionSpec extends Specification
       withTempFolder {
         Stats.clearAll()
         qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
-        qc.add("ducklings", "ugly1".getBytes)
-        qc.add("ducklings", "ugly2".getBytes)
+        qc.add("ducklings", stringToBuffer("ugly1"))
+        qc.add("ducklings", stringToBuffer("ugly2"))
         Stats.getCounter("get_hits")() mustEqual 0
         Stats.getCounter("get_misses")() mustEqual 0
 
@@ -198,9 +200,9 @@ class QueueCollectionSpec extends Specification
         withTempFolder {
           qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
           qc.reader("jobs+client1")
-          qc.add("jobs", "job1".getBytes)
+          qc.add("jobs", stringToBuffer("job1"))
           qc.remove("jobs+client2")() mustEqual None
-          qc.add("jobs", "job2".getBytes)
+          qc.add("jobs", stringToBuffer("job2"))
 
           qc.remove("jobs+client2")() must beSomeQueueItem("job2")
           qc.remove("jobs+client1")() must beSomeQueueItem("job1")
@@ -218,9 +220,9 @@ class QueueCollectionSpec extends Specification
 
           qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
           qc.loadQueues()
-          qc.add("jobs", "job1".getBytes)
+          qc.add("jobs", stringToBuffer("job1"))
           qc.remove("jobs+client1")() must beSomeQueueItem("job1")
-          qc.add("jobs", "job2".getBytes)
+          qc.add("jobs", stringToBuffer("job2"))
 
           qc.remove("jobs+client1")() must beSomeQueueItem("job2")
           qc.remove("jobs+client2")() must beSomeQueueItem("job1")
@@ -239,7 +241,7 @@ class QueueCollectionSpec extends Specification
 
             qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
             qc.loadQueues()
-            qc.add("jobs", "job1".getBytes)
+            qc.add("jobs", stringToBuffer("job1"))
 
             qc.delete("jobs+client1")
 
@@ -249,7 +251,7 @@ class QueueCollectionSpec extends Specification
             )
             qc.remove("jobs+client2")() must beSomeQueueItem("job1")
 
-            qc.add("jobs", "job2".getBytes)
+            qc.add("jobs", stringToBuffer("job2"))
             new File(folderName).list().toList.sorted mustEqual List(
               "jobs." + Time.now.inMilliseconds,
               "jobs.read.client2"
@@ -267,10 +269,10 @@ class QueueCollectionSpec extends Specification
           qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
           qc.loadQueues()
 
-          qc.add("expired", "hello".getBytes, Some(5.seconds.fromNow))
+          qc.add("expired", stringToBuffer("hello"), Some(5.seconds.fromNow))
           time.advance(4.seconds)
           qc.remove("expired")() must beSomeQueueItem("hello")
-          qc.add("expired", "hello".getBytes, Some(5.seconds.fromNow))
+          qc.add("expired", stringToBuffer("hello"), Some(5.seconds.fromNow))
           time.advance(6.seconds)
           qc.remove("expired")() mustEqual None
         }
@@ -289,7 +291,7 @@ class QueueCollectionSpec extends Specification
 
           qc = new QueueCollection(folderName, timer, scheduler, config, List(expireConfig))
           qc.loadQueues()
-          qc.add("jobs", "hello".getBytes, Some(1.second.fromNow))
+          qc.add("jobs", stringToBuffer("hello"), Some(1.second.fromNow))
           qc.reader("jobs").get.items mustEqual 1
           qc.reader("expired").get.items mustEqual 0
 
