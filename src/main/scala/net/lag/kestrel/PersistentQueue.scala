@@ -59,6 +59,10 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   val totalDiscarded = Stats.getCounter(statNamed("discarded"))
   totalDiscarded.reset()
 
+  // # of times this queue has been flushed:
+  val totalFlushes = Stats.getCounter(statNamed("total_flushes"))
+  totalFlushes.reset()
+
   // # of items in the queue (including those not in memory)
   private var queueLength: Long = 0
 
@@ -110,7 +114,8 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       ("age", currentAge.inMilliseconds.toString),
       ("discarded", totalDiscarded().toString),
       ("waiters", waiterCount.toString),
-      ("open_transactions", openTransactionCount.toString)
+      ("open_transactions", openTransactionCount.toString),
+      ("total_flushes", totalFlushes().toString)
     )
   }
 
@@ -327,6 +332,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
 
   def flush() {
     while (remove(false).isDefined) { }
+    totalFlushes.incr()
   }
 
   /**
@@ -371,6 +377,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     Stats.removeCounter(statNamed("total_items"))
     Stats.removeCounter(statNamed("expired_items"))
     Stats.removeCounter(statNamed("discarded"))
+    Stats.removeCounter(statNamed("total_flushes"))
     Stats.clearGauge(statNamed("items"))
     Stats.clearGauge(statNamed("bytes"))
     Stats.clearGauge(statNamed("journal_size"))

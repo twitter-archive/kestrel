@@ -95,6 +95,7 @@ class PersistentQueueSpec extends Specification
         q.totalItems() mustEqual 0
         q.bytes mustEqual 0
         q.journalSize mustEqual 0
+        q.totalFlushes() mustEqual 0
 
         q.add("alpha".getBytes)
         q.add("beta".getBytes)
@@ -103,6 +104,8 @@ class PersistentQueueSpec extends Specification
 
         q.flush()
         q.length mustEqual 0
+        
+        q.totalFlushes() mustEqual 1
 
         // journal should contain exactly: one unfinished transaction, 2 items.
         q.close
