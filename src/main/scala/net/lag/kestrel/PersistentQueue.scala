@@ -44,6 +44,9 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
 
   // age of the last item read from the queue:
   private var _currentAge: Duration = 0.milliseconds
+  
+  // time the queue was created
+  private var _createTime = Time.now
 
   def statNamed(statName: String) = "q/" + name + "/" + statName
 
@@ -136,6 +139,23 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       if (expiry.isDefined) Some(expiry.get min maxExpiry) else Some(maxExpiry)
     } else {
       expiry
+    }
+  }
+
+  /**
+   * Check if this Queue is eligible for expiration by way of it being empty
+   * and it's age being greater than or equal to maxQueueAge
+   */
+  def isReadyForExpiration: Boolean = {
+    // Don't even bother if the maxQueueAge is None
+    if(config.maxQueueAge.isDefined && config.maxQueueAge.get == None) {
+      false
+    } else {
+      if(queue.isEmpty && config.maxQueueAge.isDefined && Time.now > _createTime + config.maxQueueAge.get) {
+        true
+      } else {
+        false
+      }
     }
   }
 

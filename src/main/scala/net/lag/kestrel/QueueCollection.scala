@@ -196,9 +196,30 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
       queue(name) map { q => q.discardExpired(q.config.maxExpireSweep) } getOrElse(0)
     }
   }
+  
+  def expireQueue(name: String): Unit = {
+      
+    if(!shuttingDown) {
+      queues.get(name) map { q =>
+        if(q.isReadyForExpiration) {
+          delete(name)
+          Stats.incr("queue_expires")
+          log.info("Expired queue %s", name)
+        }
+      }
+    }
+    return 1
+  }
 
   def flushAllExpired(): Int = {
     queueNames.foldLeft(0) { (sum, qName) => sum + flushExpired(qName) }
+  }
+  
+  def deleteExpiredQueues(): Unit = {
+
+    // Now that we've cleaned out the queue, lets see if any of them are
+    // ready to be expired.
+    queueNames.map { qName => expireQueue(qName) }
   }
 
   def stats(key: String): Array[(String, String)] = queue(key) match {
