@@ -10,11 +10,11 @@ class KestrelProject(info: ProjectInfo)
   with SubversionPublisher
   with PublishSite
 {
-  val finagleVersion = "1.9.6"
+  val finagleVersion = "1.10.0"
 
   val libkestrel = "com.twitter" % "libkestrel" % "1.0.0-SNAPSHOT"
   val naggati = "com.twitter" % "naggati" % "2.2.2" intransitive() // allow custom netty
-  val netty   = "org.jboss.netty" % "netty" % "3.2.6.Final"
+  val netty   = "org.jboss.netty" % "netty" % "3.2.7.Final"
   val finagle = "com.twitter" % "finagle-core" % finagleVersion
   val ostrich = "com.twitter" % "ostrich" % "4.10.1-SNAPSHOT"
   val finagle_ostrich4 = "com.twitter" % "finagle-ostrich4" % finagleVersion
