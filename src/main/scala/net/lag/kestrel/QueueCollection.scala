@@ -54,6 +54,7 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
     }
     val config = queueConfigMap.getOrElse(name, defaultQueueConfig)
     log.info("Setting up queue %s: %s", realName, config)
+    Stats.incr("queue_creates")
     new PersistentQueue(realName, path, config, timer, journalSyncScheduler, Some(this.apply))
   }
 
@@ -178,6 +179,7 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
         q.destroyJournal()
         q.removeStats()
         queues.remove(name)
+        Stats.incr("queue_deletes")
       }
       if (name contains '+') {
         val master = name.split('+')(0)

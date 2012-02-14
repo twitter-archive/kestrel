@@ -47,6 +47,8 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
         Stats.clearAll()
         qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
         qc.queueNames mustEqual Nil
+        Stats.getCounter("queue_creates")() mustEqual 0
+        Stats.getCounter("queue_deletes")() mustEqual 0
 
         qc.add("work1", "stuff".getBytes)
         qc.add("work2", "other stuff".getBytes)
@@ -55,6 +57,8 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
         qc.currentBytes mustEqual 16
         qc.currentItems mustEqual 2
         Stats.getCounter("total_items")() mustEqual 2
+        Stats.getCounter("queue_creates")() mustEqual 2
+        Stats.getCounter("queue_deletes")() mustEqual 0
 
         qc.remove("work1")() must beSomeQItem("stuff")
         qc.remove("work1")() mustEqual None
@@ -164,8 +168,11 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
         new File(folderName + "/apples").createNewFile()
         new File(folderName + "/oranges").createNewFile()
         qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
+        Stats.getCounter("queue_deletes")() mustEqual 0
         qc.loadQueues()
         qc.delete("oranges")
+        
+        Stats.getCounter("queue_deletes")() mustEqual 1
 
         new File(folderName).list().toList.sorted mustEqual List("apples")
         qc.queueNames.sorted mustEqual List("apples")
