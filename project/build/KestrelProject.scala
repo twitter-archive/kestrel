@@ -10,11 +10,15 @@ class KestrelProject(info: ProjectInfo)
   with SubversionPublisher
   with PublishSite
 {
-  val ostrich = "com.twitter" % "ostrich" % "4.10.0"
-  val naggati = "com.twitter" % "naggati" % "2.2.1" intransitive() // allow custom netty
+  val finagleVersion = "1.11.0"
+
+  val ostrich = "com.twitter" % "ostrich_2.9.1" % "4.10.5"
+  val naggati = "com.twitter" % "naggati_2.9.1" % "2.2.3" intransitive() // allow custom netty
+  val finagle = "com.twitter" % "finagle-core_2.9.1" % finagleVersion
+  val finagle_ostrich4 = "com.twitter" % "finagle-ostrich4_2.9.1" % finagleVersion
+
   val netty   = "org.jboss.netty" % "netty" % "3.2.6.Final"
-  val finagle = "com.twitter" % "finagle-core" % "1.9.5"
-  val finagle_ostrich4 = "com.twitter" % "finagle-ostrich4" % "1.9.5"
+
   val scrooge_runtime = "com.twitter" % "scrooge-runtime" % "1.0.3"
   override def scroogeVersion = "1.1.7"
 
