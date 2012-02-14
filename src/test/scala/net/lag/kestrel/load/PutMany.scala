@@ -126,6 +126,8 @@ object PutMany extends LoadTesting {
   var client: Client = MemcacheClient
   var flushFirst = true
   var getAlso = false
+  var graph = false
+  var graphYMax: Option[Int] = None
 
   def usage() {
     Console.println("usage: put-many [options]")
@@ -195,6 +197,12 @@ object PutMany extends LoadTesting {
     case "-g" :: xs =>
       getAlso = true
       parseArgs(xs)
+    case "--graph" :: xs =>
+      graph = true
+      parseArgs(xs)
+    case "--ymax" :: x :: xs =>
+      graphYMax = Some(x.toInt)
+      parseArgs(xs)
     case _ =>
       usage()
       System.exit(1)
@@ -214,6 +222,7 @@ object PutMany extends LoadTesting {
       "p999" -> h.getPercentile(0.999),
       "p9999" -> h.getPercentile(0.9999)
     )
+    if (graph) new Grapher(h, (1.0 / 1000000), 25, graphYMax).draw()
     println("Distribution in usec: " + stats.map { case (k, v) => k + "=" + v }.mkString(" "))
   }
 
