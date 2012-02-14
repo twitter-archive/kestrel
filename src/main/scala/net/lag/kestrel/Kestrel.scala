@@ -127,6 +127,10 @@ class Kestrel(defaultQueueBuilder: QueueBuilder, queueBuilders: Seq[QueueBuilder
           }
         })
 
+    PeriodicSyncFile.addTiming = { duration =>
+      Stats.addMetric("fsync_delay_usec", duration.inMicroseconds.toInt)
+    }
+
     queueCollection = new QueueCollection(queuePath, new FinagleTimer(timer), journalSyncScheduler,
       defaultQueueBuilder, queueBuilders)
     queueCollection.loadQueues()
