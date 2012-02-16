@@ -156,9 +156,6 @@ Whole queues can be configured to expire as well. If `maxQueueAge` is set
 empty, and it has been longer than `maxQueueAge` since it was created then
 the queue will be deleted.
 
-A `maxQueueAge` of zero, which is usually the default, means a queue never
-expires.
-
 Fanout Queues
 -------------
 

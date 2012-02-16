@@ -215,7 +215,6 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
   }
   
   def deleteExpiredQueues(): Unit = {
-
     queueNames.map { qName => expireQueue(qName) }
   }
 
