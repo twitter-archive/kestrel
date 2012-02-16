@@ -148,14 +148,10 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
    */
   def isReadyForExpiration: Boolean = {
     // Don't even bother if the maxQueueAge is None
-    if(config.maxQueueAge.isDefined && config.maxQueueAge.get == None) {
-      false
+    if(config.maxQueueAge.isDefined && queue.isEmpty && Time.now > _createTime + config.maxQueueAge.get) {
+      true
     } else {
-      if(queue.isEmpty && config.maxQueueAge.isDefined && Time.now > _createTime + config.maxQueueAge.get) {
-        true
-      } else {
-        false
-      }
+      false
     }
   }
 

@@ -154,6 +154,8 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
           if (expired > 0) {
             log.info("Expired %d item(s) from queues automatically.", expired)
           }
+          // Now that we've cleaned out the queue, lets see if any of them are
+          // ready to be expired.
           Kestrel.this.queueCollection.deleteExpiredQueues()
         }
       }.start()

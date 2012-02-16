@@ -198,10 +198,9 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
   }
   
   def expireQueue(name: String): Unit = {
-      
-    if(!shuttingDown) {
+    if (!shuttingDown) {
       queues.get(name) map { q =>
-        if(q.isReadyForExpiration) {
+        if (q.isReadyForExpiration) {
           delete(name)
           Stats.incr("queue_expires")
           log.info("Expired queue %s", name)
@@ -217,8 +216,6 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
   
   def deleteExpiredQueues(): Unit = {
 
-    // Now that we've cleaned out the queue, lets see if any of them are
-    // ready to be expired.
     queueNames.map { qName => expireQueue(qName) }
   }
 

@@ -151,12 +151,10 @@ useful as a throttling mechanism when using a queue as a way to delay work.
 Queue expiration
 ----------------
 
-Queues can be configure to expire whole queues as well. When a queue is
-created the time is noted. It is periodically (see the aforementioned
-`expirationTimerFrequency`) checked against the current time and the
-`maxQueueAge` configuration option.  If the queue is *empty* and the current time
-is greater than create time + `maxQueueAge` then the queue is ready to be
-expired and will be deleted.
+Whole queues can be configured to expire as well. If `maxQueueAge` is set 
+`expirationTimerFrequency` is used to check the queue age. If the queue is
+empty, and it has been longer than `maxQueueAge` since it was created then
+the queue will be deleted.
 
 A `maxQueueAge` of zero, which is usually the default, means a queue never
 expires.
@@ -179,7 +177,6 @@ When a fanout queue is first referenced by a client, the journal file (if any)
 is created, and it will start receiving new items written to the parent queue.
 Existing items are not copied over. A fanout queue can be deleted to stop it
 from receiving new items.
-
 
 Memcache commands
 -----------------
