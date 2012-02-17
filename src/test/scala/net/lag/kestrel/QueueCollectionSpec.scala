@@ -56,6 +56,8 @@ class QueueCollectionSpec extends Specification
         Stats.clearAll()
         qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
         qc.queueNames mustEqual Nil
+        Stats.getCounter("queue_creates")() mustEqual 0
+        Stats.getCounter("queue_deletes")() mustEqual 0
 
         qc.add("work1", "stuff".getBytes)
         qc.add("work2", "other stuff".getBytes)
@@ -64,6 +66,8 @@ class QueueCollectionSpec extends Specification
         qc.currentBytes mustEqual 16
         qc.currentItems mustEqual 2
         Stats.getCounter("total_items")() mustEqual 2
+        Stats.getCounter("queue_creates")() mustEqual 2
+        Stats.getCounter("queue_deletes")() mustEqual 0
 
         qc.remove("work1")() must beSomeQueueItem("stuff")
         qc.remove("work1")() mustEqual None
@@ -182,8 +186,10 @@ class QueueCollectionSpec extends Specification
             "oranges.read."
           )
           qc.queueNames.sorted mustEqual List("apples", "oranges")
+          Stats.getCounter("queue_deletes")() mustEqual 0
 
           qc.delete("oranges")
+          Stats.getCounter("queue_deletes")() mustEqual 1
           new File(folderName).list().toList.sorted mustEqual List(
             "apples." + Time.now.inMilliseconds,
             "apples.read."

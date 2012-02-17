@@ -366,6 +366,8 @@ Global stats reported by kestrel (via the memcache `STATS` command) are:
 - `get_misses` - total `GET` requests on an empty queue
 - `bytes_read` - total bytes read from clients
 - `bytes_written` - total bytes written to clients
+- `queue_creates` - total number of queues created
+- `queue_deletes` - total number of queues deleted
 
 For each queue, the following stats are also reported:
 
@@ -387,6 +389,7 @@ For each queue, the following stats are also reported:
 - `waiters` - number of clients waiting for an item from this queue (using
   `GET/t`)
 - `open_transactions` - items read with `/open` but not yet confirmed
+- `total_flushes` total number of times this queue has been flushed
 
 More detailed statistics, including latency timing measurements, are available
 via the ostrich web port. To see them in human-readable form, use:

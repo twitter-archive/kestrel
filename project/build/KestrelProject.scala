@@ -10,23 +10,23 @@ class KestrelProject(info: ProjectInfo)
   with SubversionPublisher
   with PublishSite
 {
-  val finagleVersion = "1.10.0"
+  val finagleVersion = "1.11.1"
 
   val libkestrel = "com.twitter" % "libkestrel" % "1.0.0-SNAPSHOT"
-  val naggati = "com.twitter" % "naggati" % "2.2.2" intransitive() // allow custom netty
+  val ostrich = "com.twitter" % "ostrich_2.9.1" % "4.10.5"
+  val naggati = "com.twitter" % "naggati_2.9.1" % "2.2.3" intransitive() // allow custom netty
   val netty   = "org.jboss.netty" % "netty" % "3.2.7.Final"
-  val finagle = "com.twitter" % "finagle-core" % finagleVersion
-  val ostrich = "com.twitter" % "ostrich" % "4.10.1-SNAPSHOT"
-  val finagle_ostrich4 = "com.twitter" % "finagle-ostrich4" % finagleVersion
+  val finagle = "com.twitter" % "finagle-core_2.9.1" % finagleVersion
+  val finagle_ostrich4 = "com.twitter" % "finagle-ostrich4_2.9.1" % finagleVersion
 
-  val scrooge_runtime = "com.twitter" % "scrooge-runtime" % "1.0.3"
+  val scrooge_runtime = "com.twitter" %% "scrooge-runtime" % "1.1.3"
   override def scroogeVersion = "2.2.0"
 
   // building docs seems to make scalac's head explode, so skip it for now. :(
   override def docSources = sources(mainJavaSourcePath ##)
 
   // for tests only:
-  val specs = "org.scala-tools.testing" % "specs_2.8.1" % "1.6.7" % "test"
+  val specs = "org.scala-tools.testing" % "specs_2.9.1" % "1.6.9" % "test"
   val jmock = "org.jmock" % "jmock" % "2.4.0" % "test"
   val cglib = "cglib" % "cglib" % "2.1_3" % "test"
   val asm = "asm" % "asm" % "1.5.3" % "test"

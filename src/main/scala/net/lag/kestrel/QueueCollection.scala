@@ -60,6 +60,7 @@ class QueueCollection(
     val builder = queueBuilderMap.getOrElse(name, defaultQueueBuilder)
     val config = builder().copy(name = name)
     log.info("Setting up queue %s: %s", realName, config)
+    Stats.incr("queue_creates")
     config.readersToStrings().foreach { s =>
       log.info("Queue %s reader %s", realName, s)
     }
@@ -117,6 +118,7 @@ class QueueCollection(
         Stats.makeCounter(prefix + "total_items", reader.putCount)
         Stats.makeCounter(prefix + "expired_items", reader.expiredCount)
         Stats.makeCounter(prefix + "discarded", reader.discardedCount)
+        Stats.makeCounter(prefix + "total_flushes", reader.totalFlushes)
         Stats.addGauge(prefix + "items")(reader.items)
         Stats.addGauge(prefix + "bytes")(reader.bytes)
         Stats.addGauge(prefix + "mem_items")(reader.memoryItems)
@@ -135,6 +137,7 @@ class QueueCollection(
     Stats.removeCounter(prefix + "total_items")
     Stats.removeCounter(prefix + "expired_items")
     Stats.removeCounter(prefix + "discarded")
+    Stats.removeCounter(prefix + "total_flushes")
     Stats.clearGauge(prefix + "items")
     Stats.clearGauge(prefix + "bytes")
     Stats.clearGauge(prefix + "journal_size")
@@ -213,6 +216,7 @@ class QueueCollection(
         q.erase()
         queues -= name
         removeStats(name)
+        Stats.incr("queue_deletes")
       }
       if (name contains '+') {
         reader(name) foreach { n => removeStats(n.fullname) }
@@ -249,7 +253,8 @@ class QueueCollection(
         ("age", q.age.inMilliseconds.toString),
         ("discarded", q.discardedCount.toString),
         ("waiters", q.waiterCount.toString),
-        ("open_transactions", q.openItems.toString)
+        ("open_transactions", q.openItems.toString),
+        ("total_flushes", q.totalFlushes.toString)
       )
     }
   }
