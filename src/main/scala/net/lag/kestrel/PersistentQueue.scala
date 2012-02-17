@@ -95,6 +95,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   def currentAge: Duration = synchronized { if (queueSize == 0) 0.milliseconds else _currentAge }
   def waiterCount: Long = synchronized { waiters.size }
   def isClosed: Boolean = synchronized { closed || paused }
+  def createTime: Long = synchronized { _createTime }
 
   // mostly for unit tests.
   def memoryLength: Long = synchronized { queue.size }
@@ -132,6 +133,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   gauge("age_msec", currentAge.inMilliseconds)
   gauge("waiters", waiterCount)
   gauge("open_transactions", openTransactionCount)
+  gauge("create_time", createTime)
 
   private final def adjustExpiry(startingTime: Time, expiry: Option[Time]): Option[Time] = {
     if (config.maxAge.isDefined) {

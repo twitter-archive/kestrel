@@ -385,8 +385,9 @@ For each queue, the following stats are also reported:
 - `waiters` - number of clients waiting for an item from this queue (using
   `GET/t`)
 - `open_transactions` - items read with `/open` but not yet confirmed
-- `total_flushes` total number of times this queue has been flushed
-
+- `total_flushes` - total number of times this queue has been flushed
+- `age_msec` - age of the last item read from the queue
+- `create_time` - the time that the queue was created (in milliseconds since epoch)
 
 Kestrel as a library
 --------------------
