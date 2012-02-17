@@ -39,14 +39,15 @@ case class QueueConfig(
   syncJournal: Duration,
   expireToQueue: Option[String],
   maxExpireSweep: Int,
-  fanoutOnly: Boolean
+  fanoutOnly: Boolean,
+  maxQueueAge: Option[Duration]
 ) {
   override def toString() = {
     ("maxItems=%d maxSize=%s maxItemSize=%s maxAge=%s defaultJournalSize=%s maxMemorySize=%s " +
      "maxJournalSize=%s discardOldWhenFull=%s keepJournal=%s syncJournal=%s " +
-     "expireToQueue=%s maxExpireSweep=%d fanoutOnly=%s").format(maxItems, maxSize,
+     "expireToQueue=%s maxExpireSweep=%d fanoutOnly=%s maxQueueAge=%s").format(maxItems, maxSize,
      maxItemSize, maxAge, defaultJournalSize, maxMemorySize, maxJournalSize, discardOldWhenFull,
-     keepJournal, syncJournal, expireToQueue, maxExpireSweep, fanoutOnly)
+     keepJournal, syncJournal, expireToQueue, maxExpireSweep, fanoutOnly, maxQueueAge)
   }
 }
 
@@ -140,10 +141,16 @@ class QueueBuilder extends Config[QueueConfig] {
    */
   var fanoutOnly: Boolean = false
 
+  /**
+   * Expiration time for the queue itself.  If the queue is empty and older
+   * than this value then we should delete it.
+   */
+  var maxQueueAge: Option[Duration] = None
+
   def apply() = {
     QueueConfig(maxItems, maxSize, maxItemSize, maxAge, defaultJournalSize, maxMemorySize,
                 maxJournalSize, discardOldWhenFull, keepJournal, syncJournal,
-                expireToQueue, maxExpireSweep, fanoutOnly)
+                expireToQueue, maxExpireSweep, fanoutOnly, maxQueueAge)
   }
 }
 

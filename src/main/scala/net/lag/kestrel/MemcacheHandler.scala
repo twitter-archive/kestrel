@@ -201,6 +201,7 @@ extends NettyHandler[MemcacheRequest](channelGroup, queueCollection, maxOpenTran
     report += (("bytes_written", Stats.getCounter("bytes_written")().toString))
     report += (("queue_creates", Stats.getCounter("queue_creates")().toString))
     report += (("queue_deletes", Stats.getCounter("queue_deletes")().toString))
+    report += (("queue_expires", Stats.getCounter("queue_expires")().toString))
 
     for (qName <- queues.queueNames) {
       report ++= queues.stats(qName).map { case (k, v) => ("queue_" + qName + "_" + k, v) }
