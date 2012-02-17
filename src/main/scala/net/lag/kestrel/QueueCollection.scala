@@ -118,7 +118,7 @@ class QueueCollection(
         Stats.makeCounter(prefix + "total_items", reader.putCount)
         Stats.makeCounter(prefix + "expired_items", reader.expiredCount)
         Stats.makeCounter(prefix + "discarded", reader.discardedCount)
-        Stats.makeCounter(prefix + "total_flushes", reader.totalFlushes)
+        Stats.makeCounter(prefix + "total_flushes", reader.flushCount)
         Stats.addGauge(prefix + "items")(reader.items)
         Stats.addGauge(prefix + "bytes")(reader.bytes)
         Stats.addGauge(prefix + "mem_items")(reader.memoryItems)
@@ -254,7 +254,7 @@ class QueueCollection(
         ("discarded", q.discardedCount.toString),
         ("waiters", q.waiterCount.toString),
         ("open_transactions", q.openItems.toString),
-        ("total_flushes", q.totalFlushes.toString)
+        ("total_flushes", q.flushCount.toString)
       )
     }
   }
