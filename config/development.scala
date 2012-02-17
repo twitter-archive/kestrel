@@ -24,13 +24,6 @@ new KestrelConfig {
 
   admin.httpPort = 2223
 
-  admin.statsNodes = new StatsConfig {
-    reporters = new JsonStatsLoggerConfig {
-      loggerName = "stats"
-      serviceName = "kestrel"
-    } :: new TimeSeriesCollectorConfig
-  }
-
   queues = new QueueBuilder {
     // keep items for no longer than a half hour, and don't accept any more if
     // the queue reaches 1.5M items.
@@ -71,14 +64,6 @@ new KestrelConfig {
     level = Level.INFO
     handlers = new FileHandlerConfig {
       filename = "/var/log/kestrel/kestrel.log"
-      roll = Policy.Never
-    }
-  } :: new LoggerConfig {
-    node = "stats"
-    level = Level.INFO
-    useParents = false
-    handlers = new FileHandlerConfig {
-      filename = "/var/log/kestrel/stats.log"
       roll = Policy.Never
     }
   }
