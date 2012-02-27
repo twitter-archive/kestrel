@@ -11,7 +11,7 @@ class KestrelProject(info: ProjectInfo) extends StandardServiceProject(info) wit
   val utilEval =    "com.twitter" % "util-eval"    % "1.12.4"
   val utilLogging = "com.twitter" % "util-logging" % "1.12.4"
 
-  val ostrich = "com.twitter" % "ostrich" % "4.10.0"
+  val ostrich = "com.twitter" % "ostrich" % "4.10.3"
   val naggati = "com.twitter" % "naggati" % "2.1.1" intransitive() // allow custom netty
   val netty   = "org.jboss.netty" % "netty" % "3.2.6.Final"
 

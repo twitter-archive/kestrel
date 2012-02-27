@@ -404,6 +404,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     Stats.clearGauge(statNamed("age_msec"))
     Stats.clearGauge(statNamed("waiters"))
     Stats.clearGauge(statNamed("open_transactions"))
+    Stats.clearGauge(statNamed("create_time"))
     Stats.removeMetric(statNamed("set_latency_usec"))
     Stats.removeMetric(statNamed("get_timeout_msec"))
     Stats.removeMetric(statNamed("delivery_latency_msec"))
