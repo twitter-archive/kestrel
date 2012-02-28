@@ -164,17 +164,33 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
 
     memcacheAcceptor.foreach { _.close().awaitUninterruptibly() }
     textAcceptor.foreach { _.close().awaitUninterruptibly() }
-    queueCollection.shutdown()
-    channelGroup.close().awaitUninterruptibly()
-    channelFactory.releaseExternalResources()
 
-    executor.shutdown()
-    executor.awaitTermination(5, TimeUnit.SECONDS)
-    timer.stop()
-    timer = null
-    journalSyncScheduler.shutdown()
-    journalSyncScheduler.awaitTermination(5, TimeUnit.SECONDS)
-    journalSyncScheduler = null
+    if (queueCollection ne null) {
+      queueCollection.shutdown()
+      queueCollection = null
+    }
+
+    channelGroup.close().awaitUninterruptibly()
+    if (channelFactory ne null) {
+      channelFactory.releaseExternalResources()
+      channelFactory = null
+    }
+
+    if (executor ne null) {
+      executor.shutdown()
+      executor.awaitTermination(5, TimeUnit.SECONDS)
+      executor = null
+    }
+    if (timer ne null) {
+      timer.stop()
+      timer = null
+    }
+    if (journalSyncScheduler ne null) {
+      journalSyncScheduler.shutdown()
+      journalSyncScheduler.awaitTermination(5, TimeUnit.SECONDS)
+      journalSyncScheduler = null
+    }
+
     log.info("Goodbye.")
   }
 
@@ -227,6 +243,12 @@ object Kestrel {
     } catch {
       case e =>
         log.error(e, "Exception during startup; exiting!")
+
+        // Shut down all registered services such as AdminHttpService properly
+        // so that SBT does not refuse to shut itself down when 'sbt run -f ...'
+        // fails.
+        ServiceTracker.shutdown()
+
         System.exit(1)
     }
     log.info("Kestrel %s started.", runtime.jarVersion)
