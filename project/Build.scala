@@ -33,8 +33,6 @@ object Kestrel extends Build {
         "org.hamcrest" % "hamcrest-all" % "1.1" % "test"
       ),
 
-      CompileThriftScrooge.scroogeVersion := "1.1.7",
-
       mainClass := Some("net.lag.kestrel.Kestrel")
     )
 
@@ -43,6 +41,10 @@ object Kestrel extends Build {
     base = file("."),
     settings = Project.defaultSettings ++
       StandardProject.newSettings ++
-      CompileThriftScrooge.newSettings
+      CompileThriftScrooge.newSettings ++ Seq(
+        // any settings that override defaults have to go here. :/
+        CompileThriftScrooge.scroogeVersion := "1.1.7",
+        PackageDist.packageDistConfigFilesValidationRegex := Some(".*")
+      )
   )
 }
