@@ -10,11 +10,11 @@ import java.lang.IllegalArgumentException
 
 case class ArrivalRate(val arrivalsPerSecond: Int, val duration: Duration) {
   if (arrivalsPerSecond <= 0) {
-    throw new IllegalArgumentException("arrivals must be >= 1")
+    throw new IllegalArgumentException("arrivalsPerSecond must be >= 1: " + arrivalsPerSecond)
   }
 
   if (duration < 1.millisecond) {
-    throw new IllegalArgumentException("duration must be >= 1 millisecond")
+    throw new IllegalArgumentException("duration must be >= 1 millisecond: " + duration)
   }
 }
 
