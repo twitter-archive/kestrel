@@ -9,7 +9,7 @@ object Kestrel extends Build {
     Seq(
       name := "kestrel",
       organization := "net.lag",
-      version := "2.2.0-SNAPSHOT",
+      version := "2.1.3-SNAPSHOT",
       scalaVersion := "2.9.1",
 
       // time-based tests cannot be run in parallel
