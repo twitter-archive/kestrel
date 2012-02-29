@@ -17,7 +17,7 @@ object Kestrel extends Build {
       parallelExecution in Test := false,
 
       libraryDependencies ++= Seq(
-        "com.twitter" %% "ostrich" % "4.10.6",
+        "com.twitter" %% "ostrich" % "4.10.6-SNAPSHOT",
         "com.twitter" %% "naggati" % "2.2.3" intransitive(), // allow custom netty
         "com.twitter" %% "finagle-core" % finagleVersion,
         "com.twitter" %% "finagle-ostrich4" % finagleVersion,
