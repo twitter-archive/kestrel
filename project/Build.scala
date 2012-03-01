@@ -9,7 +9,7 @@ object Kestrel extends Build {
     Seq(
       name := "kestrel",
       organization := "net.lag",
-      version := "2.2.0-SNAPSHOT",
+      version := "2.2.0",
       scalaVersion := "2.9.1",
 
       // time-based tests cannot be run in parallel
@@ -41,6 +41,7 @@ object Kestrel extends Build {
     base = file("."),
     settings = Project.defaultSettings ++
       StandardProject.newSettings ++
+      SubversionPublisher.newSettings ++
       CompileThriftScrooge.newSettings ++ Seq(
         // any settings that override defaults have to go here. :/
         CompileThriftScrooge.scroogeVersion := "1.1.7",
