@@ -33,9 +33,7 @@ object Kestrel extends Build {
         "org.hamcrest" % "hamcrest-all" % "1.1" % "test"
       ),
 
-      mainClass := Some("net.lag.kestrel.Kestrel"),
-      
-      SubversionPublisher.subversionRepository := Some("https://svn.twitter.biz/maven-public")
+      mainClass := Some("net.lag.kestrel.Kestrel")
     )
 
   lazy val root = Project(
@@ -47,7 +45,8 @@ object Kestrel extends Build {
       CompileThriftScrooge.newSettings ++ Seq(
         // any settings that override defaults have to go here. :/
         CompileThriftScrooge.scroogeVersion := "1.1.7",
-        PackageDist.packageDistConfigFilesValidationRegex := Some(".*")
+        PackageDist.packageDistConfigFilesValidationRegex := Some(".*"),
+        SubversionPublisher.subversionRepository := Some("https://svn.twitter.biz/maven-public")
       )
   )
 }
