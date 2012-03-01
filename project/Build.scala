@@ -41,10 +41,13 @@ object Kestrel extends Build {
     base = file("."),
     settings = Project.defaultSettings ++
       StandardProject.newSettings ++
+      SubversionPublisher.newSettings ++
       CompileThriftScrooge.newSettings ++ Seq(
         // any settings that override defaults have to go here. :/
         CompileThriftScrooge.scroogeVersion := "1.1.7",
-        PackageDist.packageDistConfigFilesValidationRegex := Some(".*")
+        PackageDist.packageDistConfigFilesValidationRegex := Some(".*"),
+        SubversionPublisher.subversionRepository := Some("https://svn.twitter.biz/maven-public"),
+        publishArtifact in Test := true
       )
   )
 }
