@@ -9,7 +9,7 @@ object Kestrel extends Build {
     Seq(
       name := "kestrel",
       organization := "net.lag",
-      version := "2.2.0",
+      version := "2.999.0",
       scalaVersion := "2.9.1",
 
       // time-based tests cannot be run in parallel
@@ -33,7 +33,9 @@ object Kestrel extends Build {
         "org.hamcrest" % "hamcrest-all" % "1.1" % "test"
       ),
 
-      mainClass := Some("net.lag.kestrel.Kestrel")
+      mainClass := Some("net.lag.kestrel.Kestrel"),
+      
+      SubversionPublisher.subversionRepository := Some("https://svn.twitter.biz/maven-public")
     )
 
   lazy val root = Project(
