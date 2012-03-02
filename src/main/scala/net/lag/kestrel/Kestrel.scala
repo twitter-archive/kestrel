@@ -124,9 +124,15 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
           }
         })
 
-    queueCollection = new QueueCollection(queuePath, new FinagleTimer(timer), journalSyncScheduler,
-      defaultQueueConfig, builders)
-    queueCollection.loadQueues()
+    try {
+      queueCollection = new QueueCollection(queuePath, new FinagleTimer(timer), journalSyncScheduler,
+        defaultQueueConfig, builders)
+      queueCollection.loadQueues()
+    } catch {
+      case e: InaccessibleQueuePath =>
+        e.printStackTrace()
+        throw e
+    }
 
     Stats.addGauge("items") { queueCollection.currentItems.toDouble }
     Stats.addGauge("bytes") { queueCollection.currentBytes.toDouble }

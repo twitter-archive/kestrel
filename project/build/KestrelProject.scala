@@ -12,7 +12,7 @@ class KestrelProject(info: ProjectInfo)
 {
   val finagleVersion = "1.11.1"
 
-  val ostrich = "com.twitter" % "ostrich_2.9.1" % "4.10.5"
+  val ostrich = "com.twitter" % "ostrich_2.9.1" % "4.10.6"
   val naggati = "com.twitter" % "naggati_2.9.1" % "2.2.3" intransitive() // allow custom netty
   val finagle = "com.twitter" % "finagle-core_2.9.1" % finagleVersion
   val finagle_ostrich4 = "com.twitter" % "finagle-ostrich4_2.9.1" % finagleVersion
