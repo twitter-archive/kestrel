@@ -2,7 +2,6 @@ target
 kestrel.tmproj
 dist
 *.class
-bin
 .manager
 .DS_Store
 *.sw?
@@ -19,3 +18,5 @@ ignore/
 .scala_dependencies
 .settings/
 go
+kestrel.sublime-*
+kcluster-*.gem

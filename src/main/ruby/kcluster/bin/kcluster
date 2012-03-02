@@ -3,32 +3,44 @@
 $:.push(File.dirname($0))
 require 'optparse'
 require 'socket'
+require 'net/http'
+require 'json'
+
+# FIXME this really only works inside twitter. it would be nice to support
+# a general serverset interface (or opensource colony).
+$colony_host = ENV["COLONY_HOST"] || "colony.smf1.twitter.com"
+$colony_port = ENV["COLONY_PORT"] || 9080
 
 $options = {
   :config_filename => ENV['HOME'] + "/.kestrel_cluster",
   :server_list => [],
   :port => 22133,
+  :verbose => false,
 }
 
+def verbose(s)
+  puts s if $options[:verbose]
+end
+
 def fetch_stats(host, port, data)
-  puts "--- Fetching stats from #{host}:#{port}"
+  verbose "--- Fetching stats from #{host}:#{port}"
   sock = TCPSocket.open(host, port)
   sock.puts("stats")
   done = false
   while !done && line = sock.gets.chomp
     if (line == 'END') then
       done = true
-    elsif line =~ /STAT queue_([\w+]+) (\d+)/
+    elsif line =~ /STAT queue_([\w\+\-]+) (\d+)/
       key = $1
       value = $2.to_i
       (stat, queue_name) = case key
-        when /([\w+]+)_total_items/   then [:total_items, $1]
-        when /([\w+]+)_expired_items/ then [:expired_items, $1]
-        when /([\w+]+)_mem_items/     then [:mem_items, $1]
-        when /([\w+]+)_items/         then [:items, $1]
-        when /([\w+]+)_mem_bytes/     then [:mem_bytes, $1]
-        when /([\w+]+)_bytes/         then [:bytes, $1]
-        when /([\w+]+)_age/           then [:age, $1]
+        when /([\w\+\-]+)_total_items/   then [:total_items, $1]
+        when /([\w\+\-]+)_expired_items/ then [:expired_items, $1]
+        when /([\w\+\-]+)_mem_items/     then [:mem_items, $1]
+        when /([\w\+\-]+)_items/         then [:items, $1]
+        when /([\w\+\-]+)_mem_bytes/     then [:mem_bytes, $1]
+        when /([\w\+\-]+)_bytes/         then [:bytes, $1]
+        when /([\w\+\-]+)_age/           then [:age, $1]
       end
 
       if (queue_name)
@@ -151,7 +163,7 @@ end
 
 parser = OptionParser.new do |opts|
   opts.banner = "Usage: #{$0} [options] <command>"
-  opts.separator "Example: #{$0} -f shards.yml 11"
+  opts.separator "Example: #{$0} -f kestrel max_age"
 
   opts.on("-f", "--file=FILENAME", "load kestrel server list from file (use '-' for stdin) (default: #{$options[:config_filename]})") do |filename|
     $options[:config_filename] = filename
@@ -159,7 +171,13 @@ parser = OptionParser.new do |opts|
   opts.on("-p", "--port=N", "use port (default: #{$options[:port]})") do |port|
     $options[:port] = port.to_i
   end
-  opts.on("-r", "--rollup-fanouts", "roll up stats for fanout queues into a single count") do
+  opts.on("-r", "--role=ROLE", "load kestrel server list from colony audubon role (requires colony)") do |role|
+    $options[:role] = role
+  end
+  opts.on("-v", "--verbose", "print verbose debugging info as we work") do
+    $options[:verbose] = true 
+  end
+  opts.on("-F", "--rollup-fanouts", "roll up stats for fanout queues into a single count") do
     $options[:rollup_fanouts] = true
   end
 
@@ -186,9 +204,14 @@ if ARGV.size < 1
   exit 1
 end
 
-server_file = $options[:config_filename] == "-" ? STDIN : File.open($options[:config_filename], "r")
-$options[:server_list] = server_file.readlines.map { |line| line.chomp }
-server_file.close
+if $options[:role]
+  data = Net::HTTP.get URI.parse("http://#{$colony_host}:#{$colony_port}/query?q=mo+audubon.role.#{$options[:role]}")
+  $options[:server_list] = JSON.parse(data).values.flatten
+else
+  server_file = $options[:config_filename] == "-" ? STDIN : File.open($options[:config_filename], "r")
+  $options[:server_list] = server_file.readlines.map { |line| line.chomp }
+  server_file.close
+end
 
 command = ARGV[0].downcase
 
