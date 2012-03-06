@@ -179,7 +179,6 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
   def shutdown() {
     log.info("Shutting down!")
 
-<<<<<<< HEAD
     memcacheService.foreach { _.close() }
     textService.foreach { _.close() }
     thriftService.foreach { _.close() }

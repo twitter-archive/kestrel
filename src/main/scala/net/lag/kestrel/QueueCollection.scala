@@ -196,7 +196,7 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
       queue(name) map { q => q.discardExpired(q.config.maxExpireSweep) } getOrElse(0)
     }
   }
-  
+
   def expireQueue(name: String): Unit = {
     if (!shuttingDown) {
       queues.get(name) map { q =>
@@ -207,13 +207,12 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
         }
       }
     }
-    return 1
   }
 
   def flushAllExpired(): Int = {
     queueNames.foldLeft(0) { (sum, qName) => sum + flushExpired(qName) }
   }
-  
+
   def deleteExpiredQueues(): Unit = {
     queueNames.map { qName => expireQueue(qName) }
   }
