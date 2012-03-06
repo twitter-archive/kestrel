@@ -168,6 +168,9 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
           if (expired > 0) {
             log.info("Expired %d item(s) from queues automatically.", expired)
           }
+          // Now that we've cleaned out the queue, lets see if any of them are
+          // ready to be expired.
+          Kestrel.this.queueCollection.deleteExpiredQueues()
         }
       }.start()
     }
@@ -176,16 +179,27 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
   def shutdown() {
     log.info("Shutting down!")
 
+<<<<<<< HEAD
     memcacheService.foreach { _.close() }
     textService.foreach { _.close() }
     thriftService.foreach { _.close() }
-    queueCollection.shutdown()
 
-    timer.stop()
-    timer = null
-    journalSyncScheduler.shutdown()
-    journalSyncScheduler.awaitTermination(5, TimeUnit.SECONDS)
-    journalSyncScheduler = null
+    if (queueCollection ne null) {
+      queueCollection.shutdown()
+      queueCollection = null
+    }
+
+    if (timer ne null) {
+      timer.stop()
+      timer = null
+    }
+
+    if (journalSyncScheduler ne null) {
+      journalSyncScheduler.shutdown()
+      journalSyncScheduler.awaitTermination(5, TimeUnit.SECONDS)
+      journalSyncScheduler = null
+    }
+
     log.info("Goodbye.")
   }
 
@@ -227,6 +241,12 @@ object Kestrel {
     } catch {
       case e =>
         log.error(e, "Exception during startup; exiting!")
+
+        // Shut down all registered services such as AdminHttpService properly
+        // so that SBT does not refuse to shut itself down when 'sbt run -f ...'
+        // fails.
+        ServiceTracker.shutdown()
+
         System.exit(1)
     }
     log.info("Kestrel %s started.", runtime.jarVersion)
