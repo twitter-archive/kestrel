@@ -131,9 +131,15 @@ class Kestrel(defaultQueueBuilder: QueueBuilder, queueBuilders: Seq[QueueBuilder
       Stats.addMetric("fsync_delay_usec", duration.inMicroseconds.toInt)
     }
 
-    queueCollection = new QueueCollection(queuePath, new FinagleTimer(timer), journalSyncScheduler,
-      defaultQueueBuilder, queueBuilders)
-    queueCollection.loadQueues()
+    try {
+      queueCollection = new QueueCollection(queuePath, new FinagleTimer(timer), journalSyncScheduler,
+        defaultQueueBuilder, queueBuilders)
+      queueCollection.loadQueues()
+    } catch {
+      case e: InaccessibleQueuePath =>
+        e.printStackTrace()
+        throw e
+    }
 
     Stats.addGauge("items") { queueCollection.currentItems.toDouble }
     Stats.addGauge("bytes") { queueCollection.currentBytes.toDouble }
@@ -176,6 +182,9 @@ class Kestrel(defaultQueueBuilder: QueueBuilder, queueBuilders: Seq[QueueBuilder
           debugLogQueues.foreach { queueName =>
             Kestrel.this.queueCollection.debugLog(queueName)
           }
+          // Now that we've cleaned out the queue, lets see if any of them are
+          // ready to be expired.
+          Kestrel.this.queueCollection.deleteExpiredQueues()
         }
       }.start()
     }
@@ -187,13 +196,23 @@ class Kestrel(defaultQueueBuilder: QueueBuilder, queueBuilders: Seq[QueueBuilder
     memcacheService.foreach { _.close() }
     textService.foreach { _.close() }
     thriftService.foreach { _.close() }
-    queueCollection.shutdown()
 
-    timer.stop()
-    timer = null
-    journalSyncScheduler.shutdown()
-    journalSyncScheduler.awaitTermination(5, TimeUnit.SECONDS)
-    journalSyncScheduler = null
+    if (queueCollection ne null) {
+      queueCollection.shutdown()
+      queueCollection = null
+    }
+
+    if (timer ne null) {
+      timer.stop()
+      timer = null
+    }
+
+    if (journalSyncScheduler ne null) {
+      journalSyncScheduler.shutdown()
+      journalSyncScheduler.awaitTermination(5, TimeUnit.SECONDS)
+      journalSyncScheduler = null
+    }
+
     log.info("Goodbye.")
   }
 }
@@ -220,6 +239,12 @@ object Kestrel {
     } catch {
       case e =>
         log.error(e, "Exception during startup; exiting!")
+
+        // Shut down all registered services such as AdminHttpService properly
+        // so that SBT does not refuse to shut itself down when 'sbt run -f ...'
+        // fails.
+        ServiceTracker.shutdown()
+
         System.exit(1)
     }
     log.info("Kestrel %s started.", runtime.jarVersion)

@@ -150,6 +150,12 @@ class QueueReaderBuilder extends Config[JournaledQueueReaderConfig] {
   var maxExpireSweep: Int = Int.MaxValue
 
   /**
+   * Expiration time for the queue itself.  If the queue is empty and older
+   * than this value then we should delete it.
+   */
+  var maxQueueAge: Option[Duration] = None
+
+  /**
    * Name of a queue to send an item to if a client fetches the item and aborts it. Normally an
    * aborted item is just given to another client to try, but if this is set, any aborted item is
    * moved to another queue.
@@ -202,12 +208,14 @@ class QueueReaderBuilder extends Config[JournaledQueueReaderConfig] {
     true
   }
 
+
   def apply() = {
     JournaledQueueReaderConfig(
       maxItems = maxItems,
       maxSize = maxSize,
       maxMemorySize = maxMemorySize,
       maxAge = maxAge,
+      maxQueueAge = maxQueueAge,
       fullPolicy = if (discardOldWhenFull) {
         ConcurrentBlockingQueue.FullPolicy.DropOldest
       } else {
