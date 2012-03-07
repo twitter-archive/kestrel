@@ -191,9 +191,10 @@ class Kestrel(defaultQueueBuilder: QueueBuilder, queueBuilders: Seq[QueueBuilder
   def shutdown() {
     log.info("Shutting down!")
 
-    memcacheService.foreach { _.close() }
-    textService.foreach { _.close() }
-    thriftService.foreach { _.close() }
+    // finagle 1.11.1 has a bug where close() may never complete.
+    memcacheService.foreach { _.close(1.second) }
+    textService.foreach { _.close(1.second) }
+    thriftService.foreach { _.close(1.second) }
 
     if (queueCollection ne null) {
       queueCollection.shutdown()
