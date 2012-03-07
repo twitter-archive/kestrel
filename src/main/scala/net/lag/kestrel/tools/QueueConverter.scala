@@ -23,6 +23,7 @@ import com.twitter.conversions.string._
 import com.twitter.libkestrel
 import com.twitter.util.Duration
 import java.io.{File, FileNotFoundException, IOException}
+import java.nio.ByteBuffer
 import java.security.MessageDigest
 import net.lag.kestrel.oldjournal
 import scala.collection.mutable
@@ -76,7 +77,8 @@ object QueueConverter {
     def addItem(item: oldjournal.QItem): String = {
       val hash = md5.digest(item.data).hexlify
       if (allowDupes || !(seenIds contains hash)) {
-        val qitem = newJournal.put(item.data, item.addTime, item.expiry).map {
+        val buffer = ByteBuffer.wrap(item.data)
+        val qitem = newJournal.put(buffer, item.addTime, item.expiry).map {
           case (qitem, sync) => qitem
         }.get()
         seenIds(hash) = qitem.id

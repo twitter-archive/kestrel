@@ -167,9 +167,7 @@ class ThriftHandler (
   def put(queueName: String, items: Seq[ByteBuffer], expirationMsec: Int): Future[Int] = {
     var count = 0
     var expiry = if (expirationMsec == 0) None else Some(expirationMsec.milliseconds.fromNow)
-    items.foreach { item =>
-      val data = new Array[Byte](item.remaining)
-      item.get(data)
+    items.foreach { data =>
       if (!handler.setItem(queueName, 0, expiry, data)) return Future(count)
       count += 1
     }
@@ -187,7 +185,7 @@ class ThriftHandler (
         }
         case Some(item) => {
           val externalXid = externalXidOption.getOrElse(0L)
-          rv += new thrift.Item(ByteBuffer.wrap(item.data), externalXid)
+          rv += new thrift.Item(item.data, externalXid)
         }
       }
     }
@@ -217,7 +215,7 @@ class ThriftHandler (
 
   def peek(queueName: String): Future[thrift.QueueInfo] = {
     handler.getItem(queueName, None, false, true).map { itemOption =>
-      val data = itemOption.map { item => ByteBuffer.wrap(item.data) }
+      val data = itemOption.map { item => item.data }
       queueCollection.reader(queueName) map { queue =>
         new thrift.QueueInfo(data, queue.items, queue.bytes, queue.writer.journalBytes,
           queue.age.inMilliseconds, queue.waiterCount, queue.openItems)

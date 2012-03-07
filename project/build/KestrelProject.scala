@@ -14,7 +14,7 @@ class KestrelProject(info: ProjectInfo)
 
   val libkestrel = "com.twitter" % "libkestrel_2.9.1" % "1.0.0-SNAPSHOT"
   val ostrich = "com.twitter" % "ostrich_2.9.1" % "4.10.6"
-  val naggati = "com.twitter" % "naggati_2.9.1" % "2.2.3" intransitive() // allow custom netty
+  val naggati = "com.twitter" % "naggati_2.9.1" % "3.0.0" intransitive() // allow custom netty
   val netty   = "org.jboss.netty" % "netty" % "3.2.7.Final"
   val finagle = "com.twitter" % "finagle-core_2.9.1" % finagleVersion
   val finagle_ostrich4 = "com.twitter" % "finagle-ostrich4_2.9.1" % finagleVersion

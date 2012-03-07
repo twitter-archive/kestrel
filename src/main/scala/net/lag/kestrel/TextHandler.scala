@@ -26,6 +26,7 @@ import codec.{MemcacheResponse, MemcacheRequest}
 import com.twitter.naggati.Stages._
 import org.jboss.netty.buffer.{ChannelBuffer, ChannelBuffers}
 import java.net.InetSocketAddress
+import java.nio.ByteBuffer
 import com.twitter.finagle.{ClientConnection, Service}
 import com.twitter.util.{Future, Duration, Time}
 
@@ -38,18 +39,18 @@ object TextCodec {
   val read = readLine(true, "ISO-8859-1") { line =>
     if (line.endsWith(":")) {
       val segments = line.substring(0, line.length - 1).split(" ")
-      readData(segments, new mutable.ListBuffer[Array[Byte]])
+      readData(segments, new mutable.ListBuffer[ByteBuffer])
     } else {
       val segments = line.split(" ")
       emit(TextRequest(segments(0).toLowerCase, segments.drop(1).toList, Nil))
     }
   }
 
-  private def readData(segments: Seq[String], items: mutable.ListBuffer[Array[Byte]]): Stage = readLine(true, "ISO-8859-1") { line =>
+  private def readData(segments: Seq[String], items: mutable.ListBuffer[ByteBuffer]): Stage = readLine(true, "ISO-8859-1") { line =>
     if (line == "" || (items.size >= MAX_PUT_BUFFER)) {
       emit(TextRequest(segments(0).toLowerCase, segments.drop(1).toList, items.toList))
     } else {
-      items += line.getBytes("UTF-8")
+      items += ByteBuffer.wrap(line.getBytes("UTF-8"))
       readData(segments, items)
     }
   }
@@ -59,7 +60,7 @@ object TextCodec {
   }
 }
 
-case class TextRequest(command: String, args: List[String], items: List[Array[Byte]])
+case class TextRequest(command: String, args: List[String], items: List[ByteBuffer])
 
 object TextResponse {
   val NO_ITEM = Some(ChannelBuffers.wrappedBuffer("*\n".getBytes))
@@ -70,11 +71,11 @@ object TextResponse {
 abstract class TextResponse extends Codec.Signalling {
   def toBuffer: Option[ChannelBuffer]
 }
-case class ItemResponse(data: Option[Array[Byte]]) extends TextResponse {
+case class ItemResponse(data: Option[ByteBuffer]) extends TextResponse {
   def toBuffer = {
     if (data.isDefined) {
       val bytes = data.get
-      val buffer = ChannelBuffers.buffer(bytes.size + 2)
+      val buffer = ChannelBuffers.buffer(bytes.remaining + 2)
       buffer.writeByte(TextResponse.COLON)
       buffer.writeBytes(bytes)
       buffer.writeByte(TextResponse.LF)

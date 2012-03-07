@@ -172,6 +172,7 @@ class Kestrel(defaultQueueBuilder: QueueBuilder, queueBuilders: Seq[QueueBuilder
       new PeriodicBackgroundProcess("background-expiration", expirationTimerFrequency.get) {
         def periodic() {
           Kestrel.this.queueCollection.flushAllExpired()
+          Kestrel.this.queueCollection.deleteExpiredQueues()
         }
       }.start()
     }
@@ -182,9 +183,6 @@ class Kestrel(defaultQueueBuilder: QueueBuilder, queueBuilders: Seq[QueueBuilder
           debugLogQueues.foreach { queueName =>
             Kestrel.this.queueCollection.debugLog(queueName)
           }
-          // Now that we've cleaned out the queue, lets see if any of them are
-          // ready to be expired.
-          Kestrel.this.queueCollection.deleteExpiredQueues()
         }
       }.start()
     }

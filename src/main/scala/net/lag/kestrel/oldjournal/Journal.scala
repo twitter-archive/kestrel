@@ -60,7 +60,7 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
 
   private val queueFile = new File(queuePath, queueName)
 
-  private var writer: PeriodicSyncFile = null
+  private var writer: FileChannel = null
   private var reader: Option[FileChannel] = None
   private var readerFilename: Option[String] = None
   private var replayer: Option[FileChannel] = None
@@ -99,7 +99,7 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
   def this(fullPath: String) = this(fullPath, Duration.MaxValue)
 
   private def open(file: File) {
-    writer = new PeriodicSyncFile(file, syncScheduler, syncJournal)
+    writer = new FileOutputStream(file, true).getChannel
   }
 
   def open() {
@@ -218,6 +218,7 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
     val blob = item.pack(CMD_ADDX.toByte)
     size += blob.limit
     writer.write(blob)
+    Future.Unit
   }
 
   def add(item: QItem): Future[Unit] = add(true, item)
@@ -227,6 +228,7 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
     val blob = item.pack(CMD_CONTINUE.toByte, xid)
     size += blob.limit
     writer.write(blob)
+    Future.Unit
   }
 
   def remove() {
@@ -468,9 +470,9 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
       case i: Int => byteBuffer.putInt(i)
     }
     byteBuffer.flip
-    val future = writer.write(byteBuffer)
+    writer.write(byteBuffer)
     size += byteBuffer.limit
-    future
+    Future.Unit
   }
 
   val outstandingPackRequests = new AtomicInteger(0)
