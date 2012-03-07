@@ -18,6 +18,7 @@
 package net.lag.kestrel
 
 import java.io.{File, FileInputStream}
+import java.nio.ByteBuffer
 import java.util.concurrent.ScheduledThreadPoolExecutor
 import scala.collection.mutable
 import scala.util.Sorting
@@ -34,11 +35,13 @@ class FakeKestrelHandler(queues: QueueCollection, maxOpenTransactions: Int)
   extends KestrelHandler(queues, maxOpenTransactions, () => "none", 0) with SimplePendingReads
 
 class KestrelHandlerSpec extends Specification with TempFolder with TestLogging {
+  import TestBuffers.{stringToBuffer, bufferToString}
+
   val config = new QueueBuilder { name = "test" }
 
   case class beString(expected: String) extends Matcher[Option[QueueItem]]() {
     def apply(v: => Option[QueueItem]) = {
-      val actual = v.map { item => new String(item.data) }
+      val actual = v.map { item => bufferToString(item.data) }
       (actual == Some(expected), "ok", "item " + actual + " != " + expected)
     }
   }
@@ -56,8 +59,8 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
       withTempFolder {
         queues = new QueueCollection(folderName, timer, scheduler, config, Nil)
         val handler = new FakeKestrelHandler(queues, 10)
-        handler.setItem("test", 0, None, "one".getBytes)
-        handler.setItem("test", 0, None, "two".getBytes)
+        handler.setItem("test", 0, None, stringToBuffer("one"))
+        handler.setItem("test", 0, None, stringToBuffer("two"))
         handler.getItem("test", None, false, false).get() must beString("one")
         handler.getItem("test", None, false, false).get() must beString("two")
       }
@@ -74,7 +77,7 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
         Stats.getCounter("get_hits")() mustEqual 0
         Stats.getCounter("get_misses")() mustEqual 0
 
-        handler.setItem("test", 0, None, "one".getBytes)
+        handler.setItem("test", 0, None, stringToBuffer("one"))
         Stats.getCounter("cmd_set")() mustEqual 1
         Stats.getCounter("cmd_get")() mustEqual 0
 
@@ -96,7 +99,7 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
       withTempFolder {
         queues = new QueueCollection(folderName, timer, scheduler, config, Nil)
         val handler = new FakeKestrelHandler(queues, 10)
-        handler.setItem("test", 0, None, "one".getBytes)
+        handler.setItem("test", 0, None, stringToBuffer("one"))
         handler.getItem("test", None, true, false)() must beString("one")
         handler.getItem("test", None, true, false)() mustEqual None
         handler.abortRead("test") mustEqual true
@@ -111,9 +114,9 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
         withTempFolder {
           queues = new QueueCollection(folderName, timer, scheduler, config, Nil)
           val handler = new FakeKestrelHandler(queues, 10)
-          handler.setItem("test", 0, None, "one".getBytes)
-          handler.setItem("test", 0, None, "two".getBytes)
-          handler.setItem("test", 0, None, "three".getBytes)
+          handler.setItem("test", 0, None, stringToBuffer("one"))
+          handler.setItem("test", 0, None, stringToBuffer("two"))
+          handler.setItem("test", 0, None, stringToBuffer("three"))
           handler.getItem("test", None, true, false)() must beString("one")
           handler.getItem("test", None, true, false)() must beString("two")
           handler.abortRead("test") mustEqual true
@@ -129,12 +132,12 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
         withTempFolder {
           queues = new QueueCollection(folderName, timer, scheduler, config, Nil)
           val handler = new FakeKestrelHandler(queues, 10)
-          handler.setItem("red", 0, None, "red1".getBytes)
-          handler.setItem("red", 0, None, "red2".getBytes)
-          handler.setItem("green", 0, None, "green1".getBytes)
-          handler.setItem("green", 0, None, "green2".getBytes)
-          handler.setItem("blue", 0, None, "blue1".getBytes)
-          handler.setItem("blue", 0, None, "blue2".getBytes)
+          handler.setItem("red", 0, None, stringToBuffer("red1"))
+          handler.setItem("red", 0, None, stringToBuffer("red2"))
+          handler.setItem("green", 0, None, stringToBuffer("green1"))
+          handler.setItem("green", 0, None, stringToBuffer("green2"))
+          handler.setItem("blue", 0, None, stringToBuffer("blue1"))
+          handler.setItem("blue", 0, None, stringToBuffer("blue2"))
 
           handler.getItem("red", None, true, false)() must beString("red1")
           handler.getItem("green", None, true, false)() must beString("green1")
@@ -158,8 +161,8 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
         withTempFolder {
           queues = new QueueCollection(folderName, timer, scheduler, config, Nil)
           val handler = new FakeKestrelHandler(queues, 1)
-          handler.setItem("red", 0, None, "red1".getBytes)
-          handler.setItem("red", 0, None, "red2".getBytes)
+          handler.setItem("red", 0, None, stringToBuffer("red1"))
+          handler.setItem("red", 0, None, stringToBuffer("red2"))
           handler.getItem("red", None, true, false)() must beString("red1")
           handler.getItem("red", None, true, false)() must throwA[TooManyOpenReadsException]
         }
@@ -170,13 +173,13 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
           queues = new QueueCollection(folderName, timer, scheduler, config, Nil)
           val handler = new FakeKestrelHandler(queues, 5)
           val got = new mutable.ListBuffer[QueueItem]()
-          handler.setItem("red", 0, None, "red1".getBytes)
-          handler.setItem("red", 0, None, "red2".getBytes)
-          handler.setItem("red", 0, None, "red3".getBytes)
+          handler.setItem("red", 0, None, stringToBuffer("red1"))
+          handler.setItem("red", 0, None, stringToBuffer("red2"))
+          handler.setItem("red", 0, None, stringToBuffer("red3"))
           handler.monitorUntil("red", Some(1.hour.fromNow), 2, true) { (itemOption, _) =>
             itemOption.foreach { got += _ }
           }
-          got.toList.map { x => new String(x.data) } mustEqual List("red1", "red2")
+          got.toList.map { x => bufferToString(x.data) } mustEqual List("red1", "red2")
         }
       }
 
@@ -184,8 +187,8 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
         withTempFolder {
           queues = new QueueCollection(folderName, timer, scheduler, config, Nil)
           val handler = new FakeKestrelHandler(queues, 2)
-          handler.setItem("red", 0, None, "red1".getBytes)
-          handler.setItem("red", 0, None, "red2".getBytes)
+          handler.setItem("red", 0, None, stringToBuffer("red1"))
+          handler.setItem("red", 0, None, stringToBuffer("red2"))
           handler.getItem("red", None, true, false)() must beString("red1")
           handler.getItem("red", None, true, false)() must beString("red2")
           handler.closeAllReads("red") mustEqual 2

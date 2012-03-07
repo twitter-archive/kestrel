@@ -164,7 +164,7 @@ class MemcacheHandler(
               case None =>
                 new MemcacheResponse("END")
               case Some(item) =>
-                new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), Some(item.data))
+                new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.remaining), Some(item.data))
             }
           }
         } catch {
@@ -184,7 +184,7 @@ class MemcacheHandler(
         case None =>
           channel.send(new MemcacheResponse("END") then Codec.EndStream)
         case Some(item) =>
-          channel.send(new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), Some(item.data)))
+          channel.send(new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.remaining), Some(item.data)))
       }
     }
     new MemcacheResponse("") then Codec.Stream(channel)

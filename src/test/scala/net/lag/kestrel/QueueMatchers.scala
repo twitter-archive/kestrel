@@ -21,25 +21,29 @@ import com.twitter.libkestrel.QueueItem
 import org.specs.matcher.Matcher
 
 trait QueueMatchers {
+  import TestBuffers.bufferToString
+
   def beSomeQueueItem(s: String) = new Matcher[Option[QueueItem]] {
     def apply(QueueItemEval: => Option[QueueItem]) = {
       val QueueItem = QueueItemEval
-      (QueueItem.isDefined && (new String(QueueItem.get.data) == s), "ok", "wrong or missing queue item")
+      (QueueItem.isDefined && (bufferToString(QueueItem.get.data) == s), "ok", "wrong or missing queue item")
     }
   }
 
   def beSomeQueueItem(len: Int) = new Matcher[Option[QueueItem]] {
     def apply(QueueItemEval: => Option[QueueItem]) = {
       val QueueItem = QueueItemEval
-      (QueueItem.isDefined && (QueueItem.get.data.size == len), "ok", "wrong or missing queue item")
+      (QueueItem.isDefined && (QueueItem.get.data.remaining == len), "ok", "wrong or missing queue item")
     }
   }
 
   def beSomeQueueItem(len: Int, n: Int) = new Matcher[Option[QueueItem]] {
     def apply(QueueItemEval: => Option[QueueItem]) = {
       val QueueItem = QueueItemEval
-      (QueueItem.isDefined && (QueueItem.get.data.size == len) && (QueueItem.get.data(0) == n),
-        "ok", "wrong or missing queue item at " + n + "; got " + QueueItem.get.data(0))
+      ((QueueItem map { i => i.data.remaining == len && i.data.get(i.data.position) == n } orElse Some(false)).get,
+        "ok",
+        "wrong or missing queue item at " + n + "; got " +
+          (QueueItem map { i => i.data.get(i.data.position).toString } orElse Some("None")).get)
     }
   }
 }

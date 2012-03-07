@@ -28,6 +28,8 @@ import org.specs.Specification
 import org.specs.mock.{ClassMocker, JMocker}
 
 class TextHandlerSpec extends Specification with JMocker with ClassMocker {
+  import TestBuffers.{bufferToString, stringToBuffer}
+
   def wrap(s: String) = ChannelBuffers.wrappedBuffer(s.getBytes)
 
   "TextCodec" should {
@@ -52,7 +54,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
       val r = stream(0).asInstanceOf[TextRequest]
       r.command mustEqual "put"
       r.args mustEqual List("foo")
-      r.items.map { new String(_) } mustEqual List("hello")
+      r.items.map { bufferToString(_) } mustEqual List("hello")
     }
 
     "quit request" in {
@@ -77,14 +79,14 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
 
     "item response" in {
       val (codec, counter) = TestCodec(TextCodec.read, TextCodec.write)
-      codec.send(ItemResponse(Some("hello".getBytes))) mustEqual List(":hello\n")
+      codec.send(ItemResponse(Some(stringToBuffer("hello")))) mustEqual List(":hello\n")
     }
   }
 
   "TextHandler" should {
     val queueCollection = mock[QueueCollection]
     val connection = mock[ClientConnection]
-    val qitem = QueueItem(23, Time.now, None, "state shirt".getBytes)
+    val qitem = QueueItem(23, Time.now, None, stringToBuffer("state shirt"))
 
     "get request" in {
       expect {
@@ -168,11 +170,11 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
       Time.withCurrentTimeFrozen { timeMutator =>
         expect {
           one(connection).remoteAddress willReturn new InetSocketAddress("", 0)
-          one(queueCollection).add("test", "hello".getBytes, None, Time.now) willReturn true
+          one(queueCollection).add("test", stringToBuffer("hello"), None, Time.now) willReturn true
         }
 
         val textHandler = new TextHandler(connection, queueCollection, 10)
-        textHandler(TextRequest("put", List("test"), List("hello".getBytes)))() mustEqual CountResponse(1)
+        textHandler(TextRequest("put", List("test"), List(stringToBuffer("hello"))))() mustEqual CountResponse(1)
       }
     }
 
