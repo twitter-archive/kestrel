@@ -327,7 +327,7 @@ class QueueCollectionSpec extends Specification
 
         qc = new QueueCollection(folderName, timer, scheduler, config, List(jobsConfig))
         qc.loadQueues()
-        qc.add("jobs", "hello".getBytes, None)
+        qc.add("jobs", stringToBuffer("hello"), None)
 
         Kestrel.kestrel = mock[Kestrel]
         expect {
@@ -335,7 +335,7 @@ class QueueCollectionSpec extends Specification
         }
 
         val item = qc.remove("jobs", transaction = true)().get
-        new String(item.data) mustEqual "hello"
+        bufferToString(item.data) mustEqual "hello"
         qc.unremove("jobs", item.id)
 
         qc.reader("jobs").get.items mustEqual 0
@@ -362,7 +362,7 @@ class QueueCollectionSpec extends Specification
           qc = new QueueCollection(folderName, timer, scheduler, config,
             List(jobsConfig, retryConfig))
           qc.loadQueues()
-          qc.add("jobs", "hello".getBytes, None)
+          qc.add("jobs", stringToBuffer("hello"), None)
 
           Kestrel.kestrel = mock[Kestrel]
           expect {
@@ -370,7 +370,7 @@ class QueueCollectionSpec extends Specification
           }
 
           val item = qc.remove("jobs", transaction = true)().get
-          new String(item.data) mustEqual "hello"
+          bufferToString(item.data) mustEqual "hello"
           item.errorCount mustEqual 0
           qc.unremove("jobs", item.id)
 
@@ -393,7 +393,7 @@ class QueueCollectionSpec extends Specification
           }
 
           val item2 = qc.remove("jobs", transaction = true)().get
-          new String(item2.data) mustEqual "hello"
+          bufferToString(item2.data) mustEqual "hello"
           item2.errorCount mustEqual 1
           qc.unremove("jobs", item2.id)
 
@@ -402,7 +402,7 @@ class QueueCollectionSpec extends Specification
           qc.reader("errors").get.items mustEqual 1
 
           val item3 = qc.remove("errors")().get
-          new String(item3.data) mustEqual "hello"
+          bufferToString(item3.data) mustEqual "hello"
           item3.errorCount mustEqual 2
         }
       }

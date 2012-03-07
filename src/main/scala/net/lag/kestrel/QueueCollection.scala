@@ -211,21 +211,23 @@ class QueueCollection(
     reader(key) map { q => q.flush()() }
   }
 
-  def delete(name: String): Unit = synchronized {
-    if (!shuttingDown) {
-      queues.get(name) foreach { q =>
-        q.erase()
-        queues -= name
-        removeStats(name)
-        Stats.incr("queue_deletes")
-      }
-      if (name contains '+') {
-        reader(name) foreach { n => removeStats(n.fullname) }
-        val (writerName, readerName) = {
-          val names = name.split("\\+", 2)
-          (names(0), names(1))
+  def delete(name: String) {
+    synchronized {
+      if (!shuttingDown) {
+        queues.get(name) foreach { q =>
+          q.erase()
+          queues -= name
+          removeStats(name)
+          Stats.incr("queue_deletes")
         }
-        queues(writerName).dropReader(readerName)
+        if (name contains '+') {
+          reader(name) foreach { n => removeStats(n.fullname) }
+          val (writerName, readerName) = {
+            val names = name.split("\\+", 2)
+            (names(0), names(1))
+          }
+          queues(writerName).dropReader(readerName)
+        }
       }
     }
   }
@@ -236,24 +238,33 @@ class QueueCollection(
     }
   }
 
-  def expireQueue(name: String): Unit = {
-    if (!shuttingDown) {
-      queues.get(name) map { q =>
-        if (q.isReadyForExpiration) {
-          delete(name)
-          Stats.incr("queue_expires")
-          log.info("Expired queue %s", name)
-        }
-      }
-    }
-  }
-
   def flushAllExpired() {
     queueNames foreach { queueName => flushExpired(queueName) }
   }
 
-  def deleteExpiredQueues(): Unit = {
-    queueNames.map { qName => expireQueue(qName) }
+  def expireQueue(name: String): Unit = {
+    if (!shuttingDown) {
+      queues.get(name) map { q =>
+      }
+    }
+  }
+
+  def deleteExpiredQueues() {
+    synchronized {
+      if (shuttingDown) return
+      queueNames foreach { name =>
+        queues.get(name) foreach { q =>
+          q.readers foreach { reader =>
+            if (reader.isReadyForExpiration) {
+              // if this is the default reader, fullname will be the whole queue.
+              log.info("Expiring queue: %s", reader.fullname)
+              delete(reader.fullname)
+              Stats.incr("queue_expires")
+            }
+          }
+        }
+      }
+    }
   }
 
   def stats(key: String): Array[(String, String)] = reader(key) match {
@@ -271,7 +282,8 @@ class QueueCollection(
         ("discarded", q.discardedCount.toString),
         ("waiters", q.waiterCount.toString),
         ("open_transactions", q.openItems.toString),
-        ("total_flushes", q.flushCount.toString)
+        ("total_flushes", q.flushCount.toString),
+        ("create_time", q.createTime.inSeconds.toString)
       )
     }
   }
@@ -295,7 +307,11 @@ class QueueCollection(
     shuttingDown = true
     for ((name, q) <- queues) {
       // synchronous, so the journals are all officially closed before we return.
-      q.close
+      try {
+        q.close()
+      } catch {
+        case e: Throwable => log.error(e, "Exception closing queue %s", name)
+      }
     }
     queues.clear
   }
