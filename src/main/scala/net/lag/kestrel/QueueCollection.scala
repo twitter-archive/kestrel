@@ -127,6 +127,7 @@ class QueueCollection(
         Stats.addGauge(prefix + "age_msec")(reader.age.inMilliseconds)
         Stats.addGauge(prefix + "open_transactions")(reader.openItems)
         Stats.addGauge(prefix + "waiters")(reader.waiterCount)
+        Stats.addGauge(prefix + "create_time")(reader.createTime.inSeconds)
       }
     }
     rv
@@ -145,8 +146,9 @@ class QueueCollection(
     Stats.clearGauge(prefix + "mem_items")
     Stats.clearGauge(prefix + "mem_bytes")
     Stats.clearGauge(prefix + "age_msec")
-    Stats.clearGauge(prefix + "waiters")
     Stats.clearGauge(prefix + "open_transactions")
+    Stats.clearGauge(prefix + "waiters")
+    Stats.clearGauge(prefix + "create_time")
     Stats.removeMetric(prefix + "set_latency_usec")
     Stats.removeMetric(prefix + "delivery_latency_msec")
     Stats.removeMetric(prefix + "get_timeout_msec")

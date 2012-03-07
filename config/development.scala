@@ -62,6 +62,9 @@ new KestrelConfig {
   } :: new QueueBuilder {
     name = "slow"
     syncJournal = 10.milliseconds
+  } :: new QueueBuilder {
+    name = "temporary"
+    defaultReader.maxQueueAge = 15.seconds
   }
 
   debugLogQueues = List()
