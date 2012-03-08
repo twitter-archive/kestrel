@@ -165,6 +165,7 @@ expired at the same time, `maxExpireSweep` limits the number of items that
 will be removed by the background thread in a single round. This is primarily
 useful as a throttling mechanism when using a queue as a way to delay work.
 
+
 Queue expiration
 ----------------
 
@@ -172,6 +173,7 @@ Whole queues can be configured to expire as well. If `maxQueueAge` is set
 `expirationTimerFrequency` is used to check the queue age. If the queue is
 empty, and it has been longer than `maxQueueAge` since it was created then
 the queue will be deleted.
+
 
 Fanout Queues
 -------------
@@ -205,6 +207,48 @@ reader independently (which is new in 3.0), so for example, one fanout reader
 could be limited to keeping only the most recent 100 items, while another
 could enforce a default expiration time. The `defaultReader` is used for all
 readers that aren't configured by name.
+
+
+Error handling
+--------------
+
+Normally, a client should confirm fetched items even if there's something
+wrong with an item. The confirmation means "I received the job", not "The job
+was error-free". But sometimes a bad item can cause a client to crash or throw
+an exception, and you don't want these jobs to be re-enqueued over and over as
+the clients crash. And even if a client doesn't crash, aborting a fetch can be
+a useful signal that something is wrong with an item. For these cases, kestrel
+has two features to support handling aborted items.
+
+The first feature is the `puntErrorToQueue` setting on `QueueReaderBuilder`,
+which names a queue to send aborted items to. This can be used to send aborted
+items to a secondary server cluster, or to postpone problematic jobs until
+later. To postpone items, configure the two queues like this:
+
+- On the `jobs` queue, set `puntErrorToQueue` to `failed_jobs`.
+- On the `failed_jobs` queue, set `maxAge` to your desired delay.
+- On the `failed_jobs` queue, set `expireToQueue` to `jobs`.
+
+That will cause aborted jobs to be moved to `failed_jobs`, where they will
+get an expiration time. After the items expire, they'll move back to the back
+of the `jobs` queue again. One pitfall of this approach is that if a job can
+never be completed, it will move back and forth between the `jobs` and
+`failed_jobs` queues forever.
+
+The second feature allows these troubled jobs to be eventually moved to a
+third queue for special processing. Set `puntManyErrorsToQueue` to the name of
+this trouble queue, and set `puntManyErrorsCount` to the number of times an
+item can be aborted before it's moved to this queue. The abort count is
+preserved as an item is moved from queue to queue, until it's successfully
+confirmed, so if you set `puntManyErrorsCount` to 50, an item will have to be
+aborted 50 times in a row before it will be moved to this trouble queue.
+
+Of course, if you want, you can set up the trouble queue to expire items back
+into the original queue after an expiration time, just like in the
+`failed_jobs` example above. In that case, you probably want a much higher
+expiration time. In general, though, it's best to give up on a job if it fails
+many times in a row. An offline processor can check the failed jobs later, and
+possibly re-enqueue them if they were due to a temporary failure.
 
 
 Thrift protocol
@@ -399,7 +443,8 @@ For each queue, the following stats are also reported:
 - `open_transactions` - items read with `/open` but not yet confirmed
 - `total_flushes` - total number of times this queue has been flushed
 - `age_msec` - age of the last item read from the queue
-- `create_time` - the time that the queue was created (in milliseconds since epoch)
+- `create_time` - the time that the queue was created (in milliseconds since
+  epoch)
 
 More detailed statistics, including latency timing measurements, are available
 via the ostrich web port. To see them in human-readable form, use:
@@ -416,6 +461,7 @@ See the ostrich documentation for more details.
 Kestrel as a library
 --------------------
 
-The reusable parts of kestrel have been pulled out into a separate library -- check it out!
+The reusable parts of kestrel have been pulled out into a separate library --
+check it out!
 
 https://github.com/robey/libkestrel
