@@ -33,7 +33,7 @@ it last shutdown (or was killed or died). New queues are created by referring
 to them (for example, adding or trying to remove an item). A queue can be
 deleted with the "delete" command.
 
-- [#Configuration](Configuration)
+- [Configuration](#Configuration)
 
 Configuration
 -------------
