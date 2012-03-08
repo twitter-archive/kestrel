@@ -33,6 +33,8 @@ it last shutdown (or was killed or died). New queues are created by referring
 to them (for example, adding or trying to remove an item). A queue can be
 deleted with the "delete" command.
 
+- table of contents
+{:toc}
 
 Configuration
 -------------
@@ -399,7 +401,8 @@ For each queue, the following stats are also reported:
 - `open_transactions` - items read with `/open` but not yet confirmed
 - `total_flushes` - total number of times this queue has been flushed
 - `age_msec` - age of the last item read from the queue
-- `create_time` - the time that the queue was created (in milliseconds since epoch)
+- `create_time` - the time that the queue was created (in milliseconds since
+  epoch)
 
 More detailed statistics, including latency timing measurements, are available
 via the ostrich web port. To see them in human-readable form, use:
@@ -416,6 +419,7 @@ See the ostrich documentation for more details.
 Kestrel as a library
 --------------------
 
-The reusable parts of kestrel have been pulled out into a separate library -- check it out!
+The reusable parts of kestrel have been pulled out into a separate library --
+check it out!
 
 https://github.com/robey/libkestrel
