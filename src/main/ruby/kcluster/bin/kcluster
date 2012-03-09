@@ -22,6 +22,11 @@ def verbose(s)
   puts s if $options[:verbose]
 end
 
+def status(s)
+  print s
+  STDOUT.flush
+end
+
 def with_server(hostname, port, &block)
   begin
     sock = TCPSocket.open(hostname, port)
@@ -116,28 +121,23 @@ def report_all(data, keys)
   puts ""
 end
 
-def delete_all(queue_name)
+def broadcast(command, queue_name, verb)
   $options[:server_list].each do |server|
-    print "--- Deleting queue #{queue_name} from #{server}:#{$options[:port]} ... "
-    STDOUT.flush
+    status "--- #{verb} queue #{queue_name} from #{server}:#{$options[:port]} ... "
     with_server(server, $options[:port]) do |sock|
-      sock.puts("delete " + queue_name)
+      sock.puts("#{command} " + queue_name)
       puts sock.readline.chomp
     end
   end
   puts "Done."
 end
 
+def delete_all(queue_name)
+  broadcast("delete", queue_name, "Deleting")
+end
+
 def flush_all(queue_name)
-  $options[:server_list].each do |server|
-    print "--- Flushing queue #{queue_name} from #{server}:#{$options[:port]} ... "
-    STDOUT.flush
-    with_server(server, $options[:port]) do |sock|
-      sock.puts("flush " + queue_name)
-      puts sock.readline.chomp
-    end
-  end
-  puts "Done."
+  broadcast("flush", queue_name, "Flushing")
 end
 
 def keep_unchanged_data(last, current)
