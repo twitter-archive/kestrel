@@ -169,7 +169,7 @@ useful as a throttling mechanism when using a queue as a way to delay work.
 Queue expiration
 ----------------
 
-Whole queues can be configured to expire as well. If `maxQueueAge` is set 
+Whole queues can be configured to expire as well. If `maxQueueAge` is set
 `expirationTimerFrequency` is used to check the queue age. If the queue is
 empty, and it has been longer than `maxQueueAge` since it was created then
 the queue will be deleted.
@@ -225,15 +225,15 @@ which names a queue to send aborted items to. This can be used to send aborted
 items to a secondary server cluster, or to postpone problematic jobs until
 later. To postpone items, configure the two queues like this:
 
-- On the `jobs` queue, set `puntErrorToQueue` to `failed_jobs`.
-- On the `failed_jobs` queue, set `maxAge` to your desired delay.
-- On the `failed_jobs` queue, set `expireToQueue` to `jobs`.
+- On the `jobs` queue, set `puntErrorToQueue` to `jobs_to_retry`.
+- On the `jobs_to_retry` queue, set `maxAge` to your desired delay.
+- On the `jobs_to_retry` queue, set `expireToQueue` to `jobs`.
 
-That will cause aborted jobs to be moved to `failed_jobs`, where they will
+That will cause aborted jobs to be moved to `jobs_to_retry`, where they will
 get an expiration time. After the items expire, they'll move back to the back
 of the `jobs` queue again. One pitfall of this approach is that if a job can
 never be completed, it will move back and forth between the `jobs` and
-`failed_jobs` queues forever.
+`jobs_to_retry` queues forever.
 
 The second feature allows these troubled jobs to be eventually moved to a
 third queue for special processing. Set `puntManyErrorsToQueue` to the name of
@@ -242,6 +242,12 @@ item can be aborted before it's moved to this queue. The abort count is
 preserved as an item is moved from queue to queue, until it's successfully
 confirmed, so if you set `puntManyErrorsCount` to 50, an item will have to be
 aborted 50 times in a row before it will be moved to this trouble queue.
+
+A complete setup, with a retry queue and a queue of permanently-failed jobs,
+would have the above configuration plus:
+
+- On the `jobs` queue, set `puntManyErrorsCount` to the maximum error count.
+- On the `jobs` queue, set `puntManyErrorsToQueue` to `failed_jobs`.
 
 Of course, if you want, you can set up the trouble queue to expire items back
 into the original queue after an expiration time, just like in the
