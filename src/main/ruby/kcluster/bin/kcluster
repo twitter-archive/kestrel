@@ -22,40 +22,66 @@ def verbose(s)
   puts s if $options[:verbose]
 end
 
-def fetch_stats(host, port, data)
-  verbose "--- Fetching stats from #{host}:#{port}"
-  sock = TCPSocket.open(host, port)
-  sock.puts("stats")
-  done = false
-  while !done && line = sock.gets.chomp
-    if (line == 'END') then
-      done = true
-    elsif line =~ /STAT queue_([\w\+\-]+) (\d+)/
-      key = $1
-      value = $2.to_i
-      (stat, queue_name) = case key
-        when /([\w\+\-]+)_total_items/   then [:total_items, $1]
-        when /([\w\+\-]+)_expired_items/ then [:expired_items, $1]
-        when /([\w\+\-]+)_mem_items/     then [:mem_items, $1]
-        when /([\w\+\-]+)_items/         then [:items, $1]
-        when /([\w\+\-]+)_mem_bytes/     then [:mem_bytes, $1]
-        when /([\w\+\-]+)_bytes/         then [:bytes, $1]
-        when /([\w\+\-]+)_age/           then [:age, $1]
-      end
+def with_server(hostname, port, &block)
+  begin
+    sock = TCPSocket.open(hostname, port)
+  rescue
+    puts "WARNING: Unable to connect to #{hostname}:#{port}"
+    return
+  end
+  begin
+    yield sock
+  ensure
+    sock.close
+  end
+end
 
-      if (queue_name)
-        queue_name = queue_name.split('+', 2).first if $options[:rollup_fanouts]
+def flush_all(queue_name)
+  $options[:server_list].each do |server|
+    print "--- Flushing queue #{queue_name} from #{server}:#{$options[:port]} ... "
+    STDOUT.flush
+    with_server(server, $options[:port]) do |sock|
+      sock.puts("flush " + queue_name)
+      puts sock.readline.chomp
+    end
+  end
+  puts "Done."
+end
 
-        if (stat == :age)
-          data[:min_age][queue_name] = value if value < data[:min_age][queue_name]
-          data[:max_age][queue_name] = value if value > data[:max_age][queue_name]
-        else
-          data[stat][queue_name] += value
+def fetch_stats(hostname, port, data)
+  verbose "--- Fetching stats from #{hostname}:#{port}"
+  with_server(hostname, port) do |sock|
+    sock.puts("stats")
+    done = false
+    while !done && line = sock.gets.chomp
+      if (line == 'END') then
+        done = true
+      elsif line =~ /STAT queue_([\w\+\-]+) (\d+)/
+        key = $1
+        value = $2.to_i
+        (stat, queue_name) = case key
+          when /([\w\+\-]+)_total_items/   then [:total_items, $1]
+          when /([\w\+\-]+)_expired_items/ then [:expired_items, $1]
+          when /([\w\+\-]+)_mem_items/     then [:mem_items, $1]
+          when /([\w\+\-]+)_items/         then [:items, $1]
+          when /([\w\+\-]+)_mem_bytes/     then [:mem_bytes, $1]
+          when /([\w\+\-]+)_bytes/         then [:bytes, $1]
+          when /([\w\+\-]+)_age/           then [:age, $1]
+        end
+
+        if (queue_name)
+          queue_name = queue_name.split('+', 2).first if $options[:rollup_fanouts]
+
+          if (stat == :age)
+            data[:min_age][queue_name] = value if value < data[:min_age][queue_name]
+            data[:max_age][queue_name] = value if value > data[:max_age][queue_name]
+          else
+            data[stat][queue_name] += value
+          end
         end
       end
     end
   end
-  sock.close
 end
 
 def fetch_all
@@ -65,11 +91,7 @@ def fetch_all
     end
   end
   $options[:server_list].each do |server|
-    begin
-      fetch_stats(server, $options[:port], data)
-    rescue => e
-      puts "Could not connect to host #{server}: #{e}"
-    end
+    fetch_stats(server, $options[:port], data)
   end
   data
 end
@@ -98,10 +120,10 @@ def delete_all(queue_name)
   $options[:server_list].each do |server|
     print "--- Deleting queue #{queue_name} from #{server}:#{$options[:port]} ... "
     STDOUT.flush
-    sock = TCPSocket.open(server, $options[:port])
-    sock.puts("delete " + queue_name)
-    puts sock.readline.chomp
-    sock.close
+    with_server(server, $options[:port]) do |sock|
+      sock.puts("delete " + queue_name)
+      puts sock.readline.chomp
+    end
   end
   puts "Done."
 end
@@ -110,10 +132,10 @@ def flush_all(queue_name)
   $options[:server_list].each do |server|
     print "--- Flushing queue #{queue_name} from #{server}:#{$options[:port]} ... "
     STDOUT.flush
-    sock = TCPSocket.open(server, $options[:port])
-    sock.puts("flush " + queue_name)
-    puts sock.readline.chomp
-    sock.close
+    with_server(server, $options[:port]) do |sock|
+      sock.puts("flush " + queue_name)
+      puts sock.readline.chomp
+    end
   end
   puts "Done."
 end
