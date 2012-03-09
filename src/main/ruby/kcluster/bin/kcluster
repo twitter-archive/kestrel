@@ -41,18 +41,6 @@ def with_server(hostname, port, &block)
   end
 end
 
-def flush_all(queue_name)
-  $options[:server_list].each do |server|
-    print "--- Flushing queue #{queue_name} from #{server}:#{$options[:port]} ... "
-    STDOUT.flush
-    with_server(server, $options[:port]) do |sock|
-      sock.puts("flush " + queue_name)
-      puts sock.readline.chomp
-    end
-  end
-  puts "Done."
-end
-
 def fetch_stats(hostname, port, data)
   verbose "--- Fetching stats from #{hostname}:#{port}"
   with_server(hostname, port) do |sock|
