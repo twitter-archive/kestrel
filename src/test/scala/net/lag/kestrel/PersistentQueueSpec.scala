@@ -611,6 +611,44 @@ class PersistentQueueSpec extends Specification
     }
   }
 
+  "PersistentQueue with expiry" should {
+    val timer = new FakeTimer()
+    val scheduler = new ScheduledThreadPoolExecutor(1)
+
+    "expire queue" in {
+      withTempFolder {
+        Time.withCurrentTimeFrozen { time => 
+          val config = new QueueBuilder {
+            keepJournal = false
+            maxQueueAge = 90.seconds
+          }.apply()
+          val q = new PersistentQueue("wu_tang", folderName, config, timer, scheduler)
+          q.setup()
+
+          // Not ready, we just got started!
+          q.isReadyForExpiration mustEqual false
+
+          q.add("method man".getBytes, None) mustEqual true
+      
+          time.advance(30.seconds)
+          // We aren't ready to expire yet, as it's not been long enough
+          q.isReadyForExpiration mustEqual false
+          
+          time.advance(61.seconds)
+          
+          // Still not ready, as we have items in the queue!
+          q.isReadyForExpiration mustEqual false
+
+          q.remove must beSomeQItem("method man") // queue is now empty
+          
+          // This should be true now because the queue is 91 seconds old and
+          // has no items
+          q.isReadyForExpiration mustEqual true
+        }
+      }
+    }
+  }
+
   "PersistentQueue with item expiry" should {
     val timer = new FakeTimer()
     val scheduler = new ScheduledThreadPoolExecutor(1)

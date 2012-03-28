@@ -197,8 +197,24 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
     }
   }
 
+  def expireQueue(name: String): Unit = {
+    if (!shuttingDown) {
+      queues.get(name) map { q =>
+        if (q.isReadyForExpiration) {
+          delete(name)
+          Stats.incr("queue_expires")
+          log.info("Expired queue %s", name)
+        }
+      }
+    }
+  }
+
   def flushAllExpired(): Int = {
     queueNames.foldLeft(0) { (sum, qName) => sum + flushExpired(qName) }
+  }
+
+  def deleteExpiredQueues(): Unit = {
+    queueNames.map { qName => expireQueue(qName) }
   }
 
   def stats(key: String): Array[(String, String)] = queue(key) match {
