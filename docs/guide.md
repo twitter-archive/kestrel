@@ -148,6 +148,13 @@ expired at the same time, `maxExpireSweep` limits the number of items that
 will be removed by the background thread in a single round. This is primarily
 useful as a throttling mechanism when using a queue as a way to delay work.
 
+Queue expiration
+----------------
+
+Whole queues can be configured to expire as well. If `maxQueueAge` is set 
+`expirationTimerFrequency` is used to check the queue age. If the queue is
+empty, and it has been longer than `maxQueueAge` since it was created then
+the queue will be deleted.
 
 Fanout Queues
 -------------
@@ -362,6 +369,9 @@ Global stats reported by kestrel are:
 - `get_misses` - total `GET` requests on an empty queue
 - `bytes_read` - total bytes read from clients
 - `bytes_written` - total bytes written to clients
+- `queue_creates` - total number of queues created
+- `queue_deletes` - total number of queues deleted (includes expires)
+- `queue_expires` - total number of queues expires
 
 For each queue, the following stats are also reported:
 
@@ -383,7 +393,9 @@ For each queue, the following stats are also reported:
 - `waiters` - number of clients waiting for an item from this queue (using
   `GET/t`)
 - `open_transactions` - items read with `/open` but not yet confirmed
-
+- `total_flushes` - total number of times this queue has been flushed
+- `age_msec` - age of the last item read from the queue
+- `create_time` - the time that the queue was created (in milliseconds since epoch)
 
 Kestrel as a library
 --------------------

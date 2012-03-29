@@ -71,13 +71,5 @@ new KestrelConfig {
       filename = "/var/log/kestrel/kestrel.log"
       roll = Policy.Never
     }
-  } :: new LoggerConfig {
-    node = "stats"
-    level = Level.INFO
-    useParents = false
-    handlers = new FileHandlerConfig {
-      filename = "/var/log/kestrel/stats.log"
-      roll = Policy.Never
-    }
   }
 }

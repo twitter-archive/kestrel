@@ -54,6 +54,7 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
     }
     val config = queueConfigMap.getOrElse(name, defaultQueueConfig)
     log.info("Setting up queue %s: %s", realName, config)
+    Stats.incr("queue_creates")
     new PersistentQueue(realName, path, config, timer, journalSyncScheduler, Some(this.apply))
   }
 
@@ -178,6 +179,7 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
         q.destroyJournal()
         q.removeStats()
         queues.remove(name)
+        Stats.incr("queue_deletes")
       }
       if (name contains '+') {
         val master = name.split('+')(0)
@@ -195,8 +197,24 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
     }
   }
 
+  def expireQueue(name: String): Unit = {
+    if (!shuttingDown) {
+      queues.get(name) map { q =>
+        if (q.isReadyForExpiration) {
+          delete(name)
+          Stats.incr("queue_expires")
+          log.info("Expired queue %s", name)
+        }
+      }
+    }
+  }
+
   def flushAllExpired(): Int = {
     queueNames.foldLeft(0) { (sum, qName) => sum + flushExpired(qName) }
+  }
+
+  def deleteExpiredQueues(): Unit = {
+    queueNames.map { qName => expireQueue(qName) }
   }
 
   def stats(key: String): Array[(String, String)] = queue(key) match {

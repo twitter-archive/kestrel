@@ -24,7 +24,7 @@ class LoadtestProject(info: ProjectInfo) extends StandardServiceProject(info)
   def runParrot(config: String) = runParrotTask(Array("-f", config))
   def killParrot(config: String) = runParrotTask(Array("-f", config, "-k"))
 
-  val parrot = "com.twitter" % "parrot" % "0.4.3"
+  val parrot = "com.twitter" % "parrot" % "0.4.5"
 
   override def ivyXML =
     <dependencies>
