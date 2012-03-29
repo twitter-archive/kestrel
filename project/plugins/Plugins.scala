@@ -14,7 +14,8 @@ class Plugins(info: ProjectInfo) extends PluginDefinition(info) {
     super.repositories ++ Set(
       "twitter.com" at "http://maven.twttr.com/",
       "scala-tools" at "http://scala-tools.org/repo-releases/",
-      "freemarker" at "http://freemarker.sourceforge.net/maven2/"
+      "freemarker" at "http://freemarker.sourceforge.net/maven2/",
+      "maven" at "http://repo1.maven.org/maven2/"
     )
   }
   override def ivyRepositories = Seq(Resolver.defaultLocal(None)) ++ repositories
