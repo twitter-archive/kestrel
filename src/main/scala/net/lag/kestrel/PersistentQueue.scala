@@ -44,7 +44,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
 
   // age of the last item read from the queue:
   private var _currentAge: Duration = 0.milliseconds
-  
+
   // time the queue was created
   private var _createTime = Time.now
 
@@ -95,7 +95,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   def currentAge: Duration = synchronized { if (queueSize == 0) 0.milliseconds else _currentAge }
   def waiterCount: Long = synchronized { waiters.size }
   def isClosed: Boolean = synchronized { closed || paused }
-  def createTime: Long = synchronized { _createTime }
+  def createTime: Long = synchronized { _createTime.inSeconds }
 
   // mostly for unit tests.
   def memoryLength: Long = synchronized { queue.size }
@@ -414,6 +414,12 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     Stats.clearGauge(statNamed("age_msec"))
     Stats.clearGauge(statNamed("waiters"))
     Stats.clearGauge(statNamed("open_transactions"))
+    Stats.clearGauge(statNamed("create_time"))
+    Stats.removeMetric(statNamed("set_latency_usec"))
+    Stats.removeMetric(statNamed("get_timeout_msec"))
+    Stats.removeMetric(statNamed("delivery_latency_msec"))
+    Stats.removeMetric(statNamed("get_hit_latency_usec"))
+    Stats.removeMetric(statNamed("get_miss_latency_usec"))
   }
 
   private final def nextXid(): Int = {
