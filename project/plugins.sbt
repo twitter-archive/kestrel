@@ -19,6 +19,6 @@ resolvers <<= (resolvers) { r =>
 
 externalResolvers <<= (resolvers) map identity
 
-addSbtPlugin("com.twitter" % "sbt-package-dist" % "1.0.0")
+addSbtPlugin("com.twitter" %% "sbt-package-dist" % "1.0.0")
 
-addSbtPlugin("com.twitter" % "sbt11-scrooge" % "0.99.0-SNAPSHOT")
+addSbtPlugin("com.twitter" %% "sbt11-scrooge" % "1.0.0")
