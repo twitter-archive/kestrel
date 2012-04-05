@@ -1,0 +1,1 @@
+../../../../src/main/thrift/kestrel.thrift

@@ -4,15 +4,17 @@ import java.io._
 new ParrotLauncherConfig {
   mesosCluster = "smfd-devel"
   hadoopNS = "hdfs://hadoop-scribe-nn.smfd.twitter.com"
+  hadoopConfig = "/etc/hadoop/hadoop-conf-smfd"
+
   zkHostName = Some("zookeeper.smfd.twitter.com")
 
   distDir = "dist/kestrel_loadtest"
-  jobName = "kestrel_producer"
-  port = 22133
+  jobName = "kestrel_thrift_consumer"
+  port = 2229
   victims = "smfd-akc-04-sr1.devel.twitter.com"
   parser = "thrift" // magic
 
-  hostConnectionLimit = 500
+  hostConnectionLimit = 2000
 
   log = {
     val file = File.createTempFile("kestrel", "parrot")
@@ -26,15 +28,16 @@ new ParrotLauncherConfig {
   duration = 10
   timeUnit = "MINUTES"
 
-  imports = """import net.lag.kestrel.loadtest.KestrelProducerLoadTest
+  imports = """import net.lag.kestrel.loadtest.thrift.KestrelThriftConsumer
                import com.twitter.finagle.kestrel.protocol.Response"""
-  responseType = "Response"
-  transport = "KestrelTransport"
-  loadTest = """new KestrelProducerLoadTest(kestrelService) {
+  responseType = "Array[Byte]"
+  transport = "ThriftTransport"
+  loadTest = """new KestrelThriftConsumer(service.get) {
                   numQueues = 10
-                  payloadSize = 50
+                  numFanouts = 5
+                  timeout = 100
                   queueNameTemplate = "vshard_%d"
                 }"""
 
-  doConfirm = false
+   doConfirm = false
 }

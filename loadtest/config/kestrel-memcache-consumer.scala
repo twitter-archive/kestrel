@@ -4,10 +4,12 @@ import java.io._
 new ParrotLauncherConfig {
   mesosCluster = "smfd-devel"
   hadoopNS = "hdfs://hadoop-scribe-nn.smfd.twitter.com"
+  hadoopConfig = "/etc/hadoop/hadoop-conf-smfd"
+
   zkHostName = Some("zookeeper.smfd.twitter.com")
 
   distDir = "dist/kestrel_loadtest"
-  jobName = "kestrel_consumer"
+  jobName = "kestrel_memcache_consumer"
   port = 22133
   victims = "smfd-akc-04-sr1.devel.twitter.com"
   parser = "thrift" // magic
@@ -26,11 +28,11 @@ new ParrotLauncherConfig {
   duration = 10
   timeUnit = "MINUTES"
 
-  imports = """import net.lag.kestrel.loadtest.KestrelConsumerLoadTest
+  imports = """import net.lag.kestrel.loadtest.memcache.KestrelMemcacheConsumer
                import com.twitter.finagle.kestrel.protocol.Response"""
   responseType = "Response"
   transport = "KestrelTransport"
-  loadTest = """new KestrelConsumerLoadTest(kestrelService) {
+  loadTest = """new KestrelMemcacheConsumer(service.get) {
                   numQueues = 10
                   numFanouts = 5
                   timeout = 100
