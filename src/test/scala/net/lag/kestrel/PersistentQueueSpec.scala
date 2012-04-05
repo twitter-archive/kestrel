@@ -714,8 +714,8 @@ class PersistentQueueSpec extends Specification
           val configWithoutMaxExpireSweep = new QueueBuilder {
             keepJournal = false
           }.apply()
-          val r = new PersistentQueue("vocaloid", folderName, configWithoutMaxExpireSweep, timer, timer)
-          val q = new PersistentQueue("wu_tang", folderName, configWithMaxExpireSweep, timer, timer)
+          val r = new PersistentQueue("vocaloid", folderName, configWithoutMaxExpireSweep, timer, scheduler)
+          val q = new PersistentQueue("wu_tang", folderName, configWithMaxExpireSweep, timer, scheduler)
           r.setup()
           q.setup()
 
