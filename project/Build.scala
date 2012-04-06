@@ -15,7 +15,7 @@ object Kestrel extends Build {
   ).settings(
     name := "kestrel",
     organization := "net.lag",
-    version := "2.2.0-SNAPSHOT",
+    version := "3.0.0-SNAPSHOT",
     scalaVersion := "2.9.1",
 
     // time-based tests cannot be run in parallel
@@ -23,12 +23,13 @@ object Kestrel extends Build {
     parallelExecution in Test := false,
 
     libraryDependencies ++= Seq(
+      "com.twitter" %% "libkestrel" % "1.0.1",
       "com.twitter" %% "ostrich" % "4.10.6",
-      "com.twitter" %% "naggati" % "2.2.3" intransitive(), // allow custom netty
+      "com.twitter" %% "naggati" % "3.0.0" intransitive(), // allow custom netty
       "com.twitter" %% "finagle-core" % finagleVersion,
       "com.twitter" %% "finagle-ostrich4" % finagleVersion,
       "com.twitter" %% "finagle-thrift" % finagleVersion, // override scrooge's version
-      "org.jboss.netty" % "netty" % "3.2.6.Final",
+      "org.jboss.netty" % "netty" % "3.2.7.Final",
       "com.twitter" %% "scrooge-runtime" % "1.1.3",
 
       // for tests only:
@@ -42,7 +43,7 @@ object Kestrel extends Build {
 
     mainClass in Compile := Some("net.lag.kestrel.Kestrel"),
 
-    CompileThriftScrooge.scroogeVersion := "1.1.7",
+    CompileThriftScrooge.scroogeVersion := "2.2.0",
     PackageDist.packageDistConfigFilesValidationRegex := Some(".*"),
     SubversionPublisher.subversionRepository := Some("https://svn.twitter.biz/maven-public"),
     publishArtifact in Test := true
