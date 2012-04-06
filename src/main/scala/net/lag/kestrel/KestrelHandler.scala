@@ -207,11 +207,6 @@ abstract class KestrelHandler(
       }
       itemOption
     }
-    future.onCancellation {
-      // if the connection is closed, pre-emptively return un-acked items.
-      abortAnyOpenRead()
-    }
-    future
   }
 
   def abortAnyOpenRead() {
