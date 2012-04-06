@@ -40,7 +40,8 @@ object Kestrel extends Build {
       "org.hamcrest" % "hamcrest-all" % "1.1" % "test"
     ),
 
-    mainClass := Some("net.lag.kestrel.Kestrel"),
+    mainClass in Compile := Some("net.lag.kestrel.Kestrel"),
+
     CompileThriftScrooge.scroogeVersion := "1.1.7",
     PackageDist.packageDistConfigFilesValidationRegex := Some(".*"),
     SubversionPublisher.subversionRepository := Some("https://svn.twitter.biz/maven-public"),
