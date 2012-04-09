@@ -14,7 +14,7 @@ new ParrotLauncherConfig {
   victims = "smfd-akc-04-sr1.devel.twitter.com"
   parser = "thrift" // magic
 
-  hostConnectionLimit = 2000
+  hostConnectionLimit = 5000
 
   log = {
     val file = File.createTempFile("kestrel", "parrot")
@@ -23,18 +23,23 @@ new ParrotLauncherConfig {
     writer.close
     file.getAbsolutePath
   }
-  requestRate = 100
+
+  requestRate = 1300
   numInstances = 1
-  duration = 10
+  duration = 75
   timeUnit = "MINUTES"
 
   imports = """import net.lag.kestrel.loadtest.thrift.KestrelThriftConsumer
-               import com.twitter.finagle.kestrel.protocol.Response"""
+               import com.twitter.parrot.util.SlowStartPoissonProcess
+               import com.twitter.conversions.time._"""
+
+  createDistribution = "createDistribution = { rate => new SlowStartPoissonProcess(rate, 5.minutes) }"
+
   responseType = "Array[Byte]"
   transport = "ThriftTransport"
   loadTest = """new KestrelThriftConsumer(service.get) {
                   numQueues = 10
-                  numFanouts = 5
+                  numFanouts = 0
                   timeout = 100
                   queueNameTemplate = "vshard_%d"
                 }"""
