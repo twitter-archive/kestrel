@@ -211,7 +211,7 @@ trait KestrelConfig extends ServerConfig[Kestrel] {
   /**
    * An optional size for the backlog of connecting clients. This setting is applied to each listening port.
    */
-  var connectionBacklog: Option[Int] = Some(1000)
+  var connectionBacklog: Option[Int] = None
 
   def apply(runtime: RuntimeEnvironment) = {
     new Kestrel(
