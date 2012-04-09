@@ -43,7 +43,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
               listenAddress: String, memcacheListenPort: Option[Int], textListenPort: Option[Int],
               thriftListenPort: Option[Int], queuePath: String,
               expirationTimerFrequency: Option[Duration], clientTimeout: Option[Duration],
-              maxOpenTransactions: Int)
+              maxOpenTransactions: Int, connectionBacklog: Option[Int])
       extends Service {
   private val log = Logger.get(getClass.getName)
 
@@ -73,8 +73,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
       .name(name)
       .reportTo(new OstrichStatsReceiver)
       .bindTo(address)
-      .backlog(1024)
-
+    connectionBacklog.foreach { backlog => builder = builder.backlog(backlog) }
     clientTimeout.foreach { timeout => builder = builder.readTimeout(timeout) }
     // calling build() is equivalent to calling start() in finagle.
     builder.build(factory)
@@ -90,6 +89,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
       .name(name)
       .reportTo(new OstrichStatsReceiver)
       .bindTo(address)
+    connectionBacklog.foreach { backlog => builder = builder.backlog(backlog) }
     clientTimeout.foreach { timeout => builder = builder.readTimeout(timeout) }
     // calling build() is equivalent to calling start() in finagle.
     builder.build(connection => {
@@ -109,9 +109,9 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
 
   def start() {
     log.info("Kestrel config: listenAddress=%s memcachePort=%s textPort=%s queuePath=%s " +
-             "expirationTimerFrequency=%s clientTimeout=%s maxOpenTransactions=%d",
+             "expirationTimerFrequency=%s clientTimeout=%s maxOpenTransactions=%d connectionBacklog=%s",
              listenAddress, memcacheListenPort, textListenPort, queuePath,
-             expirationTimerFrequency, clientTimeout, maxOpenTransactions)
+             expirationTimerFrequency, clientTimeout, maxOpenTransactions, connectionBacklog)
 
     // this means no timeout will be at better granularity than 100 ms.
     timer = new HashedWheelTimer(100, TimeUnit.MILLISECONDS)
