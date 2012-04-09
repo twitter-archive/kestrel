@@ -73,6 +73,8 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
       .name(name)
       .reportTo(new OstrichStatsReceiver)
       .bindTo(address)
+      .backlog(1024)
+
     clientTimeout.foreach { timeout => builder = builder.readTimeout(timeout) }
     // calling build() is equivalent to calling start() in finagle.
     builder.build(factory)
