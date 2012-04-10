@@ -21,6 +21,7 @@ import java.io._
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.channels.FileChannel
 import java.util.concurrent.{CountDownLatch, Executor, ScheduledExecutorService}
+import java.util.concurrent.atomic.AtomicLong
 import scala.collection.mutable
 import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
@@ -51,8 +52,24 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   def statNamed(statName: String) = "q/" + name + "/" + statName
 
   // # of items EVER added to the queue:
-  val totalItems = Stats.getCounter(statNamed("total_items"))
-  totalItems.reset()
+  val putItems = new AtomicLong(0)
+  Stats.removeCounter(statNamed("total_items"))
+  Stats.makeCounter(statNamed("total_items"), putItems)
+  Stats.removeCounter(statNamed("put_items"))
+  Stats.makeCounter(statNamed("put_items"), putItems)
+
+  // # of bytes EVER added to the queue:
+  val putBytes = new AtomicLong(0)
+  Stats.removeCounter(statNamed("put_bytes"))
+  Stats.makeCounter(statNamed("put_bytes"), putBytes)
+
+  // # of items EVER received as hit or miss:
+  val getItemsHit = new AtomicLong(0)
+  Stats.removeCounter(statNamed("get_items_hit"))
+  Stats.makeCounter(statNamed("get_items_hit"), getItemsHit)
+  val getItemsMiss = new AtomicLong(0)
+  Stats.removeCounter(statNamed("get_items_miss"))
+  Stats.makeCounter(statNamed("get_items_miss"), getItemsMiss)
 
   // # of items that were expired by the time they were read:
   val totalExpired = Stats.getCounter(statNamed("expired_items"))
@@ -110,7 +127,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     Array(
       ("items", length.toString),
       ("bytes", bytes.toString),
-      ("total_items", totalItems().toString),
+      ("total_items", putItems.toString),
       ("logsize", journalSize.toString),
       ("expired_items", totalExpired().toString),
       ("mem_items", memoryLength.toString),
@@ -296,8 +313,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
           future.setValue(None)
         }
         val w = waiters.add(deadline.get, onTrigger, onTimeout)
-        // FIXME: use onCancellation when util-core is bumped.
-        future.linkTo(new CancellableSink({ waiters.remove(w) }))
+        future.onCancellation { waiters.remove(w) }
         false
       } else {
         true
@@ -316,13 +332,19 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       Stats.addMetric(statName, usec)
       Stats.addMetric("q/" + name + "/" + statName, usec)
     }
-    promise
+    promise map { itemOption =>
+      if (itemOption.isDefined) getItemsHit.getAndIncrement() else getItemsMiss.getAndIncrement()
+      itemOption
+    }
   }
 
   final def waitPeek(deadline: Option[Time]): Future[Option[QItem]] = {
     val promise = new Promise[Option[QItem]]()
     waitOperation(peek(), Time.now, deadline, promise)
-    promise
+    promise map { itemOption =>
+      if (itemOption.isDefined) getItemsHit.getAndIncrement() else getItemsMiss.getAndIncrement()
+      itemOption
+    }
   }
 
   /**
@@ -483,7 +505,8 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       queue += item
       _memoryBytes += item.data.length
     }
-    totalItems.incr()
+    putItems.getAndIncrement()
+    putBytes.getAndAdd(item.data.length)
     queueSize += item.data.length
     queueLength += 1
   }
