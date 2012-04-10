@@ -117,6 +117,10 @@ class QueueCollection(
       if (seenReaders.putIfAbsent(reader.fullname, reader) eq null) {
         val prefix = "q/" + reader.fullname + "/"
         Stats.makeCounter(prefix + "total_items", reader.putCount)
+        Stats.makeCounter(prefix + "put_items", reader.putCount)
+        Stats.makeCounter(prefix + "put_bytes", reader.putBytes)
+        Stats.makeCounter(prefix + "get_items_hit", reader.getHitCount)
+        Stats.makeCounter(prefix + "get_items_miss", reader.getMissCount)
         Stats.makeCounter(prefix + "expired_items", reader.expiredCount)
         Stats.makeCounter(prefix + "discarded", reader.discardedCount)
         Stats.makeCounter(prefix + "total_flushes", reader.flushCount)
@@ -137,6 +141,10 @@ class QueueCollection(
   def removeStats(name: String) {
     val prefix = "q/" + name + "/"
     Stats.removeCounter(prefix + "total_items")
+    Stats.removeCounter(prefix + "put_items")
+    Stats.removeCounter(prefix + "put_bytes")
+    Stats.removeCounter(prefix + "get_items_hit")
+    Stats.removeCounter(prefix + "get_items_miss")
     Stats.removeCounter(prefix + "expired_items")
     Stats.removeCounter(prefix + "discarded")
     Stats.removeCounter(prefix + "total_flushes")
@@ -234,10 +242,8 @@ class QueueCollection(
     }
   }
 
-  def flushExpired(name: String) {
-    if (!shuttingDown) {
-      writer(name) foreach { _.discardExpired() }
-    }
+  def flushExpired(name: String, limit: Boolean = false) {
+    writer(name) foreach { _.discardExpired() }
   }
 
   def flushAllExpired() {

@@ -45,7 +45,8 @@ class Kestrel(defaultQueueBuilder: QueueBuilder, queueBuilders: Seq[QueueBuilder
               listenAddress: String, memcacheListenPort: Option[Int], textListenPort: Option[Int],
               thriftListenPort: Option[Int], queuePath: String,
               expirationTimerFrequency: Option[Duration], clientTimeout: Option[Duration],
-              maxOpenTransactions: Int, debugLogQueues: List[String] = Nil)
+              maxOpenTransactions: Int, debugLogQueues: List[String] = Nil,
+              connectionBacklog: Option[Int])
       extends Service {
   private val log = Logger.get(getClass.getName)
 
@@ -76,6 +77,7 @@ class Kestrel(defaultQueueBuilder: QueueBuilder, queueBuilders: Seq[QueueBuilder
       .name(name)
       .reportTo(new OstrichStatsReceiver)
       .bindTo(address)
+    connectionBacklog.foreach { backlog => builder = builder.backlog(backlog) }
     clientTimeout.foreach { timeout => builder = builder.readTimeout(timeout) }
     // calling build() is equivalent to calling start() in finagle.
     builder.build(factory)
@@ -91,6 +93,7 @@ class Kestrel(defaultQueueBuilder: QueueBuilder, queueBuilders: Seq[QueueBuilder
       .name(name)
       .reportTo(new OstrichStatsReceiver)
       .bindTo(address)
+    connectionBacklog.foreach { backlog => builder = builder.backlog(backlog) }
     clientTimeout.foreach { timeout => builder = builder.readTimeout(timeout) }
     // calling build() is equivalent to calling start() in finagle.
     builder.build(connection => {
@@ -110,9 +113,9 @@ class Kestrel(defaultQueueBuilder: QueueBuilder, queueBuilders: Seq[QueueBuilder
 
   def start() {
     log.info("Kestrel config: listenAddress=%s memcachePort=%s textPort=%s queuePath=%s " +
-             "expirationTimerFrequency=%s clientTimeout=%s maxOpenTransactions=%d",
+             "expirationTimerFrequency=%s clientTimeout=%s maxOpenTransactions=%d connectionBacklog=%s",
              listenAddress, memcacheListenPort, textListenPort, queuePath,
-             expirationTimerFrequency, clientTimeout, maxOpenTransactions)
+             expirationTimerFrequency, clientTimeout, maxOpenTransactions, connectionBacklog)
 
     // this means no timeout will be at better granularity than 100 ms.
     timer = new HashedWheelTimer(100, TimeUnit.MILLISECONDS)
@@ -172,6 +175,8 @@ class Kestrel(defaultQueueBuilder: QueueBuilder, queueBuilders: Seq[QueueBuilder
       new PeriodicBackgroundProcess("background-expiration", expirationTimerFrequency.get) {
         def periodic() {
           Kestrel.this.queueCollection.flushAllExpired()
+          // Now that we've cleaned out the queue, lets see if any of them are
+          // ready to be expired.
           Kestrel.this.queueCollection.deleteExpiredQueues()
         }
       }.start()

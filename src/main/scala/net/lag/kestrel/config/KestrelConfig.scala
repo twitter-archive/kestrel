@@ -299,10 +299,16 @@ trait KestrelConfig extends ServerConfig[Kestrel] {
    */
   var debugLogQueues: List[String] = Nil
 
+  /**
+   * An optional size for the backlog of connecting clients. This setting is applied to each listening port.
+   */
+  var connectionBacklog: Option[Int] = None
+
   def apply(runtime: RuntimeEnvironment) = {
     new Kestrel(
       default, queues, listenAddress, memcacheListenPort, textListenPort, thriftListenPort,
-      queuePath, expirationTimerFrequency, clientTimeout, maxOpenTransactions, debugLogQueues
+      queuePath, expirationTimerFrequency, clientTimeout, maxOpenTransactions, debugLogQueues,
+      connectionBacklog
     )
   }
 }
