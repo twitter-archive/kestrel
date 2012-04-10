@@ -47,14 +47,15 @@ class PersistentQueueSpec extends Specification
         q.setup
 
         q.length mustEqual 0
-        q.totalItems() mustEqual 0
+        q.putItems.get mustEqual 0L
         q.bytes mustEqual 0
         q.journalSize mustEqual 0
 
         q.add("hello kitty".getBytes)
 
         q.length mustEqual 1
-        q.totalItems() mustEqual 1
+        q.putItems.get mustEqual 1L
+        q.putBytes.get mustEqual 11L
         q.bytes mustEqual 11
         q.journalSize mustEqual 32
         new File(folderName, "work").length mustEqual 32
@@ -62,7 +63,8 @@ class PersistentQueueSpec extends Specification
         new String(q.remove.get.data) mustEqual "hello kitty"
 
         q.length mustEqual 0
-        q.totalItems() mustEqual 1
+        q.putItems.get mustEqual 1L
+        q.putBytes.get mustEqual 11L
         q.bytes mustEqual 0
         q.journalSize mustEqual 33
 
@@ -92,7 +94,7 @@ class PersistentQueueSpec extends Specification
         q.setup()
 
         q.length mustEqual 0
-        q.totalItems() mustEqual 0
+        q.putItems.get mustEqual 0L
         q.bytes mustEqual 0
         q.journalSize mustEqual 0
         q.totalFlushes() mustEqual 0
@@ -104,7 +106,7 @@ class PersistentQueueSpec extends Specification
 
         q.flush()
         q.length mustEqual 0
-        
+
         q.totalFlushes() mustEqual 1
 
         // journal should contain exactly: one unfinished transaction, 2 items.
@@ -125,20 +127,20 @@ class PersistentQueueSpec extends Specification
         q.add(new Array[Byte](32))
         q.add(new Array[Byte](64))
         q.length mustEqual 2
-        q.totalItems() mustEqual 2
+        q.putItems.get mustEqual 2L
         q.bytes mustEqual 32 + 64
         (q.journalTotalSize > 96) mustBe true
 
         q.remove()
         q.length mustEqual 1
-        q.totalItems() mustEqual 2
+        q.putItems.get mustEqual 2L
         q.bytes mustEqual 64
         (q.journalTotalSize > 96) mustBe true
 
         // now it should rotate:
         q.remove()
         q.length mustEqual 0
-        q.totalItems() mustEqual 2
+        q.putItems.get mustEqual 2L
         q.bytes mustEqual 0
         (q.journalTotalSize < 10) mustBe true
       }
@@ -155,13 +157,13 @@ class PersistentQueueSpec extends Specification
         q.add(new Array[Byte](32))
         q.add(new Array[Byte](64))
         q.length mustEqual 2
-        q.totalItems() mustEqual 2
+        q.putItems.get mustEqual 2
         q.bytes mustEqual 32 + 64
         (q.journalSize > 96) mustBe true
 
         q.remove()
         q.length mustEqual 1
-        q.totalItems() mustEqual 2
+        q.putItems.get mustEqual 2
         q.bytes mustEqual 64
         (q.journalSize > 96) mustBe true
 
@@ -169,7 +171,7 @@ class PersistentQueueSpec extends Specification
         q.remove(true)
         q.length mustEqual 0
         q.openTransactionCount mustEqual 1
-        q.totalItems() mustEqual 2
+        q.putItems.get mustEqual 2
         q.bytes mustEqual 0
         (q.journalSize < 96) mustBe true
       }
@@ -617,7 +619,7 @@ class PersistentQueueSpec extends Specification
 
     "expire queue" in {
       withTempFolder {
-        Time.withCurrentTimeFrozen { time => 
+        Time.withCurrentTimeFrozen { time =>
           val config = new QueueBuilder {
             keepJournal = false
             maxQueueAge = 90.seconds
@@ -629,18 +631,18 @@ class PersistentQueueSpec extends Specification
           q.isReadyForExpiration mustEqual false
 
           q.add("method man".getBytes, None) mustEqual true
-      
+
           time.advance(30.seconds)
           // We aren't ready to expire yet, as it's not been long enough
           q.isReadyForExpiration mustEqual false
-          
+
           time.advance(61.seconds)
-          
+
           // Still not ready, as we have items in the queue!
           q.isReadyForExpiration mustEqual false
 
           q.remove must beSomeQItem("method man") // queue is now empty
-          
+
           // This should be true now because the queue is 91 seconds old and
           // has no items
           q.isReadyForExpiration mustEqual true
@@ -667,7 +669,7 @@ class PersistentQueueSpec extends Specification
           q.add("ol dirty bastard".getBytes, Some(expiry)) mustEqual true
           q.add("raekwon".getBytes) mustEqual true
           time.advance(2.seconds)
-          q.discardExpired(q.length.toInt) mustEqual 3
+          q.discardExpired() mustEqual 3
           q.length mustEqual 1
           q.remove must beSomeQItem("raekwon")
         }
@@ -692,7 +694,7 @@ class PersistentQueueSpec extends Specification
           q.add("u-god".getBytes, Some(expiry)) mustEqual true
           q.add("masta killa".getBytes) mustEqual true
           time.advance(2.seconds)
-          q.discardExpired(q.length.toInt) mustEqual 3
+          q.discardExpired() mustEqual 3
           q.length mustEqual 1
           q.remove must beSomeQItem("masta killa")
 
@@ -700,6 +702,47 @@ class PersistentQueueSpec extends Specification
           r.remove must beSomeQItem("method man")
           r.remove must beSomeQItem("ghostface killah")
           r.remove must beSomeQItem("u-god")
+        }
+      }
+    }
+
+    "expire over maxExpireSweep number of items" in {
+      withTempFolder {
+        Time.withCurrentTimeFrozen { time =>
+          val configWithMaxExpireSweep = new QueueBuilder {
+            keepJournal = false
+            maxExpireSweep = 3
+          }.apply()
+          val configWithoutMaxExpireSweep = new QueueBuilder {
+            keepJournal = false
+          }.apply()
+          val r = new PersistentQueue("vocaloid", folderName, configWithoutMaxExpireSweep, timer, scheduler)
+          val q = new PersistentQueue("wu_tang", folderName, configWithMaxExpireSweep, timer, scheduler)
+          r.setup()
+          q.setup()
+
+          val expiryQ = Time.now + 1.second
+          q.add("rza".getBytes, Some(expiryQ)) mustEqual true
+          q.add("gza".getBytes, Some(expiryQ)) mustEqual true
+          q.add("ol dirty bastard".getBytes, Some(expiryQ)) mustEqual true
+          q.add("cappadonna".getBytes, Some(expiryQ)) mustEqual true
+          q.add("raekwon".getBytes) mustEqual true
+          time.advance(2.seconds)
+          q.discardExpired(true) mustEqual 3
+          q.length mustEqual 2
+          q.remove must beSomeQItem("raekwon")
+          q.length mustEqual 0
+
+          val expiryR = Time.now + 1.second
+          r.add("miku".getBytes, Some(expiryR)) mustEqual true
+          r.add("rin".getBytes, Some(expiryR)) mustEqual true
+          r.add("len".getBytes, Some(expiryR)) mustEqual true
+          r.add("luka".getBytes, Some(expiryR)) mustEqual true
+          r.add("geso".getBytes) mustEqual true
+          time.advance(2.seconds)
+          r.discardExpired(true) mustEqual 4
+          r.length mustEqual 1
+          r.remove must beSomeQItem("geso")
         }
       }
     }

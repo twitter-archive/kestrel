@@ -324,7 +324,11 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
           promise.setValue(None)
         }
         val w = waiters.add(deadline.get, onTrigger, onTimeout)
+<<<<<<< HEAD
         promise.onCancellation { waiters.remove(w) }
+=======
+        future.onCancellation { waiters.remove(w) }
+>>>>>>> put_bytes
         false
       } else {
         true
