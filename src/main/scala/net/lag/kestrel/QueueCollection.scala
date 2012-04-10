@@ -234,10 +234,8 @@ class QueueCollection(
     }
   }
 
-  def flushExpired(name: String) {
-    if (!shuttingDown) {
-      writer(name) foreach { _.discardExpired() }
-    }
+  def flushExpired(name: String, limit: Boolean = false) {
+    writer(name) foreach { _.discardExpired() }
   }
 
   def flushAllExpired() {
