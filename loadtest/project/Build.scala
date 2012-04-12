@@ -12,7 +12,8 @@ object Kestrel extends Build {
     base = file("."),
     settings = Project.defaultSettings ++
       StandardProject.newSettings ++
-      SubversionPublisher.newSettings
+      SubversionPublisher.newSettings ++
+      CompileThriftScrooge.newSettings
   ).settings(
     name := "kestrel_loadtest",
     organization := "net.lag",
@@ -20,9 +21,11 @@ object Kestrel extends Build {
     scalaVersion := "2.8.1",
 
     libraryDependencies ++= Seq(
-      "com.twitter" % "parrot" % "0.4.5"
+      "com.twitter" % "parrot" % "0.4.5",
+      "com.twitter" %% "scrooge-runtime" % "1.1.3"
     ),
 
+    CompileThriftScrooge.scroogeVersion := "1.1.7",
     PackageDist.packageDistConfigFilesValidationRegex := None,
     publishArtifact in Test := true,
 

@@ -38,7 +38,8 @@ new ParrotLauncherConfig {
 
   responseType = "Array[Byte]"
   transport = "ThriftTransport"
-  loadTest = """new KestrelThriftProducer(service.get) {
+//  loadTest = """new KestrelThriftProducer(service.get) { // 0.4.6
+  loadTest = """new KestrelThriftProducer(thriftService) {
                   distribution = ProducerQueueDistribution.simple("vshard_%d", 10, 50.bytes)
                 }"""
 

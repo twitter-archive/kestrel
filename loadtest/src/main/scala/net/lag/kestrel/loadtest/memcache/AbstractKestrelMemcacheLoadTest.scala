@@ -2,11 +2,13 @@ package net.lag.kestrel.loadtest.memcache
 
 import com.twitter.finagle.kestrel.protocol.{Response => KestrelResponse, Error => KestrelError}
 import com.twitter.ostrich.stats.Stats
-import com.twitter.parrot.server.{ParrotService, ParrotRequest}
+//import com.twitter.parrot.server.{ParrotService, ParrotRequest}       // 0.4.6
+import com.twitter.parrot.server.{ParrotKestrelService, ParrotRequest} // 0.4.5
 import com.twitter.parrot.thrift.ParrotJob
 import net.lag.kestrel.loadtest.KestrelRecordProcessor
 
-abstract class AbstractKestrelMemcacheLoadTest(service: ParrotService[ParrotRequest, KestrelResponse])
+//abstract class AbstractKestrelMemcacheLoadTest(service: ParrotService[ParrotRequest, KestrelResponse]) // 0.4.6
+abstract class AbstractKestrelMemcacheLoadTest(service: ParrotKestrelService)
 extends KestrelRecordProcessor {
   def commands: Seq[String]
 
