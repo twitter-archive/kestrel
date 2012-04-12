@@ -1,6 +1,6 @@
 sbtResolver <<= (sbtResolver) { r =>
   Option(System.getenv("SBT_PROXY_REPO")) map { x =>
-    Resolver.url("proxy repo for sbt", url(x))(Resolver.ivyStylePatterns)                                             
+    Resolver.url("proxy repo for sbt", url(x))(Resolver.ivyStylePatterns)
   } getOrElse r
 }
 
