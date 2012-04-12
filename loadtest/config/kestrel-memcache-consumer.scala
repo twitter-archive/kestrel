@@ -29,6 +29,7 @@ new ParrotLauncherConfig {
   timeUnit = "MINUTES"
 
   imports = """import net.lag.kestrel.loadtest.memcache.KestrelMemcacheConsumer
+               import net.lag.kestrel.loadtest._
                import com.twitter.finagle.kestrel.protocol.Response
                import com.twitter.parrot.util.SlowStartPoissonProcess
                import com.twitter.conversions.time._"""
@@ -38,10 +39,8 @@ new ParrotLauncherConfig {
   responseType = "Response"
   transport = "KestrelTransport"
   loadTest = """new KestrelMemcacheConsumer(service.get) {
-                  numQueues = 10
-                  numFanouts = 0
+                  distribution = ConsumerQueueDistribution.simple("vshard_%d", 10, 10)
                   timeout = 100
-                  queueNameTemplate = "vshard_%d"
                 }"""
 
    doConfirm = false

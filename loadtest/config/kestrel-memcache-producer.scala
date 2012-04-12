@@ -29,18 +29,18 @@ new ParrotLauncherConfig {
   timeUnit = "MINUTES"
 
   imports = """import net.lag.kestrel.loadtest.memcache.KestrelMemcacheProducer
+               import net.lag.kestrel.loadtest._
                import com.twitter.finagle.kestrel.protocol.Response
                import com.twitter.parrot.util.SlowStartPoissonProcess
-               import com.twitter.conversions.time._"""
+               import com.twitter.conversions.time._
+               import com.twitter.conversions.storage._"""
 
   createDistribution = "createDistribution = { rate => new SlowStartPoissonProcess(rate, 5.minutes) }"
 
   responseType = "Response"
   transport = "KestrelTransport"
   loadTest = """new KestrelMemcacheProducer(service.get) {
-                  numQueues = 10
-                  payloadSize = 50
-                  queueNameTemplate = "vshard_%d"
+                  distribution = ProducerQueueDistribution.simple("vshard_%d", 10, 50.bytes)
                 }"""
 
   doConfirm = false

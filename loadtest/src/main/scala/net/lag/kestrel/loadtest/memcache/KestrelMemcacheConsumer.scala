@@ -9,16 +9,13 @@ extends AbstractKestrelMemcacheLoadTest(service) with KestrelConsumerLoadTestCon
   val statName = "items_consumed"
 
   lazy val commands = {
-    log.info("generating consumer commands from %d queue names", queueNames.size)
-    log.info("numQueues: %d, numFanouts: %d, queueNameTemplate: '%s'",
-	numQueues, numFanouts, queueNameTemplate)
-    log.info("queueNames: %s", queueNames.mkString(", "))
+    log.info("generating consumer memcache commands")
 
-    queueNames.map { queueName =>
+    distribution.map { segment =>
       if (timeout > 0) {
-        "get %s/t=%d".format(queueName, timeout)
+        "get %s/t=%d".format(segment.queueName, timeout)
       } else {
-        "get %s".format(queueName)
+        "get %s".format(segment.queueName)
       }
     }
   }

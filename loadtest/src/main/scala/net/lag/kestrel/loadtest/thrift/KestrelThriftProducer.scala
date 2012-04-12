@@ -11,16 +11,12 @@ extends AbstractKestrelThriftLoadTest[Int](parrotService) with KestrelProducerLo
   Stats.incr("items_produced", 0)
 
   lazy val commands = {
-    log.info("generating producer commands from %d queue names", queueNames.size)
-    log.info("numQueues: %d, queueNameTemplate: '%s', payloadSize: %d",
-	numQueues, queueNameTemplate, payloadSize)
-    log.info("queueNames: %s", queueNames.mkString(", "))
+    log.info("generating producer thrift commands")
+    log.info(distribution.toString)
 
-    val payloadBytes = payload.getBytes
-
-    queueNames.map { queueName =>
+    distribution.map { segment =>
       (client: Kestrel.FinagledClient) => {
-        client.put(queueName, List(ByteBuffer.wrap(payloadBytes))) onSuccess { n =>
+        client.put(segment.queueName, List(ByteBuffer.wrap(segment.payloadBytes))) onSuccess { n =>
           Stats.incr("items_produced", n)
         }
       }

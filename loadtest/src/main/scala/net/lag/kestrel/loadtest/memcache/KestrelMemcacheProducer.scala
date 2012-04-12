@@ -9,13 +9,11 @@ extends AbstractKestrelMemcacheLoadTest(service) with KestrelProducerLoadTestCon
   val statName = "items_produced"
 
   lazy val commands = {
-    log.info("generating producer commands from %d queue names", queueNames.size)
-    log.info("numQueues: %d, queueNameTemplate: '%s', payloadSize: %d",
-	numQueues, queueNameTemplate, payloadSize)
-    log.info("queueNames: %s", queueNames.mkString(", "))
+    log.info("generating producer memcache commands")
+    log.info(distribution.toString)
 
-    queueNames.map { queueName =>
-      "set %s 0 0 %d\r\n%s".format(queueName, payloadSize, payload)
+    distribution.map { segment =>
+      "set %s 0 0 %d\r\n%s".format(segment.queueName, segment.payloadSize.inBytes, segment.payload)
     }
   }
 }

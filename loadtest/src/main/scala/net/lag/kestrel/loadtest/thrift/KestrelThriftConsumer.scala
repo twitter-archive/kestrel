@@ -13,21 +13,18 @@ extends AbstractKestrelThriftLoadTest[Seq[Item]](parrotService) with KestrelCons
   Stats.incr("items_consumed", 0)
 
   lazy val commands = {
-    log.info("generating consumer commands from %d queue names", queueNames.size)
-    log.info("numQueues: %d, numFanouts: %d, queueNameTemplate: '%s'",
-	numQueues, numFanouts, queueNameTemplate)
-    log.info("queueNames: %s", queueNames.mkString(", "))
+    log.info("generating consumer thrift commands")
 
-    queueNames.map { queueName =>
+    distribution.map { segment =>
       if (timeout > 0) {
         (client: Kestrel.FinagledClient) => {
-          client.get(queueName, maxItemsPerRequest, timeout) onSuccess { items =>
+          client.get(segment.queueName, maxItemsPerRequest, timeout) onSuccess { items =>
             Stats.incr("items_consumed", items.size)
           }
         }
       } else {
         (client: Kestrel.FinagledClient) => {
-          client.get(queueName, maxItemsPerRequest) onSuccess { items =>
+          client.get(segment.queueName, maxItemsPerRequest) onSuccess { items =>
             Stats.incr("items_consumed", items.size)
           }
         }
