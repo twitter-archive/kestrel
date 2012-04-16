@@ -10,10 +10,11 @@
 APP_NAME="kestrel"
 ADMIN_PORT="2223"
 VERSION="@VERSION@"
+SCALA_VERSION="2.9.1"
 APP_HOME="/usr/local/$APP_NAME/current"
 DAEMON="/usr/local/bin/daemon"
 
-JAR_NAME="$APP_NAME-$VERSION.jar"
+JAR_NAME="${APP_NAME}_${SCALA_VERSION}-${VERSION}.jar"
 STAGE="production"
 FD_LIMIT="262144"
 
