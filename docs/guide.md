@@ -261,26 +261,6 @@ Memcache commands
   Reload the config file and reconfigure all queues. This should have no
   noticable effect on the server's responsiveness.
 
-- `DUMP_CONFIG`
-
-  Dump a list of each queue currently known to the server, and list the config
-  values for each queue. The format is:
-
-        queue 'master' {
-          max_items=2147483647
-          max_size=9223372036854775807
-          max_age=0
-          max_journal_size=16277216
-          max_memory_size=134217728
-          max_journal_overflow=10
-          max_journal_size_absolute=9223372036854775807
-          discard_old_when_full=false
-          journal=true
-          sync_journal=false
-        }
-
-  The last queue will be followed by `END` on a line by itself.
-
 - `STATS`
 
   Display server stats in memcache style. They're described below.
