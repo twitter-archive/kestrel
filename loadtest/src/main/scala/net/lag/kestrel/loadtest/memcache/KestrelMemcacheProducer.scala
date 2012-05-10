@@ -1,12 +1,10 @@
 package net.lag.kestrel.loadtest.memcache
 
 import com.twitter.finagle.kestrel.protocol.{Response => KestrelResponse}
-//import com.twitter.parrot.server.{ParrotService, ParrotRequest}       // 0.4.6
-import com.twitter.parrot.server.{ParrotKestrelService, ParrotRequest} // 0.4.5
+import com.twitter.parrot.server.{ParrotService, ParrotRequest}
 import net.lag.kestrel.loadtest.KestrelProducerLoadTestConfig
 
-//class KestrelMemcacheProducer(service: ParrotService[ParrotRequest, KestrelResponse]) // 0.4.6
-class KestrelMemcacheProducer(service: ParrotKestrelService)
+class KestrelMemcacheProducer(service: ParrotService[ParrotRequest, KestrelResponse])
 extends AbstractKestrelMemcacheLoadTest(service) with KestrelProducerLoadTestConfig {
   val statName = "items_produced"
 

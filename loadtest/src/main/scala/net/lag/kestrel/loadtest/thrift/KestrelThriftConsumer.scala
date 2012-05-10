@@ -1,14 +1,12 @@
 package net.lag.kestrel.loadtest.thrift
 
 import com.twitter.ostrich.stats.Stats
-//import com.twitter.parrot.server.{ParrotRequest, ParrotService} // 0.4.6
-import com.twitter.parrot.server.{ParrotRequest, ParrotThriftService} // 0.4.5
+import com.twitter.parrot.server.{ParrotRequest, ParrotService}
 import java.nio.ByteBuffer
 import net.lag.kestrel.loadtest.KestrelConsumerLoadTestConfig
 import net.lag.kestrel.thrift.{Item, Kestrel}
 
-// class KestrelThriftConsumer(parrotService: ParrotService[ParrotRequest, Array[Byte]]) // 0.4.6
-class KestrelThriftConsumer(parrotService: ParrotThriftService)
+class KestrelThriftConsumer(parrotService: ParrotService[ParrotRequest, Array[Byte]])
 extends AbstractKestrelThriftLoadTest[Seq[Item]](parrotService) with KestrelConsumerLoadTestConfig {
   var maxItemsPerRequest = 1
 

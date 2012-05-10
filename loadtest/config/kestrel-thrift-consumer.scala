@@ -38,9 +38,8 @@ new ParrotLauncherConfig {
 
   responseType = "Array[Byte]"
   transport = "ThriftTransport"
-//  loadTest = """new KestrelThriftConsumer(service.get) { // 0.4.6
-  loadTest = """new KestrelThriftConsumer(thriftService) {
-                  distribution = ConsumerQueueDistribution.simple("vshard_%d", 10, 10)
+  loadTest = """new KestrelThriftConsumer(service.get) {
+                  distribution = ConsumerQueueDistribution.simple("vshard_%d", 10, 9)
                   timeout = 100
                 }"""
 

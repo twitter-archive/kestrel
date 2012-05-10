@@ -39,8 +39,7 @@ new ParrotLauncherConfig {
 
   responseType = "Response"
   transport = "KestrelTransport"
-//  loadTest = """new KestrelMemcacheProducer(service.get) { // 0.4.6
-  loadTest = """new KestrelMemcacheProducer(kestrelService) {
+  loadTest = """new KestrelMemcacheProducer(service.get) {
                   distribution = ProducerQueueDistribution.simple("vshard_%d", 10, 50.bytes)
                 }"""
 

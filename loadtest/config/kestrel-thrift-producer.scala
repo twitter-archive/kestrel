@@ -23,7 +23,7 @@ new ParrotLauncherConfig {
     writer.close
     file.getAbsolutePath
   }
-  requestRate = 1250
+  requestRate = 125
   numInstances = 1
   duration = 60
   timeUnit = "MINUTES"
@@ -38,8 +38,7 @@ new ParrotLauncherConfig {
 
   responseType = "Array[Byte]"
   transport = "ThriftTransport"
-//  loadTest = """new KestrelThriftProducer(service.get) { // 0.4.6
-  loadTest = """new KestrelThriftProducer(thriftService) {
+  loadTest = """new KestrelThriftProducer(service.get) {
                   distribution = ProducerQueueDistribution.simple("vshard_%d", 10, 50.bytes)
                 }"""
 
