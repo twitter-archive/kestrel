@@ -21,7 +21,7 @@ object Kestrel extends Build {
     scalaVersion := "2.8.1",
 
     libraryDependencies ++= Seq(
-      "com.twitter" % "iago" % "0.4.7-SNAPSHOT",
+      "com.twitter" % "iago" % "0.4.7",
       "com.twitter" %% "scrooge-runtime" % "1.1.3"
     ),
 
