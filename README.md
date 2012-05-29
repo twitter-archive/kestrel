@@ -173,7 +173,7 @@ sure kestrel works as advertised without blowing up.
 
 A sample run on a 2010 MacBook Pro:
 
-    $ ./dist/kestrel/scripts/load/many-clients 
+    $ ./dist/kestrel/scripts/load/many-clients
     many-clients: 100 items to localhost using 100 clients, kill rate 0%,
       at 100 msec/item
     Received 100 items in 11046 msec.
