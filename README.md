@@ -115,10 +115,12 @@ When running it as a server, a startup script is provided in
 `daemon`, a standard daemonizer for Linux, but also available
 [here](http://libslack.org/daemon/) for all common unix platforms.
 
-The created archive `kestrel-VERSION.tar.bz2` can be expanded into a place
+The created archive `kestrel-VERSION.zip` can be expanded into a place
 like `/usr/local` (or wherever you like) and executed within its own folder as
-a self-contained package. All dependent jars are included, and the startup
-script loads things from relative paths.
+a self-contained package. All dependent jars are included. The current startup
+script, however, assumes that kestrel has been deployed to
+`/usr/local/kestrel/current` (e.g., as if by capistrano), and the startup
+script loads kestrel from that path.
 
 The default configuration puts logfiles into `/var/log/kestrel/` and queue
 journal files into `/var/spool/kestrel/`.
