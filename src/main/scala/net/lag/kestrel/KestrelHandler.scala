@@ -180,7 +180,7 @@ abstract class KestrelHandler(
           case None =>
             f(None, None)
           case x @ Some(item) =>
-            val xidContext = if (opening) addPendingRead(key, item.xid) else None
+            val xidContext = if (opening) addPendingRead(key, item.id) else None
             f(x, xidContext)
             monitorLoop(maxItems - 1)
         }

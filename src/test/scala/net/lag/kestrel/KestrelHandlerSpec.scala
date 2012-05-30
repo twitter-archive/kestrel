@@ -105,16 +105,16 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
         queues = new QueueCollection(folderName, timer, scheduler, config, Nil)
         val handler = new FakeKestrelHandler(queues, 10)
 
-        handler.setItem("test", 0, None, "one".getBytes)
-        handler.setItem("test", 0, None, "two".getBytes)
-        handler.setItem("test", 0, None, "three".getBytes)
+        handler.setItem("test", 0, None, stringToBuffer("one"))
+        handler.setItem("test", 0, None, stringToBuffer("two"))
+        handler.setItem("test", 0, None, stringToBuffer("three"))
         Stats.getCounter("cmd_set")() mustEqual 3
         Stats.getCounter("cmd_get")() mustEqual 0
         Stats.getCounter("cmd_monitor")() mustEqual 0
         Stats.getCounter("cmd_monitor_get")() mustEqual 0
 
-        val items = new mutable.ListBuffer[Option[QItem]]()
-        def addItem(item: Option[QItem], xid: Option[Long]) { items.append(item) }
+        val items = new mutable.ListBuffer[Option[QueueItem]]()
+        def addItem(item: Option[QueueItem], xid: Option[Long]) { items.append(item) }
 
         handler.monitorUntil("test", Some(1.hour.fromNow), 2, false)(addItem)
         items.size mustEqual 3
