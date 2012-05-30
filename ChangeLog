@@ -1,3 +1,20 @@
+2.2.0
+-----
+release: 11 May 2012
+
+- Thrift interface. See src/main/thrift/kestrel.thrift. [Jason Jackson]
+- Kestrel now uses the Finagle library for networking.
+- Allow max items to be specified for memcache protocol monitor command
+- maxExpireSweep configuration to limit the number of expired items removed
+  from a queue per sweep [Hitoshi Asai]
+- maxQueueAge configuration auto deletes empty queues that have existed
+  longer than the specified time [Cory G Watson]
+- New statistics:
+    queue_creates, queue_deletes, queue_expires (global) [Cory G Watson]
+    cmd_monitor, cmd_monitor_get (global)
+    total_flushes, create_time (per-queue) [Cory G Watson]
+- Better error reporting on startup failure
+- Scala 2.9.1, sbt11, sbt-package-dist 1.0.5
 
 2.1.5
 -----

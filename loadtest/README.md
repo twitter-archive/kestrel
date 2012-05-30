@@ -8,9 +8,9 @@ From the project root directory...
 
     $ cd loadtest
     $ sbt update package-dist  # only necessary if libs change
-    $ sbt start-parrot-consumer
+    $ sbt run-parrot\ config/kestrel-memcache-consumer.scala
     ...
-    $ sbt start-parrot-producer
+    $ sbt run-parrot\ config/kestrel-memcache-producer.scala
     ...
 
 Modify the config files in loadtest/config to choose victims,

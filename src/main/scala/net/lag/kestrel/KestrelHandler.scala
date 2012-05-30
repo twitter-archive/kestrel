@@ -168,19 +168,26 @@ abstract class KestrelHandler(
   // will do a continuous fetch on a queue until time runs out or read buffer is full.
   final def monitorUntil(key: String, timeLimit: Option[Time], maxItems: Int, opening: Boolean)(f: (Option[QueueItem], Option[Long]) => Unit) {
     log.debug("monitor -> q=%s t=%s max=%d open=%s", key, timeLimit, maxItems, opening)
-    if (maxItems == 0 || (timeLimit.isDefined && timeLimit.get <= Time.now) || countPendingReads(key) >= maxOpenReads) {
-      log.debug("monitor <- max=%s timeLimit=%s opened=%s", maxItems, timeLimit, countPendingReads(key))
-      f(None, None)
-    } else {
-      queues.remove(key, timeLimit, opening, false) onSuccess {
-        case None =>
-          f(None, None)
-        case x @ Some(item) =>
-          val xidContext = if (opening) addPendingRead(key, item.id) else None
-          f(x, xidContext)
-          monitorUntil(key, timeLimit, maxItems - 1, opening)(f)
+    Stats.incr("cmd_monitor")
+
+    def monitorLoop(maxItems: Int) {
+      log.debug("monitor loop -> q=%s t=%s max=%d open=%s", key, timeLimit, maxItems, opening)
+      if (maxItems == 0 || (timeLimit.isDefined && timeLimit.get <= Time.now) || countPendingReads(key) >= maxOpenReads) {
+        f(None, None)
+      } else {
+        Stats.incr("cmd_monitor_get")
+        queues.remove(key, timeLimit, opening, false).onSuccess {
+          case None =>
+            f(None, None)
+          case x @ Some(item) =>
+            val xidContext = if (opening) addPendingRead(key, item.xid) else None
+            f(x, xidContext)
+            monitorLoop(maxItems - 1)
+        }
       }
     }
+
+    monitorLoop(maxItems)
   }
 
   def getItem(key: String, timeout: Option[Time], opening: Boolean, peeking: Boolean): Future[Option[QueueItem]] = {

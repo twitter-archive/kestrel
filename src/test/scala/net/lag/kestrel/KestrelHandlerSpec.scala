@@ -74,6 +74,8 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
 
         Stats.getCounter("cmd_get")() mustEqual 0
         Stats.getCounter("cmd_set")() mustEqual 0
+        Stats.getCounter("cmd_monitor")() mustEqual 0
+        Stats.getCounter("cmd_monitor_get")() mustEqual 0
         Stats.getCounter("get_hits")() mustEqual 0
         Stats.getCounter("get_misses")() mustEqual 0
 
@@ -92,6 +94,64 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
         Stats.getCounter("cmd_get")() mustEqual 2
         Stats.getCounter("get_hits")() mustEqual 1
         Stats.getCounter("get_misses")() mustEqual 1
+        Stats.getCounter("cmd_monitor")() mustEqual 0
+        Stats.getCounter("cmd_monitor_get")() mustEqual 0
+      }
+    }
+
+    "track monitor stats" in {
+      withTempFolder {
+        Stats.clearAll()
+        queues = new QueueCollection(folderName, timer, scheduler, config, Nil)
+        val handler = new FakeKestrelHandler(queues, 10)
+
+        handler.setItem("test", 0, None, "one".getBytes)
+        handler.setItem("test", 0, None, "two".getBytes)
+        handler.setItem("test", 0, None, "three".getBytes)
+        Stats.getCounter("cmd_set")() mustEqual 3
+        Stats.getCounter("cmd_get")() mustEqual 0
+        Stats.getCounter("cmd_monitor")() mustEqual 0
+        Stats.getCounter("cmd_monitor_get")() mustEqual 0
+
+        val items = new mutable.ListBuffer[Option[QItem]]()
+        def addItem(item: Option[QItem], xid: Option[Long]) { items.append(item) }
+
+        handler.monitorUntil("test", Some(1.hour.fromNow), 2, false)(addItem)
+        items.size mustEqual 3
+        items(0) must beString("one")
+        items(1) must beString("two")
+        items(2) mustEqual None
+        Stats.getCounter("cmd_set")() mustEqual 3
+        Stats.getCounter("cmd_get")() mustEqual 0
+        Stats.getCounter("cmd_monitor")() mustEqual 1
+        Stats.getCounter("cmd_monitor_get")() mustEqual 2
+        Stats.getCounter("get_hits")() mustEqual 2
+        Stats.getCounter("get_misses")() mustEqual 0
+
+        items.clear()
+        handler.monitorUntil("test", Some(1.second.fromNow), 2, false)(addItem)
+        timer.timeout()
+        items.size mustEqual 2
+        items(0) must beString("three")
+        items(1) mustEqual None
+        Stats.getCounter("cmd_set")() mustEqual 3
+        Stats.getCounter("cmd_get")() mustEqual 0
+        Stats.getCounter("cmd_monitor")() mustEqual 2
+        Stats.getCounter("cmd_monitor_get")() mustEqual 4
+        Stats.getCounter("get_hits")() mustEqual 3
+        Stats.getCounter("get_misses")() mustEqual 1
+
+        items.clear()
+        handler.monitorUntil("test", Some(1.second.fromNow), 2, false)(addItem)
+        timer.timeout()
+        items.size mustEqual 1
+        items(0) mustEqual None
+        Stats.getCounter("cmd_set")() mustEqual 3
+        Stats.getCounter("cmd_get")() mustEqual 0
+        Stats.getCounter("cmd_monitor")() mustEqual 3
+        Stats.getCounter("cmd_monitor_get")() mustEqual 5
+        Stats.getCounter("get_hits")() mustEqual 3
+        Stats.getCounter("get_misses")() mustEqual 2
       }
     }
 

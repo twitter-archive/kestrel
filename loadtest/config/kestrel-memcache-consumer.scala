@@ -4,15 +4,17 @@ import java.io._
 new ParrotLauncherConfig {
   mesosCluster = "smfd-devel"
   hadoopNS = "hdfs://hadoop-scribe-nn.smfd.twitter.com"
+  hadoopConfig = "/etc/hadoop/hadoop-conf-smfd"
+
   zkHostName = Some("zookeeper.smfd.twitter.com")
 
   distDir = "dist/kestrel_loadtest"
-  jobName = "kestrel_consumer"
+  jobName = "kestrel_memcache_consumer"
   port = 22133
   victims = "smfd-akc-04-sr1.devel.twitter.com"
   parser = "thrift" // magic
 
-  hostConnectionLimit = 2000
+  hostConnectionLimit = 5000
 
   log = {
     val file = File.createTempFile("kestrel", "parrot")
@@ -21,20 +23,24 @@ new ParrotLauncherConfig {
     writer.close
     file.getAbsolutePath
   }
-  requestRate = 100
+  requestRate = 1300
   numInstances = 1
-  duration = 10
+  duration = 75
   timeUnit = "MINUTES"
 
-  imports = """import net.lag.kestrel.loadtest.KestrelConsumerLoadTest
-               import com.twitter.finagle.kestrel.protocol.Response"""
+  imports = """import net.lag.kestrel.loadtest.memcache.KestrelMemcacheConsumer
+               import net.lag.kestrel.loadtest._
+               import com.twitter.finagle.kestrel.protocol.Response
+               import com.twitter.parrot.util.SlowStartPoissonProcess
+               import com.twitter.conversions.time._"""
+
+  createDistribution = "createDistribution = { rate => new SlowStartPoissonProcess(rate, 5.minutes) }"
+
   responseType = "Response"
   transport = "KestrelTransport"
-  loadTest = """new KestrelConsumerLoadTest(kestrelService) {
-                  numQueues = 10
-                  numFanouts = 5
+  loadTest = """new KestrelMemcacheConsumer(service.get) {
+                  distribution = ConsumerQueueDistribution.simple("vshard_%d", 10, 10)
                   timeout = 100
-                  queueNameTemplate = "vshard_%d"
                 }"""
 
    doConfirm = false
