@@ -14,6 +14,7 @@ Features
 --------
 
 - memcache protocol
+- thrift protocol
 - journaled (durable) queues
 - fanout queues (one writer, many readers)
 - item expiration
@@ -23,6 +24,8 @@ For more information, check out the [readme](readme.html).
 
 News
 ----
+
+- **11 May 2012** - *kestrel 2.2.0 released*
 
 - **12 Jan 2012** - *kestrel 2.1.5 released*
 
@@ -49,6 +52,8 @@ Further Reading
 
 Downloads
 ---------
+
+- [kestrel 2.2.0](download/kestrel-2.2.0.zip)
 
 - [kestrel 2.1.5](download/kestrel-2.1.5.zip)
 

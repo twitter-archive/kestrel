@@ -98,7 +98,7 @@ the included <a href="https://github.com/robey/kestrel/blob/master/docs/guide.md
 <p>Kestrel has a mailing list here:
 <a href="http://groups.google.com/group/kestrel-talk">kestrel-talk@googlegroups.com</a></p>
 
-<p>Author's address: Robey Pointer \<a href="&#x6d;&#97;i&#x6c;&#x74;&#x6f;&#58;&#114;&#111;&#98;&#101;&#x79;&#x70;&#111;&#105;&#110;&#116;&#x65;&#x72;@&#x67;&#x6d;&#97;&#x69;&#108;&#x2e;&#x63;&#x6f;&#x6d;">&#114;&#x6f;&#98;&#x65;&#x79;&#112;&#111;i&#x6e;&#116;&#x65;&#x72;&#x40;&#x67;&#x6d;&#97;&#x69;&#108;&#x2e;&#x63;&#x6f;m</a></p>
+<p>Author's address: Robey Pointer <a href="&#x6d;&#97;i&#x6c;&#x74;&#x6f;&#58;&#114;&#111;&#98;&#101;&#x79;&#x70;&#111;&#105;&#110;&#116;&#x65;&#x72;@&#x67;&#x6d;&#97;&#x69;&#108;&#x2e;&#x63;&#x6f;&#x6d;">&#114;&#x6f;&#98;&#x65;&#x79;&#112;&#111;i&#x6e;&#116;&#x65;&#x72;&#x40;&#x67;&#x6d;&#97;&#x69;&#108;&#x2e;&#x63;&#x6f;m</a></p>
 
 <h2>Features</h2>
 
@@ -159,7 +159,8 @@ unit.</p></li>
 
 <h2>Building it</h2>
 
-<p>Kestrel requires java 6 and sbt 0.7.4. On OS X 10.5, you may have to hard-code
+<p>Kestrel requires java 6 and sbt 0.11.2. Presently some sbt plugins used by kestrel
+depend on that exact version of sbt. On OS X 10.5, you may have to hard-code
 an annoying <code>JAVA_HOME</code> to use java 6:</p>
 
 <pre><code>$ export JAVA_HOME=/System/Library/Frameworks/JavaVM.framework/Versions/1.6/Home
@@ -188,9 +189,11 @@ which config file to load, so <code>devel.sh</code> sets <code>-Dstage=developme
 <code>daemon</code>, a standard daemonizer for Linux, but also available
 <a href="http://libslack.org/daemon/">here</a> for all common unix platforms.</p>
 
-<p>The created archive <code>kestrel-VERSION.tar.bz2</code> can be expanded into a place
+<p>The created archive <code>kestrel-VERSION.zip</code> can be expanded into a place
 like <code>/usr/local</code> (or wherever you like) and executed within its own folder as
-a self-contained package. All dependent jars are included, and the startup
+a self-contained package. All dependent jars are included. The current startup
+script, however, assumes that kestrel has been deployed to
+<code>/usr/local/kestrel/current</code> (e.g., as if by capistrano) and the statup
 script loads things from relative paths.</p>
 
 <p>The default configuration puts logfiles into <code>/var/log/kestrel/</code> and queue
@@ -242,7 +245,7 @@ sure kestrel works as advertised without blowing up.</p>
 
 <p>A sample run on a 2010 MacBook Pro:</p>
 
-<pre><code>$ ./dist/kestrel/scripts/load/many-clients 
+<pre><code>$ ./dist/kestrel/scripts/load/many-clients
 many-clients: 100 items to localhost using 100 clients, kill rate 0%,
   at 100 msec/item
 Received 100 items in 11046 msec.
@@ -294,6 +297,26 @@ Read 25000 items in 3370 msec. Consumer spun 0 times in misses.
 <p>You can see the journals being packed in the kestrel log. Like
 "many-clients", this test is a load test instead of a speed test.</p>
 
+<h2>Leaky Reader</h2>
+
+<p>This test starts a producer and several consumers, with the consumers
+occasionally "forgetting" to acknowledge an item that they've read. It
+verifies that the un-acknowledged items are eventually handed off to another
+consmer.</p>
+
+<p>A sample run:</p>
+
+<pre><code>$ ./dist/kestrel/scripts/load/leaky-reader -n 100000 -t 10
+leaky-reader: 10 threads each sending 100000 items through spam
+Flushing queues first.
+1000
+2000
+100000
+Finished in 40220 msec (40.2 usec/put throughput).
+Completed all reads
+</code></pre>
+
+<p>Like "many-clients", it's just a load test.</p>
 
 </body>
 </html>
