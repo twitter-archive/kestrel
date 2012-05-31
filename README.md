@@ -87,7 +87,8 @@ Or the latest development versions & branches are on github:
 Building it
 -----------
 
-Kestrel requires java 6 and sbt 0.7.4. On OS X 10.5, you may have to hard-code
+Kestrel requires java 6 and sbt 0.11.2. Presently some sbt plugins used by kestrel
+depend on that exact version of sbt. On OS X 10.5, you may have to hard-code
 an annoying `JAVA_HOME` to use java 6:
 
     $ export JAVA_HOME=/System/Library/Frameworks/JavaVM.framework/Versions/1.6/Home
