@@ -45,7 +45,7 @@ The config file evaluates to a `KestrelConfig` object that's used to configure
 the server as a whole, a default queue, and any overrides for specific named
 queues. The fields on `KestrelConfig` are documented here with their default
 values:
-[KestrelConfig.html](http://robey.github.com/kestrel/doc/main/api/net/lag/kestrel/config/KestrelConfig.html)
+[KestrelConfig.html](http://robey.github.com/kestrel/api/main/api/net/lag/kestrel/config/KestrelConfig.html)
 
 To confirm the current configuration of each queue, send "dump_config" to
 a server (which can be done over telnet).
@@ -60,7 +60,7 @@ syntax is described here:
 [util-logging](https://github.com/twitter/util/blob/master/util-logging/README.markdown)
 
 Per-queue configuration is documented here:
-[QueueBuilder.html](http://robey.github.com/kestrel/doc/main/api/net/lag/kestrel/config/QueueBuilder.html)
+[QueueBuilder.html](http://robey.github.com/kestrel/api/main/api/net/lag/kestrel/config/QueueBuilder.html)
 
 
 Full queues

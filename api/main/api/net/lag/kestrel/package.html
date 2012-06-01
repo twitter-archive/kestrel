@@ -5,32 +5,31 @@
           <title>net.lag.kestrel</title>
           <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
           
-      <link href="../../../lib/template.css" rel="stylesheet" type="text/css" media="screen" />
+      <link type="text/css" media="screen" rel="stylesheet" href="../../../lib/template.css" />
       <script type="text/javascript" src="../../../lib/jquery.js"></script>
       <script type="text/javascript" src="../../../lib/jquery-ui.js"></script>
       <script type="text/javascript" src="../../../lib/template.js"></script>
       <script type="text/javascript" src="../../../lib/tools.tooltip.js"></script>
     
         </head>
-        <body class="value" onload="windowTitle();">
-
-      <p id="owner"><a href="../../package.html" class="extype" name="net">net</a>.<a href="../package.html" class="extype" name="net.lag">lag</a></p>
-
+        <body class="value">
       <div id="definition">
         <img src="../../../lib/package_big.png" />
+        <p id="owner"><a name="net" class="extype" href="../../package.html">net</a>.<a name="net.lag" class="extype" href="../package.html">lag</a></p>
         <h1>kestrel</h1>
       </div>
 
       <h4 class="signature" id="signature">
       <span class="kind">package</span>
-      <span class="symbol">
+      <span class="symbol"> 
         <span class="name">kestrel</span>
-        
         
         
       </span>
       </h4>
-      <div class="fullcomment" id="comment"></div>
+      
+          <div class="fullcommenttop" id="comment"></div>
+        
 
       <div id="template">
 
@@ -40,11 +39,7 @@
           
           <div id="visbl">
               <span class="filtertype">Visibility</span>
-              <ol><li class="public in">Public</li><li class="all out">All</li></ol>
-            </div>
-          <div id="impl">
-              <span class="filtertype">Impl.</span>
-              <ol><li class="concrete in">Concrete</li><li class="abstract in">Abstract</li></ol>
+              <ol><li class="public in"><span>Public</span></li><li class="all out"><span>All</span></li></ol>
             </div>
         </div>
 
@@ -52,432 +47,491 @@
 
         <div class="types members" id="types">
               <h3>Type Members</h3>
-              <ol><li visbl="pub" data-isabs="false" name="net.lag.kestrel.BrokenItemException">
+              <ol><li visbl="pub" name="net.lag.kestrel.BrokenItemException" data-isabs="false">
       <a id="BrokenItemException:BrokenItemException"></a>
-      <h4 class="signature"><a href="BrokenItemException.html">
+      <h4 class="signature">
       <span class="kind">case class</span>
-      <span class="symbol">
-        <span class="name">BrokenItemException</span>
+      <span class="symbol"> 
+        <a href="BrokenItemException.html"><span class="name">BrokenItemException</span></a>
         
-        <span class="params">(<span name="lastValidPosition">lastValidPosition: Long</span>, <span name="cause">cause: Throwable</span>)</span>
-        <span class="result"> extends IOException with Product</span>
+        <span class="params">(<span name="lastValidPosition">lastValidPosition: Long</span>, <span name="cause">cause: Throwable</span>)</span><span class="result"> extends IOException with Product with Serializable</span>
       </span>
-      </a></h4>
+      </h4>
       
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.Checkpoint">
+    </li><li visbl="pub" name="net.lag.kestrel.Checkpoint" data-isabs="false">
       <a id="Checkpoint:Checkpoint"></a>
-      <h4 class="signature"><a href="Checkpoint.html">
+      <h4 class="signature">
       <span class="kind">case class</span>
-      <span class="symbol">
-        <span class="name">Checkpoint</span>
+      <span class="symbol"> 
+        <a href="Checkpoint.html"><span class="name">Checkpoint</span></a>
         
-        <span class="params">(<span name="filename">filename: String</span>, <span name="reservedItems">reservedItems: Seq[QItem]</span>)</span>
-        <span class="result"> extends Product</span>
+        <span class="params">(<span name="filename">filename: String</span>, <span name="reservedItems">reservedItems: Seq[QItem]</span>)</span><span class="result"> extends Product with Serializable</span>
       </span>
-      </a></h4>
+      </h4>
       
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.CountResponse">
-      <a id="CountResponse:CountResponse"></a>
-      <h4 class="signature"><a href="CountResponse.html">
-      <span class="kind">case class</span>
-      <span class="symbol">
-        <span class="name">CountResponse</span>
-        
-        <span class="params">(<span name="count">count: Long</span>)</span>
-        <span class="result"> extends TextResponse with Product</span>
-      </span>
-      </a></h4>
-      
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.DeadlineWaitQueue">
-      <a id="DeadlineWaitQueue:DeadlineWaitQueue"></a>
-      <h4 class="signature"><a href="DeadlineWaitQueue.html">
+    </li><li visbl="pub" name="net.lag.kestrel.ConcurrentHashMap" data-isabs="false">
+      <a id="ConcurrentHashMap:ConcurrentHashMap[K, V]"></a>
+      <h4 class="signature">
       <span class="kind">class</span>
-      <span class="symbol">
-        <span class="name">DeadlineWaitQueue</span>
+      <span class="symbol"> 
+        <a href="ConcurrentHashMap.html"><span class="name">ConcurrentHashMap</span></a>
+        <span class="tparams">[<span name="K">K</span>, <span name="V">V</span>]</span>
+        <span class="result"> extends ConcurrentHashMap[K, V]</span>
+      </span>
+      </h4>
+      
+    </li><li visbl="pub" name="net.lag.kestrel.CountResponse" data-isabs="false">
+      <a id="CountResponse:CountResponse"></a>
+      <h4 class="signature">
+      <span class="kind">case class</span>
+      <span class="symbol"> 
+        <a href="CountResponse.html"><span class="name">CountResponse</span></a>
         
+        <span class="params">(<span name="count">count: Long</span>)</span><span class="result"> extends TextResponse with Product with Serializable</span>
+      </span>
+      </h4>
+      
+    </li><li visbl="pub" name="net.lag.kestrel.DeadlineWaitQueue" data-isabs="false">
+      <a id="DeadlineWaitQueue:DeadlineWaitQueue"></a>
+      <h4 class="signature">
+      <span class="kind">class</span>
+      <span class="symbol"> 
+        <a href="DeadlineWaitQueue.html"><span class="name">DeadlineWaitQueue</span></a>
         
         <span class="result"> extends AnyRef</span>
       </span>
-      </a></h4>
+      </h4>
       <p class="comment cmt">A wait queue where each item has a timeout.</p>
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.ErrorResponse">
+    </li><li visbl="pub" name="net.lag.kestrel.ErrorResponse" data-isabs="false">
       <a id="ErrorResponse:ErrorResponse"></a>
-      <h4 class="signature"><a href="ErrorResponse.html">
+      <h4 class="signature">
       <span class="kind">case class</span>
-      <span class="symbol">
-        <span class="name">ErrorResponse</span>
+      <span class="symbol"> 
+        <a href="ErrorResponse.html"><span class="name">ErrorResponse</span></a>
         
-        <span class="params">(<span name="message">message: String</span>)</span>
-        <span class="result"> extends TextResponse with Product</span>
+        <span class="params">(<span name="message">message: String</span>)</span><span class="result"> extends TextResponse with Product with Serializable</span>
       </span>
-      </a></h4>
+      </h4>
       
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.InaccessibleQueuePath">
+    </li><li visbl="pub" name="net.lag.kestrel.InaccessibleQueuePath" data-isabs="false">
       <a id="InaccessibleQueuePath:InaccessibleQueuePath"></a>
-      <h4 class="signature"><a href="InaccessibleQueuePath.html">
+      <h4 class="signature">
       <span class="kind">class</span>
-      <span class="symbol">
-        <span class="name">InaccessibleQueuePath</span>
-        
+      <span class="symbol"> 
+        <a href="InaccessibleQueuePath.html"><span class="name">InaccessibleQueuePath</span></a>
         
         <span class="result"> extends Exception</span>
       </span>
-      </a></h4>
+      </h4>
       
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.ItemResponse">
+    </li><li visbl="pub" name="net.lag.kestrel.ItemIdList" data-isabs="false">
+      <a id="ItemIdList:ItemIdList"></a>
+      <h4 class="signature">
+      <span class="kind">class</span>
+      <span class="symbol"> 
+        <a href="ItemIdList.html"><span class="name">ItemIdList</span></a>
+        
+        <span class="result"> extends AnyRef</span>
+      </span>
+      </h4>
+      <p class="comment cmt">Set of ids that maintains insert order.</p>
+    </li><li visbl="pub" name="net.lag.kestrel.ItemResponse" data-isabs="false">
       <a id="ItemResponse:ItemResponse"></a>
-      <h4 class="signature"><a href="ItemResponse.html">
+      <h4 class="signature">
       <span class="kind">case class</span>
-      <span class="symbol">
-        <span class="name">ItemResponse</span>
+      <span class="symbol"> 
+        <a href="ItemResponse.html"><span class="name">ItemResponse</span></a>
         
-        <span class="params">(<span name="data">data: Option[Array[Byte]]</span>)</span>
-        <span class="result"> extends TextResponse with Product</span>
+        <span class="params">(<span name="data">data: Option[Array[Byte]]</span>)</span><span class="result"> extends TextResponse with Product with Serializable</span>
       </span>
-      </a></h4>
+      </h4>
       
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.Journal">
+    </li><li visbl="pub" name="net.lag.kestrel.Journal" data-isabs="false">
       <a id="Journal:Journal"></a>
-      <h4 class="signature"><a href="Journal.html">
+      <h4 class="signature">
       <span class="kind">class</span>
-      <span class="symbol">
-        <span class="name">Journal</span>
-        
+      <span class="symbol"> 
+        <a href="Journal.html"><span class="name">Journal</span></a>
         
         <span class="result"> extends AnyRef</span>
       </span>
-      </a></h4>
+      </h4>
       <p class="comment cmt">Codes for working with the journal file for a PersistentQueue.</p>
-    </li><li visbl="pub" data-isabs="true" name="net.lag.kestrel.JournalItem">
+    </li><li visbl="pub" name="net.lag.kestrel.JournalItem" data-isabs="true">
       <a id="JournalItem:JournalItem"></a>
-      <h4 class="signature"><a href="JournalItem.html">
+      <h4 class="signature">
       <span class="kind">class</span>
-      <span class="symbol">
-        <span class="name">JournalItem</span>
-        
+      <span class="symbol"> 
+        <a href="JournalItem.html"><span class="name">JournalItem</span></a>
         
         <span class="result"> extends AnyRef</span>
       </span>
-      </a></h4>
-      
-            
-            <div class="fullcomment"><div class="block">
-          attributes: abstract 
-        </div></div>
-          
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.JournalPacker">
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>abstract </dd></dl></div>
+    </li><li visbl="pub" name="net.lag.kestrel.JournalPacker" data-isabs="false">
       <a id="JournalPacker:JournalPacker"></a>
-      <h4 class="signature"><a href="JournalPacker.html">
+      <h4 class="signature">
       <span class="kind">class</span>
-      <span class="symbol">
-        <span class="name">JournalPacker</span>
-        
+      <span class="symbol"> 
+        <a href="JournalPacker.html"><span class="name">JournalPacker</span></a>
         
         <span class="result"> extends AnyRef</span>
       </span>
-      </a></h4>
+      </h4>
       <p class="comment cmt">Pack one or more journal files into a single new file that only consists of the queue's current
 contents, as of the end of the last journal file processed.</p>
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.Kestrel">
+    </li><li visbl="pub" name="net.lag.kestrel.Kestrel" data-isabs="false">
       <a id="Kestrel:Kestrel"></a>
-      <h4 class="signature"><a href="Kestrel.html">
+      <h4 class="signature">
       <span class="kind">class</span>
-      <span class="symbol">
-        <span class="name">Kestrel</span>
-        
+      <span class="symbol"> 
+        <a href="Kestrel.html"><span class="name">Kestrel</span></a>
         
         <span class="result"> extends Service</span>
       </span>
-      </a></h4>
+      </h4>
       
-    </li><li visbl="pub" data-isabs="true" name="net.lag.kestrel.KestrelHandler">
+    </li><li visbl="pub" name="net.lag.kestrel.KestrelHandler" data-isabs="true">
       <a id="KestrelHandler:KestrelHandler"></a>
-      <h4 class="signature"><a href="KestrelHandler.html">
+      <h4 class="signature">
       <span class="kind">class</span>
-      <span class="symbol">
-        <span class="name">KestrelHandler</span>
-        
+      <span class="symbol"> 
+        <a href="KestrelHandler.html"><span class="name">KestrelHandler</span></a>
         
         <span class="result"> extends AnyRef</span>
       </span>
-      </a></h4>
+      </h4>
       <p class="comment cmt">Common implementations of kestrel commands that don't depend on which protocol you're using.</p>
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.MemcacheHandler">
+    </li><li visbl="pub" name="net.lag.kestrel.MemcacheHandler" data-isabs="false">
       <a id="MemcacheHandler:MemcacheHandler"></a>
-      <h4 class="signature"><a href="MemcacheHandler.html">
+      <h4 class="signature">
       <span class="kind">class</span>
-      <span class="symbol">
-        <span class="name">MemcacheHandler</span>
+      <span class="symbol"> 
+        <a href="MemcacheHandler.html"><span class="name">MemcacheHandler</span></a>
         
-        
-        <span class="result"> extends NettyHandler[MemcacheRequest]</span>
+        <span class="result"> extends Service[MemcacheRequest, MemcacheResponse]</span>
       </span>
-      </a></h4>
+      </h4>
       <p class="comment cmt">Memcache protocol handler for a kestrel connection.</p>
-    </li><li visbl="pub" data-isabs="true" name="net.lag.kestrel.NettyHandler">
-      <a id="NettyHandler:NettyHandler[M]"></a>
-      <h4 class="signature"><a href="NettyHandler.html">
-      <span class="kind">class</span>
-      <span class="symbol">
-        <span class="name">NettyHandler</span>
-        <span class="tparams">[<span name="M">M</span>]</span>
+    </li><li visbl="pub" name="net.lag.kestrel.NoResponse" data-isabs="false">
+      <a id="NoResponse:NoResponse"></a>
+      <h4 class="signature">
+      <span class="kind">case class</span>
+      <span class="symbol"> 
+        <a href="NoResponse.html"><span class="name">NoResponse</span></a>
         
-        <span class="result"> extends KestrelHandler with ChannelUpstreamHandler</span>
+        <span class="params">()</span><span class="result"> extends TextResponse with Product with Serializable</span>
       </span>
-      </a></h4>
-      <p class="comment cmt">Kestrel handler that uses netty.</p>
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.NettyTimer">
-      <a id="NettyTimer:NettyTimer"></a>
-      <h4 class="signature"><a href="NettyTimer.html">
-      <span class="kind">class</span>
-      <span class="symbol">
-        <span class="name">NettyTimer</span>
-        
-        
-        <span class="result"> extends Timer</span>
-      </span>
-      </a></h4>
+      </h4>
       
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.PackRequest">
+    </li><li visbl="pub" name="net.lag.kestrel.PackRequest" data-isabs="false">
       <a id="PackRequest:PackRequest"></a>
-      <h4 class="signature"><a href="PackRequest.html">
+      <h4 class="signature">
       <span class="kind">case class</span>
-      <span class="symbol">
-        <span class="name">PackRequest</span>
+      <span class="symbol"> 
+        <a href="PackRequest.html"><span class="name">PackRequest</span></a>
         
-        <span class="params">(<span name="journal">journal: Journal</span>, <span name="checkpoint">checkpoint: Checkpoint</span>, <span name="openItems">openItems: Iterable[QItem]</span>, <span name="pentUpDeletes">pentUpDeletes: Int</span>, <span name="queueState">queueState: Iterable[QItem]</span>)</span>
-        <span class="result"> extends Product</span>
+        <span class="params">(<span name="journal">journal: Journal</span>, <span name="checkpoint">checkpoint: Checkpoint</span>, <span name="openItems">openItems: Iterable[QItem]</span>, <span name="pentUpDeletes">pentUpDeletes: Int</span>, <span name="queueState">queueState: Iterable[QItem]</span>)</span><span class="result"> extends Product with Serializable</span>
       </span>
-      </a></h4>
+      </h4>
       
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.PeriodicSyncFile">
+    </li><li visbl="pub" name="net.lag.kestrel.PeriodicSyncFile" data-isabs="false">
       <a id="PeriodicSyncFile:PeriodicSyncFile"></a>
-      <h4 class="signature"><a href="PeriodicSyncFile.html">
+      <h4 class="signature">
       <span class="kind">class</span>
-      <span class="symbol">
-        <span class="name">PeriodicSyncFile</span>
-        
+      <span class="symbol"> 
+        <a href="PeriodicSyncFile.html"><span class="name">PeriodicSyncFile</span></a>
         
         <span class="result"> extends AnyRef</span>
       </span>
-      </a></h4>
+      </h4>
       <p class="comment cmt">Open a file for writing, and fsync it on a schedule.</p>
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.PersistentQueue">
+    </li><li visbl="pub" name="net.lag.kestrel.PeriodicSyncTask" data-isabs="true">
+      <a id="PeriodicSyncTask:PeriodicSyncTask"></a>
+      <h4 class="signature">
+      <span class="kind">class</span>
+      <span class="symbol"> 
+        <a href="PeriodicSyncTask.html"><span class="name">PeriodicSyncTask</span></a>
+        
+        <span class="result"> extends Runnable</span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>abstract </dd></dl></div>
+    </li><li visbl="pub" name="net.lag.kestrel.PersistentQueue" data-isabs="false">
       <a id="PersistentQueue:PersistentQueue"></a>
-      <h4 class="signature"><a href="PersistentQueue.html">
+      <h4 class="signature">
       <span class="kind">class</span>
-      <span class="symbol">
-        <span class="name">PersistentQueue</span>
-        
+      <span class="symbol"> 
+        <a href="PersistentQueue.html"><span class="name">PersistentQueue</span></a>
         
         <span class="result"> extends AnyRef</span>
       </span>
-      </a></h4>
+      </h4>
       
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.QItem">
+    </li><li visbl="pub" name="net.lag.kestrel.QItem" data-isabs="false">
       <a id="QItem:QItem"></a>
-      <h4 class="signature"><a href="QItem.html">
+      <h4 class="signature">
       <span class="kind">case class</span>
-      <span class="symbol">
-        <span class="name">QItem</span>
+      <span class="symbol"> 
+        <a href="QItem.html"><span class="name">QItem</span></a>
         
-        <span class="params">(<span name="addTime">addTime: Time</span>, <span name="expiry">expiry: Option[Time]</span>, <span name="data">data: Array[Byte]</span>, <span name="xid">xid: Int</span>)</span>
-        <span class="result"> extends Product</span>
+        <span class="params">(<span name="addTime">addTime: Time</span>, <span name="expiry">expiry: Option[Time]</span>, <span name="data">data: Array[Byte]</span>, <span name="xid">xid: Int</span>)</span><span class="result"> extends Product with Serializable</span>
       </span>
-      </a></h4>
+      </h4>
       
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.QueueCollection">
+    </li><li visbl="pub" name="net.lag.kestrel.QueueCollection" data-isabs="false">
       <a id="QueueCollection:QueueCollection"></a>
-      <h4 class="signature"><a href="QueueCollection.html">
+      <h4 class="signature">
       <span class="kind">class</span>
-      <span class="symbol">
-        <span class="name">QueueCollection</span>
-        
+      <span class="symbol"> 
+        <a href="QueueCollection.html"><span class="name">QueueCollection</span></a>
         
         <span class="result"> extends AnyRef</span>
       </span>
-      </a></h4>
+      </h4>
       
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.StringResponse">
+    </li><li visbl="pub" name="net.lag.kestrel.QueueTransaction" data-isabs="false">
+      <a id="QueueTransaction:QueueTransaction"></a>
+      <h4 class="signature">
+      <span class="kind">case class</span>
+      <span class="symbol"> 
+        <a href="QueueTransaction.html"><span class="name">QueueTransaction</span></a>
+        
+        <span class="params">(<span name="name">name: String</span>, <span name="xid">xid: Int</span>, <span name="timerTask">timerTask: Option[TimerTask]</span>)</span><span class="result"> extends Product with Serializable</span>
+      </span>
+      </h4>
+      
+    </li><li visbl="pub" name="net.lag.kestrel.SimplePendingReads" data-isabs="true">
+      <a id="SimplePendingReads:SimplePendingReads"></a>
+      <h4 class="signature">
+      <span class="kind">trait</span>
+      <span class="symbol"> 
+        <a href="SimplePendingReads.html"><span class="name">SimplePendingReads</span></a>
+        
+        <span class="result"> extends AnyRef</span>
+      </span>
+      </h4>
+      
+    </li><li visbl="pub" name="net.lag.kestrel.StringResponse" data-isabs="false">
       <a id="StringResponse:StringResponse"></a>
-      <h4 class="signature"><a href="StringResponse.html">
+      <h4 class="signature">
       <span class="kind">case class</span>
-      <span class="symbol">
-        <span class="name">StringResponse</span>
+      <span class="symbol"> 
+        <a href="StringResponse.html"><span class="name">StringResponse</span></a>
         
-        <span class="params">(<span name="message">message: String</span>)</span>
-        <span class="result"> extends TextResponse with Product</span>
+        <span class="params">(<span name="message">message: String</span>)</span><span class="result"> extends TextResponse with Product with Serializable</span>
       </span>
-      </a></h4>
+      </h4>
       
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.TextHandler">
+    </li><li visbl="pub" name="net.lag.kestrel.TextHandler" data-isabs="false">
       <a id="TextHandler:TextHandler"></a>
-      <h4 class="signature"><a href="TextHandler.html">
+      <h4 class="signature">
       <span class="kind">class</span>
-      <span class="symbol">
-        <span class="name">TextHandler</span>
+      <span class="symbol"> 
+        <a href="TextHandler.html"><span class="name">TextHandler</span></a>
         
-        
-        <span class="result"> extends NettyHandler[TextRequest]</span>
+        <span class="result"> extends Service[TextRequest, TextResponse]</span>
       </span>
-      </a></h4>
+      </h4>
       <p class="comment cmt">Simple text-line protocol handler for a kestrel connection.</p>
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.TextRequest">
+    </li><li visbl="pub" name="net.lag.kestrel.TextRequest" data-isabs="false">
       <a id="TextRequest:TextRequest"></a>
-      <h4 class="signature"><a href="TextRequest.html">
+      <h4 class="signature">
       <span class="kind">case class</span>
-      <span class="symbol">
-        <span class="name">TextRequest</span>
+      <span class="symbol"> 
+        <a href="TextRequest.html"><span class="name">TextRequest</span></a>
         
-        <span class="params">(<span name="command">command: String</span>, <span name="args">args: List[String]</span>, <span name="items">items: List[Array[Byte]]</span>)</span>
-        <span class="result"> extends Product</span>
+        <span class="params">(<span name="command">command: String</span>, <span name="args">args: List[String]</span>, <span name="items">items: List[Array[Byte]]</span>)</span><span class="result"> extends Product with Serializable</span>
       </span>
-      </a></h4>
+      </h4>
       
-    </li><li visbl="pub" data-isabs="true" name="net.lag.kestrel.TextResponse">
+    </li><li visbl="pub" name="net.lag.kestrel.TextResponse" data-isabs="true">
       <a id="TextResponse:TextResponse"></a>
-      <h4 class="signature"><a href="TextResponse.html">
+      <h4 class="signature">
       <span class="kind">class</span>
-      <span class="symbol">
-        <span class="name">TextResponse</span>
+      <span class="symbol"> 
+        <a href="TextResponse.html"><span class="name">TextResponse</span></a>
         
+        <span class="result"> extends Signalling</span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>abstract </dd></dl></div>
+    </li><li visbl="pub" name="net.lag.kestrel.ThriftFinagledService" data-isabs="false">
+      <a id="ThriftFinagledService:ThriftFinagledService"></a>
+      <h4 class="signature">
+      <span class="kind">class</span>
+      <span class="symbol"> 
+        <a href="ThriftFinagledService.html"><span class="name">ThriftFinagledService</span></a>
+        
+        <span class="result"> extends FinagledService</span>
+      </span>
+      </h4>
+      
+    </li><li visbl="pub" name="net.lag.kestrel.ThriftHandler" data-isabs="false">
+      <a id="ThriftHandler:ThriftHandler"></a>
+      <h4 class="signature">
+      <span class="kind">class</span>
+      <span class="symbol"> 
+        <a href="ThriftHandler.html"><span class="name">ThriftHandler</span></a>
+        
+        <span class="result"> extends FutureIface</span>
+      </span>
+      </h4>
+      
+    </li><li visbl="pub" name="net.lag.kestrel.ThriftPendingReads" data-isabs="true">
+      <a id="ThriftPendingReads:ThriftPendingReads"></a>
+      <h4 class="signature">
+      <span class="kind">trait</span>
+      <span class="symbol"> 
+        <a href="ThriftPendingReads.html"><span class="name">ThriftPendingReads</span></a>
         
         <span class="result"> extends AnyRef</span>
       </span>
-      </a></h4>
+      </h4>
       
-            
-            <div class="fullcomment"><div class="block">
-          attributes: abstract 
-        </div></div>
-          
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.TooManyOpenTransactionsException">
-      <a id="TooManyOpenTransactionsException:TooManyOpenTransactionsException"></a>
-      <h4 class="signature"><a href="TooManyOpenTransactionsException.html">
+    </li><li visbl="pub" name="net.lag.kestrel.TooManyOpenReadsException" data-isabs="false">
+      <a id="TooManyOpenReadsException:TooManyOpenReadsException"></a>
+      <h4 class="signature">
       <span class="kind">class</span>
-      <span class="symbol">
-        <span class="name">TooManyOpenTransactionsException</span>
-        
+      <span class="symbol"> 
+        <a href="TooManyOpenReadsException.html"><span class="name">TooManyOpenReadsException</span></a>
         
         <span class="result"> extends Exception</span>
       </span>
-      </a></h4>
+      </h4>
+      
+    </li></ol>
+            </div>
+        
+        
+
+        <div class="values members" id="values">
+              <h3>Value Members</h3>
+              <ol><li visbl="pub" name="net.lag.kestrel.Journal" data-isabs="false">
+      <a id="Journal:Journal"></a>
+      <h4 class="signature">
+      <span class="kind">object</span>
+      <span class="symbol"> 
+        <a href="Journal$.html"><span class="name">Journal</span></a>
+        
+        <span class="result"> extends AnyRef</span>
+      </span>
+      </h4>
+      
+    </li><li visbl="pub" name="net.lag.kestrel.JournalItem" data-isabs="false">
+      <a id="JournalItem:JournalItem"></a>
+      <h4 class="signature">
+      <span class="kind">object</span>
+      <span class="symbol"> 
+        <a href="JournalItem$.html"><span class="name">JournalItem</span></a>
+        
+        <span class="result"> extends AnyRef</span>
+      </span>
+      </h4>
+      
+    </li><li visbl="pub" name="net.lag.kestrel.Kestrel" data-isabs="false">
+      <a id="Kestrel:Kestrel"></a>
+      <h4 class="signature">
+      <span class="kind">object</span>
+      <span class="symbol"> 
+        <a href="Kestrel$.html"><span class="name">Kestrel</span></a>
+        
+        <span class="result"> extends AnyRef</span>
+      </span>
+      </h4>
+      
+    </li><li visbl="pub" name="net.lag.kestrel.QItem" data-isabs="false">
+      <a id="QItem:QItem"></a>
+      <h4 class="signature">
+      <span class="kind">object</span>
+      <span class="symbol"> 
+        <a href="QItem$.html"><span class="name">QItem</span></a>
+        
+        <span class="result"> extends Serializable</span>
+      </span>
+      </h4>
+      
+    </li><li visbl="pub" name="net.lag.kestrel.TextCodec" data-isabs="false">
+      <a id="TextCodec:TextCodec"></a>
+      <h4 class="signature">
+      <span class="kind">object</span>
+      <span class="symbol"> 
+        <a href="TextCodec$.html"><span class="name">TextCodec</span></a>
+        
+        <span class="result"> extends AnyRef</span>
+      </span>
+      </h4>
+      
+    </li><li visbl="pub" name="net.lag.kestrel.TextResponse" data-isabs="false">
+      <a id="TextResponse:TextResponse"></a>
+      <h4 class="signature">
+      <span class="kind">object</span>
+      <span class="symbol"> 
+        <a href="TextResponse$.html"><span class="name">TextResponse</span></a>
+        
+        <span class="result"> extends AnyRef</span>
+      </span>
+      </h4>
+      
+    </li><li visbl="pub" name="net.lag.kestrel.ThriftPendingReads" data-isabs="false">
+      <a id="ThriftPendingReads:ThriftPendingReads"></a>
+      <h4 class="signature">
+      <span class="kind">object</span>
+      <span class="symbol"> 
+        <a href="ThriftPendingReads$.html"><span class="name">ThriftPendingReads</span></a>
+        
+        <span class="result"> extends AnyRef</span>
+      </span>
+      </h4>
+      
+    </li><li visbl="pub" name="net.lag.kestrel.TooManyOpenReadsException" data-isabs="false">
+      <a id="TooManyOpenReadsException:TooManyOpenReadsException"></a>
+      <h4 class="signature">
+      <span class="kind">object</span>
+      <span class="symbol"> 
+        <a href="TooManyOpenReadsException$.html"><span class="name">TooManyOpenReadsException</span></a>
+        
+        <span class="result"> extends TooManyOpenReadsException</span>
+      </span>
+      </h4>
+      
+    </li><li visbl="pub" name="net.lag.kestrel.config" data-isabs="false">
+      <a id="config:config"></a>
+      <h4 class="signature">
+      <span class="kind">package</span>
+      <span class="symbol"> 
+        <a href="config/package.html"><span class="name">config</span></a>
+        
+        
+      </span>
+      </h4>
+      
+    </li><li visbl="pub" name="net.lag.kestrel.thrift" data-isabs="false">
+      <a id="thrift:thrift"></a>
+      <h4 class="signature">
+      <span class="kind">package</span>
+      <span class="symbol"> 
+        <a href="thrift/package.html"><span class="name">thrift</span></a>
+        
+        
+      </span>
+      </h4>
+      
+    </li><li visbl="pub" name="net.lag.kestrel.tools" data-isabs="false">
+      <a id="tools:tools"></a>
+      <h4 class="signature">
+      <span class="kind">package</span>
+      <span class="symbol"> 
+        <a href="tools/package.html"><span class="name">tools</span></a>
+        
+        
+      </span>
+      </h4>
       
     </li></ol>
             </div>
 
-        <div class="values members" id="values">
-              <h3>Value Members</h3>
-              <ol><li visbl="pub" data-isabs="false" name="net.lag.kestrel.Journal">
-      <a id="Journal:Journal"></a>
-      <h4 class="signature"><a href="Journal$.html">
-      <span class="kind">object</span>
-      <span class="symbol">
-        <span class="name">Journal</span>
         
-        
-        <span class="result"> extends AnyRef</span>
-      </span>
-      </a></h4>
-      
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.JournalItem">
-      <a id="JournalItem:JournalItem"></a>
-      <h4 class="signature"><a href="JournalItem$.html">
-      <span class="kind">object</span>
-      <span class="symbol">
-        <span class="name">JournalItem</span>
-        
-        
-        <span class="result"> extends AnyRef</span>
-      </span>
-      </a></h4>
-      
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.Kestrel">
-      <a id="Kestrel:Kestrel"></a>
-      <h4 class="signature"><a href="Kestrel$.html">
-      <span class="kind">object</span>
-      <span class="symbol">
-        <span class="name">Kestrel</span>
-        
-        
-        <span class="result"> extends AnyRef</span>
-      </span>
-      </a></h4>
-      
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.QItem">
-      <a id="QItem:QItem"></a>
-      <h4 class="signature"><a href="QItem$.html">
-      <span class="kind">object</span>
-      <span class="symbol">
-        <span class="name">QItem</span>
-        
-        
-        <span class="result"> extends AnyRef</span>
-      </span>
-      </a></h4>
-      
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.TextCodec">
-      <a id="TextCodec:TextCodec"></a>
-      <h4 class="signature"><a href="TextCodec$.html">
-      <span class="kind">object</span>
-      <span class="symbol">
-        <span class="name">TextCodec</span>
-        
-        
-        <span class="result"> extends AnyRef</span>
-      </span>
-      </a></h4>
-      
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.TextResponse">
-      <a id="TextResponse:TextResponse"></a>
-      <h4 class="signature"><a href="TextResponse$.html">
-      <span class="kind">object</span>
-      <span class="symbol">
-        <span class="name">TextResponse</span>
-        
-        
-        <span class="result"> extends AnyRef</span>
-      </span>
-      </a></h4>
-      
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.TooManyOpenTransactionsException">
-      <a id="TooManyOpenTransactionsException:TooManyOpenTransactionsException"></a>
-      <h4 class="signature"><a href="TooManyOpenTransactionsException$.html">
-      <span class="kind">object</span>
-      <span class="symbol">
-        <span class="name">TooManyOpenTransactionsException</span>
-        
-        
-        <span class="result"> extends TooManyOpenTransactionsException</span>
-      </span>
-      </a></h4>
-      
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.config">
-      <a id="config:config"></a>
-      <h4 class="signature"><a href="config/package.html">
-      <span class="kind">package</span>
-      <span class="symbol">
-        <span class="name">config</span>
-        
-        
-        
-      </span>
-      </a></h4>
-      
-    </li><li visbl="pub" data-isabs="false" name="net.lag.kestrel.tools">
-      <a id="tools:tools"></a>
-      <h4 class="signature"><a href="tools/package.html">
-      <span class="kind">package</span>
-      <span class="symbol">
-        <span class="name">tools</span>
-        
-        
-        
-      </span>
-      </a></h4>
-      
-    </li></ol>
-            </div>
 
         
 

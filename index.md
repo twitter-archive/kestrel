@@ -48,7 +48,7 @@ Further Reading
 
 - [Slides from a tech talk](kestrel-tech-talk-jun2011.pdf) on the state of kestrel 2.0, in June 2011
 
-- [Scaladocs](http://robey.github.com/kestrel/doc/main/api/index.html)
+- [Scaladocs](http://robey.github.com/kestrel/api/main/api/index.html)
 
 Downloads
 ---------
