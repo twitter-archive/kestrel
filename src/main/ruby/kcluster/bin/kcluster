@@ -185,10 +185,13 @@ parser = OptionParser.new do |opts|
     $options[:role] = role
   end
   opts.on("-v", "--verbose", "print verbose debugging info as we work") do
-    $options[:verbose] = true 
+    $options[:verbose] = true
   end
   opts.on("-F", "--rollup-fanouts", "roll up stats for fanout queues into a single count") do
     $options[:rollup_fanouts] = true
+  end
+  opts.on("-s", "--script-mode", "eliminates the interactive prompt when deleting or flushing queues") do
+    $options[:scriptmode] = true
   end
 
   opts.separator ""
@@ -239,15 +242,23 @@ elsif command == "max_age"
   $show = [ :max_age ]
 elsif command == "delete" && ARGV.size == 2
   queue_name = ARGV[1]
-  print "Really delete #{queue_name}? (yes/no) "
-  STDOUT.flush
-  delete_all(queue_name) if STDIN.gets.chomp == 'yes'
+  if $options[:scriptmode]
+    delete_all(queue_name)
+  else
+    print "Really delete #{queue_name}? (yes/no) "
+    STDOUT.flush
+    delete_all(queue_name) if STDIN.gets.chomp == 'yes'
+  end
   exit 0
 elsif command == "flush" && ARGV.size == 2
   queue_name = ARGV[1]
-  print "Really flush #{queue_name}? (yes/no) "
-  STDOUT.flush
-  flush_all(queue_name) if STDIN.gets.chomp == 'yes'
+  if $options[:scriptmode]
+    flush_all(queue_name)
+  else
+    print "Really flush #{queue_name}? (yes/no) "
+    STDOUT.flush
+    flush_all(queue_name) if STDIN.gets.chomp == 'yes'
+  end
   exit 0
 elsif command == "stale"
   rounds = ARGV[1] ? ARGV[1].to_i : 5
