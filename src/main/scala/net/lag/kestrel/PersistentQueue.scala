@@ -426,6 +426,10 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   // Remove various stats related to the queue
   def removeStats() {
     Stats.removeCounter(statNamed("total_items"))
+    Stats.removeCounter(statNamed("get_items_hit"))
+    Stats.removeCounter(statNamed("get_items_miss"))
+    Stats.removeCounter(statNamed("put_bytes"))
+    Stats.removeCounter(statNamed("put_items"))
     Stats.removeCounter(statNamed("expired_items"))
     Stats.removeCounter(statNamed("discarded"))
     Stats.removeCounter(statNamed("total_flushes"))
