@@ -22,6 +22,7 @@ import java.util.concurrent.{CountDownLatch, ScheduledThreadPoolExecutor}
 import scala.collection.mutable
 import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
+import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{Duration, TempFolder, Time, Timer, TimerTask}
 import org.specs.Specification
 import org.specs.matcher.Matcher
@@ -520,6 +521,35 @@ class PersistentQueueSpec extends Specification
         q.remove() must beSomeQItem(128)
         q.length mustEqual 0
         q.currentAge mustEqual 0.milliseconds
+      }
+    }
+
+    "remove all stats" in {
+      def stats(queueName: String): List[String] = {
+        val prefix = "q/" + queueName + "/"
+        List(Stats.getCounters(), Stats.getGauges(), Stats.getMetrics())
+          .flatMap { _.map { case (k, _) => k } }
+          .filter { _.startsWith(prefix) }
+          .sorted
+      }
+
+      withTempFolder {
+        Stats.clearAll()
+
+        val statNamesBefore = stats("things")
+        statNamesBefore must beEmpty
+
+        val q = new PersistentQueue("things", folderName, new QueueBuilder().apply(), timer, scheduler)
+        q.setup
+
+        q.add(Array[Byte](1,2,3))
+        q.add(Array[Byte](4,5,6))
+        q.remove()
+
+        q.removeStats()
+
+        val statNamesAfter = stats("things")
+        statNamesAfter must beEmpty
       }
     }
   }
