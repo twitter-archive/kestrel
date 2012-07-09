@@ -78,6 +78,17 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
       }
     }
 
+    "refuse to create a bad fanout queue and not break the master queue" in {
+      withTempFolder {
+        qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
+        qc.queue("the_queue")
+        qc.queue("the_queue+fanout/open/close") must throwA[Exception]
+
+        qc.add("the_queue", "xypdq".getBytes) mustNot throwA[Exception]
+      }
+    }
+
+
     "report reserved memory usage as a fraction of max heap" in {
       withTempFolder {
         val maxHeapBytes = config.maxMemorySize.inBytes * 4
