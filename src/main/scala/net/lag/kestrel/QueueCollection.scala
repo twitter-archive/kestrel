@@ -88,10 +88,15 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
   /**
    * Get a named queue, creating it if necessary.
    */
-  def queue(name: String): Option[PersistentQueue] = synchronized {
+  def queue(name: String): Option[PersistentQueue] = queue(name, true)
+
+  /**
+   * Get a named queue, with control over whether non-existent queues are created.
+   */
+  def queue(name: String, create: Boolean): Option[PersistentQueue] = synchronized {
     if (shuttingDown) {
       None
-    } else {
+    } else if (create) {
       Some(queues.get(name) getOrElse {
         // only happens when creating a queue for the first time.
         val q = if (name contains '+') {
@@ -107,6 +112,8 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
         queues(name) = q
         q
       })
+    } else {
+      queues.get(name)
     }
   }
 
@@ -162,15 +169,15 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
   }
 
   def unremove(key: String, xid: Int) {
-    queue(key) map { q => q.unremove(xid) }
+    queue(key, false) map { q => q.unremove(xid) }
   }
 
   def confirmRemove(key: String, xid: Int) {
-    queue(key) map { q => q.confirmRemove(xid) }
+    queue(key, false) map { q => q.confirmRemove(xid) }
   }
 
   def flush(key: String) {
-    queue(key) map { q => q.flush() }
+    queue(key, false) map { q => q.flush() }
   }
 
   def delete(name: String): Unit = synchronized {
@@ -194,7 +201,7 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
     if (shuttingDown) {
       0
     } else {
-      queue(name) map { q => q.discardExpired(limit) } getOrElse(0)
+      queue(name, false) map { q => q.discardExpired(limit) } getOrElse(0)
     }
   }
 
@@ -218,7 +225,7 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
     queueNames.map { qName => expireQueue(qName) }
   }
 
-  def stats(key: String): Array[(String, String)] = queue(key) match {
+  def stats(key: String): Array[(String, String)] = queue(key, false) match {
     case None => Array[(String, String)]()
     case Some(q) =>
       q.dumpStats() ++

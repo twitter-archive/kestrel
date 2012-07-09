@@ -182,7 +182,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
         Stats.getCounter("queue_deletes")() mustEqual 0
         qc.loadQueues()
         qc.delete("oranges")
-        
+
         Stats.getCounter("queue_deletes")() mustEqual 1
 
         new File(folderName).list().toList.sorted mustEqual List("apples")
@@ -255,45 +255,66 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
       }
     }
 
-    "expire items when (and only when) they are expired" in {
-      withTempFolder {
-        Time.withCurrentTimeFrozen { time =>
-          new File(folderName + "/expired").createNewFile()
-          qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
-          qc.loadQueues()
+    "expired items" in {
+      "expire items when (and only when) they are expired" in {
+        withTempFolder {
+          Time.withCurrentTimeFrozen { time =>
+            new File(folderName + "/expired").createNewFile()
+            qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
+            qc.loadQueues()
 
-          qc.add("expired", "hello".getBytes, Some(5.seconds.fromNow))
-          time.advance(4.seconds)
-          qc.remove("expired")() must beSomeQItem("hello")
-          qc.add("expired", "hello".getBytes, Some(5.seconds.fromNow))
-          time.advance(6.seconds)
-          qc.remove("expired")() mustEqual None
+            qc.add("expired", "hello".getBytes, Some(5.seconds.fromNow))
+            time.advance(4.seconds)
+            qc.remove("expired")() must beSomeQItem("hello")
+            qc.add("expired", "hello".getBytes, Some(5.seconds.fromNow))
+            time.advance(6.seconds)
+            qc.remove("expired")() mustEqual None
+          }
+        }
+      }
+
+      "move expired items from one queue to another" in {
+        withTempFolder {
+          Time.withCurrentTimeFrozen { time =>
+            new File(folderName + "/jobs").createNewFile()
+            new File(folderName + "/expired").createNewFile()
+            val expireConfig = new QueueBuilder() {
+              name = "jobs"
+              expireToQueue = "expired"
+            }
+            qc = new QueueCollection(folderName, timer, scheduler, config, List(expireConfig))
+            qc.loadQueues()
+            qc.add("jobs", "hello".getBytes, Some(1.second.fromNow))
+            qc.queue("jobs").get.length mustEqual 1
+            qc.queue("expired").get.length mustEqual 0
+
+            time.advance(2.seconds)
+            qc.queue("jobs").get.length mustEqual 1
+            qc.queue("expired").get.length mustEqual 0
+            qc.remove("jobs")() mustEqual None
+            qc.queue("jobs").get.length mustEqual 0
+            qc.queue("expired").get.length mustEqual 1
+            qc.remove("expired")() must beSomeQItem("hello")
+          }
         }
       }
     }
 
-    "move expired items from one queue to another" in {
-      withTempFolder {
-        Time.withCurrentTimeFrozen { time =>
-          new File(folderName + "/jobs").createNewFile()
-          new File(folderName + "/expired").createNewFile()
-          val expireConfig = new QueueBuilder() {
-            name = "jobs"
-            expireToQueue = "expired"
+    "non-existent queues" in {
+      val tests: Map[String, (QueueCollection, String) => Unit] =
+        Map("unremove" ->      { (qc: QueueCollection, name: String) => qc.unremove(name, 100) },
+            "confirmRemove" -> { (qc: QueueCollection, name: String) => qc.confirmRemove(name, 100) },
+            "flush" ->         { (qc: QueueCollection, name: String) => qc.flush(name) },
+            "delete" ->        { (qc: QueueCollection, name: String) => qc.delete(name) },
+            "flushExpired" ->  { (qc: QueueCollection, name: String) => qc.flushExpired(name, true) },
+            "stats" ->         { (qc: QueueCollection, name: String) => qc.stats(name) })
+      tests foreach { case (op, test) =>
+        "%s should not cause a queue to be created".format(op) in {
+          withTempFolder {
+            qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
+            test(qc, "some_queue")
+            qc.queueNames mustEqual Nil
           }
-          qc = new QueueCollection(folderName, timer, scheduler, config, List(expireConfig))
-          qc.loadQueues()
-          qc.add("jobs", "hello".getBytes, Some(1.second.fromNow))
-          qc.queue("jobs").get.length mustEqual 1
-          qc.queue("expired").get.length mustEqual 0
-
-          time.advance(2.seconds)
-          qc.queue("jobs").get.length mustEqual 1
-          qc.queue("expired").get.length mustEqual 0
-          qc.remove("jobs")() mustEqual None
-          qc.queue("jobs").get.length mustEqual 0
-          qc.queue("expired").get.length mustEqual 1
-          qc.remove("expired")() must beSomeQItem("hello")
         }
       }
     }

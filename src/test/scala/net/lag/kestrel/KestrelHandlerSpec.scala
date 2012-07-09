@@ -194,6 +194,20 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
       }
     }
 
+    "abort reads on a deleted queue without resurrecting the queue" in {
+      withTempFolder {
+        queues = new QueueCollection(folderName, timer, scheduler, config, Nil)
+        val handler = new FakeKestrelHandler(queues, 10)
+        handler.setItem("test", 0, None, "one".getBytes)
+        handler.getItem("test", None, true, false)() must beString("one")
+        handler.delete("test")
+        queues.queueNames mustEqual Nil
+
+        handler.abortRead("test")
+        queues.queueNames mustEqual Nil
+      }
+    }
+
     "open several reads" in {
       "on one queue" in {
         withTempFolder {
