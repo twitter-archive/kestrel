@@ -154,6 +154,30 @@ class QueueBuilder extends Config[QueueConfig] {
   }
 }
 
+case class AliasConfig(
+  destinationQueues: List[String]
+) {
+  override def toString() = {
+    ("destinationQueues=[%s]").format(destinationQueues.mkString(", "))
+  }
+}
+
+class AliasBuilder extends Config[AliasConfig] {
+  /**
+   * Name of the alias being configured.
+   */
+  var name: String = null
+
+  /**
+   * List of queues which receive items added to this alias.
+   */
+  var destinationQueues: List[String] = Nil
+
+  def apply() = {
+    AliasConfig(destinationQueues)
+  }
+}
+
 trait KestrelConfig extends ServerConfig[Kestrel] {
   /**
    * Settings for a queue that isn't explicitly listed in `queues`.
@@ -164,6 +188,11 @@ trait KestrelConfig extends ServerConfig[Kestrel] {
    * Specific per-queue config.
    */
   var queues: List[QueueBuilder] = Nil
+
+  /*
+   * Alias configurations.
+   */
+  var aliases: List[AliasBuilder] = Nil
 
   /**
    * Address to listen for client connections. By default, accept from any interface.
@@ -215,7 +244,7 @@ trait KestrelConfig extends ServerConfig[Kestrel] {
 
   def apply(runtime: RuntimeEnvironment) = {
     new Kestrel(
-      default(), queues, listenAddress, memcacheListenPort, textListenPort, thriftListenPort,
+      default(), queues, aliases, listenAddress, memcacheListenPort, textListenPort, thriftListenPort,
       queuePath, expirationTimerFrequency, clientTimeout, maxOpenTransactions, connectionBacklog
     )
   }
@@ -223,6 +252,6 @@ trait KestrelConfig extends ServerConfig[Kestrel] {
   def reload(kestrel: Kestrel) {
     Logger.configure(loggers)
     // only the queue configs can be changed.
-    kestrel.reload(default(), queues)
+    kestrel.reload(default(), queues, aliases)
   }
 }

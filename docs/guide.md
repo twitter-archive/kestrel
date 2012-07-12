@@ -175,6 +175,14 @@ is created, and it will start receiving new items written to the parent queue.
 Existing items are not copied over. A fanout queue can be deleted to stop it
 from receiving new items.
 
+Queue Aliases
+-------------
+
+Queue aliases are somewhat similar to fanout queues, but without a required
+naming convention or implicit creation of child queues. A queue alias can
+only be used in set operations. Kestrel responds to attempts to retrieve
+items from the alias as if it were an empty queue. Delete and flush requests
+are also ignored.
 
 Thrift protocol
 ---------------

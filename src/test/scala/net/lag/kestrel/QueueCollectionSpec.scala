@@ -20,6 +20,7 @@ package net.lag.kestrel
 import java.io.{File, FileInputStream}
 import java.util.concurrent.ScheduledThreadPoolExecutor
 import scala.util.Sorting
+import com.twitter.logging.{Level, TestLogging}
 import com.twitter.util.{TempFolder, Time, Timer}
 import com.twitter.conversions.time._
 import com.twitter.conversions.storage._
@@ -45,7 +46,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
     "create a queue" in {
       withTempFolder {
         Stats.clearAll()
-        qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
+        qc = new QueueCollection(folderName, timer, scheduler, config, Nil, Nil)
         qc.queueNames mustEqual Nil
         Stats.getCounter("queue_creates")() mustEqual 0
         Stats.getCounter("queue_deletes")() mustEqual 0
@@ -73,14 +74,14 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
 
     "refuse to create a bad queue" in {
       withTempFolder {
-        qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
+        qc = new QueueCollection(folderName, timer, scheduler, config, Nil, Nil)
         qc.queue("hello.there") must throwA[Exception]
       }
     }
 
     "refuse to create a bad fanout queue and not break the master queue" in {
       withTempFolder {
-        qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
+        qc = new QueueCollection(folderName, timer, scheduler, config, Nil, Nil)
         qc.queue("the_queue")
         qc.queue("the_queue+fanout/open/close") must throwA[Exception]
 
@@ -88,11 +89,10 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
       }
     }
 
-
     "report reserved memory usage as a fraction of max heap" in {
       withTempFolder {
         val maxHeapBytes = config.maxMemorySize.inBytes * 4
-        qc = new QueueCollection(folderName, timer, scheduler, config, Nil) {
+        qc = new QueueCollection(folderName, timer, scheduler, config, Nil, Nil) {
           override lazy val systemMaxHeapBytes = maxHeapBytes
         }
 
@@ -106,7 +106,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
 
     "load from journal" in {
       withTempFolder {
-        qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
+        qc = new QueueCollection(folderName, timer, scheduler, config, Nil, Nil)
         qc.add("ducklings", "huey".getBytes)
         qc.add("ducklings", "dewey".getBytes)
         qc.add("ducklings", "louie".getBytes)
@@ -115,7 +115,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
         qc.currentItems mustEqual 3
         qc.shutdown
 
-        qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
+        qc = new QueueCollection(folderName, timer, scheduler, config, Nil, Nil)
         qc.queueNames mustEqual Nil
         qc.remove("ducklings")() must beSomeQItem("huey")
         // now the queue should be suddenly instantiated:
@@ -127,7 +127,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
     "queue hit/miss tracking" in {
       withTempFolder {
         Stats.clearAll()
-        qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
+        qc = new QueueCollection(folderName, timer, scheduler, config, Nil, Nil)
         qc.add("ducklings", "ugly1".getBytes)
         qc.add("ducklings", "ugly2".getBytes)
         Stats.getCounter("get_hits")() mustEqual 0
@@ -157,7 +157,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
         new File(folderName + "/apples").createNewFile()
         new File(folderName + "/oranges.101").createNewFile()
         new File(folderName + "/oranges.133").createNewFile()
-        qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
+        qc = new QueueCollection(folderName, timer, scheduler, config, Nil, Nil)
         qc.loadQueues()
         qc.queueNames.sorted mustEqual List("apples", "oranges")
       }
@@ -168,7 +168,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
         new File(folderName + "/apples").createNewFile()
         new File(folderName + "/oranges").createNewFile()
         new File(folderName + "/oranges~~900").createNewFile()
-        qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
+        qc = new QueueCollection(folderName, timer, scheduler, config, Nil, Nil)
         qc.loadQueues()
         qc.queueNames.sorted mustEqual List("apples", "oranges")
       }
@@ -178,7 +178,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
       withTempFolder {
         new File(folderName + "/apples").createNewFile()
         new File(folderName + "/oranges").createNewFile()
-        qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
+        qc = new QueueCollection(folderName, timer, scheduler, config, Nil, Nil)
         Stats.getCounter("queue_deletes")() mustEqual 0
         qc.loadQueues()
         qc.delete("oranges")
@@ -193,7 +193,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
     "fanout queues" in {
       "generate on the fly" in {
         withTempFolder {
-          qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
+          qc = new QueueCollection(folderName, timer, scheduler, config, Nil, Nil)
           qc.add("jobs", "job1".getBytes)
           qc.remove("jobs+client1")() mustEqual None
           qc.add("jobs", "job2".getBytes)
@@ -208,7 +208,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
         withTempFolder {
           new File(folderName + "/jobs").createNewFile()
           new File(folderName + "/jobs+client1").createNewFile()
-          qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
+          qc = new QueueCollection(folderName, timer, scheduler, config, Nil, Nil)
           qc.loadQueues()
           qc.add("jobs", "job1".getBytes)
           qc.remove("jobs+client1")() must beSomeQItem("job1")
@@ -224,7 +224,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
         withTempFolder {
           new File(folderName + "/jobs").createNewFile()
           new File(folderName + "/jobs+client1").createNewFile()
-          qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
+          qc = new QueueCollection(folderName, timer, scheduler, config, Nil, Nil)
           qc.loadQueues()
           qc.add("jobs", "job1".getBytes)
 
@@ -246,7 +246,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
             name = "jobs"
             fanoutOnly = true
           }
-          qc = new QueueCollection(folderName, timer, scheduler, config, List(jobConfig))
+          qc = new QueueCollection(folderName, timer, scheduler, config, List(jobConfig), Nil)
           qc.loadQueues()
           qc.add("jobs", "job1".getBytes)
           qc.remove("jobs")() mustEqual None
@@ -260,7 +260,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
         withTempFolder {
           Time.withCurrentTimeFrozen { time =>
             new File(folderName + "/expired").createNewFile()
-            qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
+            qc = new QueueCollection(folderName, timer, scheduler, config, Nil, Nil)
             qc.loadQueues()
 
             qc.add("expired", "hello".getBytes, Some(5.seconds.fromNow))
@@ -282,7 +282,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
               name = "jobs"
               expireToQueue = "expired"
             }
-            qc = new QueueCollection(folderName, timer, scheduler, config, List(expireConfig))
+            qc = new QueueCollection(folderName, timer, scheduler, config, List(expireConfig), Nil)
             qc.loadQueues()
             qc.add("jobs", "hello".getBytes, Some(1.second.fromNow))
             qc.queue("jobs").get.length mustEqual 1
@@ -300,6 +300,71 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
       }
     }
 
+    "aliases" in {
+      "alias to a single queue" in {
+        withTempFolder {
+          val aliasConfig = new AliasBuilder() {
+            name = "nom-de-guerre"
+            destinationQueues = List("fromage")
+          }
+          qc = new QueueCollection(folderName, timer, scheduler, config, Nil, List(aliasConfig))
+          qc.loadQueues()
+          qc.add("nom-de-guerre", "brie".getBytes)
+          qc.remove("fromage")() must beSomeQItem("brie")
+        }
+      }
+
+      "alias to multiple queues" in {
+        withTempFolder {
+          val aliasConfig = new AliasBuilder() {
+            name = "nom-de-guerre"
+            destinationQueues = List("fromage", "formaggio")
+          }
+          qc = new QueueCollection(folderName, timer, scheduler, config, Nil, List(aliasConfig))
+          qc.loadQueues()
+          qc.add("nom-de-guerre", "brie".getBytes)
+          qc.remove("fromage")() must beSomeQItem("brie")
+          qc.remove("formaggio")() must beSomeQItem("brie")
+        }
+      }
+
+      "alias reads always return None" in {
+        withTempFolder {
+          val aliasConfig = new AliasBuilder() {
+            name = "nom-de-guerre"
+            destinationQueues = List("fromage")
+          }
+          qc = new QueueCollection(folderName, timer, scheduler, config, Nil, List(aliasConfig))
+          qc.loadQueues()
+          qc.add("nom-de-guerre", "brie".getBytes)
+          qc.remove("nom-de-guerre")() must beNone
+        }
+      }
+
+      "log queue name/alias duplicates" in {
+        withTempFolder {
+          traceLogger(Level.WARNING)
+
+          val queueConfigs = List("q1", "q2", "q3") map { q =>
+            new QueueBuilder {
+              name = q
+            }
+          }
+          val aliasConfigs = List("a1", "q1", "q2") map { a =>
+            new AliasBuilder() {
+              name = a
+              destinationQueues = List("fromage")
+            }
+          }
+
+          qc = new QueueCollection(folderName, timer, scheduler, config, queueConfigs, aliasConfigs)
+          qc.loadQueues()
+
+          mustLog("queue name(s) masked by alias(es): q1, q2")
+        }
+      }
+    }
+
     "non-existent queues" in {
       val tests: Map[String, (QueueCollection, String) => Unit] =
         Map("unremove" ->      { (qc: QueueCollection, name: String) => qc.unremove(name, 100) },
@@ -311,7 +376,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
       tests foreach { case (op, test) =>
         "%s should not cause a queue to be created".format(op) in {
           withTempFolder {
-            qc = new QueueCollection(folderName, timer, scheduler, config, Nil)
+            qc = new QueueCollection(folderName, timer, scheduler, config, Nil, Nil)
             test(qc, "some_queue")
             qc.queueNames mustEqual Nil
           }

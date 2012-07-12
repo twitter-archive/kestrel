@@ -22,6 +22,7 @@ import java.util.concurrent.{CountDownLatch, ScheduledThreadPoolExecutor}
 import scala.collection.mutable
 import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
+import com.twitter.logging.TestLogging
 import com.twitter.util.{Duration, TempFolder, Time, Timer, TimerTask}
 import org.specs.Specification
 import config._

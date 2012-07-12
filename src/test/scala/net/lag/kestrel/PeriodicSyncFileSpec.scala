@@ -18,6 +18,7 @@
 package net.lag.kestrel
 
 import com.twitter.conversions.time._
+import com.twitter.logging.TestLogging
 import com.twitter.util.Duration
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicInteger

@@ -65,6 +65,14 @@ new KestrelConfig {
     syncJournal = 10.milliseconds
   }
 
+  aliases = new AliasBuilder {
+    name = "wx_updates"
+    destinationQueues = List("weather_updates")
+  } :: new AliasBuilder {
+    name = "spam_all"
+    destinationQueues = List("spam", "spam0")
+  }
+
   loggers = new LoggerConfig {
     level = Level.INFO
     handlers = new FileHandlerConfig {

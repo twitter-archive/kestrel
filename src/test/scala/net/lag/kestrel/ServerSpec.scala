@@ -23,7 +23,7 @@ import scala.collection.Map
 import scala.util.Random
 import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
-import com.twitter.logging.Logger
+import com.twitter.logging.{Logger, TestLogging}
 import com.twitter.ostrich.admin.RuntimeEnvironment
 import com.twitter.util.{TempFolder, Time}
 import org.specs.Specification
@@ -46,8 +46,13 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
       maxItems = 1500000
       maxAge = 1800.seconds
     }
-    kestrel = new Kestrel(defaultConfig, List(weatherUpdatesConfig), "localhost",
-      Some(PORT), None, None, canonicalFolderName, None, None, 1, None)
+    val aliasWeatherUpdatesConfig = new AliasBuilder() {
+      name = "wx_updates"
+      destinationQueues = List("weather_updates")
+    }
+
+    kestrel = new Kestrel(defaultConfig, List(weatherUpdatesConfig), List(aliasWeatherUpdatesConfig),
+      "localhost", Some(PORT), None, None, canonicalFolderName, None, None, 1, None)
     kestrel.start()
   }
 
@@ -438,6 +443,36 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
           client.stats()("queue_q2_items") mustEqual "0"
           client.stats()("queue_q3_items") mustEqual "0"
         }
+      }
+    }
+
+    "use configured aliases" in {
+      withTempFolder {
+        makeServer()
+        val client = new TestClient("localhost", PORT)
+        client.set("wx_updates", "sunny and mild", 1)
+        client.get("weather_updates") mustEqual "sunny and mild"
+      }
+    }
+
+    "reload aliases" in {
+      withTempFolder {
+        makeServer()
+        new KestrelConfig {
+          queues = new QueueBuilder {
+            name = "weather_updates"
+          } :: new QueueBuilder {
+            name = "starship"
+          }
+          aliases = new AliasBuilder {
+            name = "wx_updates"
+            destinationQueues = List("weather_updates", "starship")
+          }
+        }.reload(kestrel)
+        val client = new TestClient("localhost", PORT)
+        client.set("wx_updates", "dark and stormy", 1)
+        client.get("weather_updates") mustEqual "dark and stormy"
+        client.get("starship") mustEqual "dark and stormy"
       }
     }
   }

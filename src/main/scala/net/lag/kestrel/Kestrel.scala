@@ -39,7 +39,7 @@ import org.jboss.netty.util.{HashedWheelTimer, Timer => NettyTimer}
 import scala.collection.{immutable, mutable}
 import config._
 
-class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
+class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], aliases: List[AliasBuilder],
               listenAddress: String, memcacheListenPort: Option[Int], textListenPort: Option[Int],
               thriftListenPort: Option[Int], queuePath: String,
               expirationTimerFrequency: Option[Duration], clientTimeout: Option[Duration],
@@ -128,7 +128,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
 
     try {
       queueCollection = new QueueCollection(queuePath, new FinagleTimer(timer), journalSyncScheduler,
-        defaultQueueConfig, builders)
+        defaultQueueConfig, builders, aliases)
       queueCollection.loadQueues()
     } catch {
       case e: InaccessibleQueuePath =>
@@ -216,8 +216,9 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder],
     }
   }
 
-  def reload(newDefaultQueueConfig: QueueConfig, newQueueBuilders: List[QueueBuilder]) {
-    queueCollection.reload(newDefaultQueueConfig, newQueueBuilders)
+  def reload(newDefaultQueueConfig: QueueConfig, newQueueBuilders: List[QueueBuilder],
+             newAliasBuilders: List[AliasBuilder]) {
+    queueCollection.reload(newDefaultQueueConfig, newQueueBuilders, newAliasBuilders)
   }
 }
 
