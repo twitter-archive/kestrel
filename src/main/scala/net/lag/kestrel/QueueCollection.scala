@@ -27,7 +27,6 @@ import com.twitter.util.{Duration, Future, Time, Timer}
 import config._
 
 class InaccessibleQueuePath extends Exception("Inaccessible queue path: Must be a directory and writable")
-class UndefinedAlias(name: String) extends Exception("Undefined alias: %s".format(name))
 
 class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: ScheduledExecutorService,
                       @volatile private var defaultQueueConfig: QueueConfig,
