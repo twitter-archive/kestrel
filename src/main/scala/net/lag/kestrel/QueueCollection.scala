@@ -82,7 +82,7 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
           alias.config = config
         case None =>
           log.info("Setting up alias %s: %s", name, config)
-          val alias = new AliasedQueue(name, config, this.apply)
+          val alias = new AliasedQueue(name, config, this)
           aliases(name) = alias
       }
     }

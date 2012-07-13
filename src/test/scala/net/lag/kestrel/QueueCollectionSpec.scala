@@ -328,6 +328,36 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
         }
       }
 
+      "alias to queues with fanouts" in {
+        withTempFolder {
+          val queueConfig = List(
+            new QueueBuilder() {
+              name = "fromage"
+              fanoutOnly = true
+            },
+            new QueueBuilder() {
+              name = "formaggio"
+              fanoutOnly = true
+            })
+
+          val aliasConfig = List(new AliasBuilder() {
+            name = "nom-de-guerre"
+            destinationQueues = List("fromage", "formaggio")
+          })
+
+          qc = new QueueCollection(folderName, timer, scheduler, config, queueConfig, aliasConfig)
+          qc.loadQueues()
+
+          // create fanouts
+          qc.remove("fromage+brie")() must beNone
+          qc.remove("formaggio+gorgonzola")() must beNone
+
+          qc.add("nom-de-guerre", "cheez whiz".getBytes)
+          qc.remove("fromage+brie")() must beSomeQItem("cheez whiz")
+          qc.remove("formaggio+gorgonzola")() must beSomeQItem("cheez whiz")
+        }
+      }
+
       "alias reads always return None" in {
         withTempFolder {
           val aliasConfig = new AliasBuilder() {

@@ -22,8 +22,7 @@ import com.twitter.util.Time
 import java.util.concurrent.atomic.AtomicLong
 import config._
 
-class AliasedQueue(val name: String, @volatile var config: AliasConfig,
-                   queueLookup: (String => Option[PersistentQueue])) {
+class AliasedQueue(val name: String, @volatile var config: AliasConfig, queueCollection: QueueCollection) {
 
   def statNamed(statName: String) = "q/" + name + "/" + statName
 
@@ -48,10 +47,7 @@ class AliasedQueue(val name: String, @volatile var config: AliasConfig,
     putBytes.getAndAdd(value.length)
 
     config.destinationQueues.foldLeft(true) { case (result, name) =>
-      val thisResult = queueLookup(name) match {
-        case Some(q) => q.add(value, expiry, None, addTime)
-        case None => true
-      }
+      val thisResult = queueCollection.add(name, value, expiry, addTime)
       result && thisResult
     }
   }
@@ -60,7 +56,7 @@ class AliasedQueue(val name: String, @volatile var config: AliasConfig,
     Array(
       ("put_items", putItems.toString),
       ("put_bytes", putBytes.toString),
-      ("children",  config.destinationQueues.size.toString)
+      ("children",  config.destinationQueues.mkString(","))
     )
   }
 }
