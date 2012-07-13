@@ -1,3 +1,18 @@
+2.3.0
+-----
+release: 16 July 2012
+
+- Introduce queue aliases, see docs/guide.md
+- Remove all queue-related stats when a queue is deleted [Cory G Watson]
+- Fanout queues are not tracked until they are successfully created (old
+  behavior caused never ending set errors if a fanout queue could not be
+  created due to filesystem name limitations, for example).
+- Non-existent queues are no longer created
+  - when transactions are confirmed or aborted
+  - on flush
+  - on delete
+  - when stats for the queue are retrieved (e.g. STATS <queue>)
+
 2.2.0
 -----
 release: 11 May 2012
