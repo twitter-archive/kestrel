@@ -2,8 +2,10 @@
 A working guide to kestrel
 ==========================
 
-Kestrel is a very simple message queue that runs on the JVM and uses the
-memcache protocol (with some extensions) to talk to clients.
+Kestrel is a very simple message queue that runs on the JVM. It supports multiple protocols:
+
+- memcache: the memcache protocol, with some extensions
+- thrift: Apache Thrift-based RPC
 
 A single kestrel server has a set of queues identified by a name, which is
 also the filename of that queue's journal file (usually in
@@ -45,7 +47,7 @@ The config file evaluates to a `KestrelConfig` object that's used to configure
 the server as a whole, a default queue, and any overrides for specific named
 queues. The fields on `KestrelConfig` are documented here with their default
 values:
-[KestrelConfig.html](http://robey.github.com/kestrel/doc/main/api/net/lag/kestrel/config/KestrelConfig.html)
+[KestrelConfig.html](http://robey.github.com/kestrel/api/main/api/net/lag/kestrel/config/KestrelConfig.html)
 
 To confirm the current configuration of each queue, send "dump_config" to
 a server (which can be done over telnet).
@@ -60,7 +62,7 @@ syntax is described here:
 [util-logging](https://github.com/twitter/util/blob/master/util-logging/README.markdown)
 
 Per-queue configuration is documented here:
-[QueueBuilder.html](http://robey.github.com/kestrel/doc/main/api/net/lag/kestrel/config/QueueBuilder.html)
+[QueueBuilder.html](http://robey.github.com/kestrel/api/main/api/net/lag/kestrel/config/QueueBuilder.html)
 
 
 Full queues
@@ -151,10 +153,11 @@ useful as a throttling mechanism when using a queue as a way to delay work.
 Queue expiration
 ----------------
 
-Whole queues can be configured to expire as well. If `maxQueueAge` is set 
+Whole queues can be configured to expire as well. If `maxQueueAge` is set
 `expirationTimerFrequency` is used to check the queue age. If the queue is
 empty, and it has been longer than `maxQueueAge` since it was created then
 the queue will be deleted.
+
 
 Fanout Queues
 -------------
@@ -175,6 +178,7 @@ is created, and it will start receiving new items written to the parent queue.
 Existing items are not copied over. A fanout queue can be deleted to stop it
 from receiving new items.
 
+
 Queue Aliases
 -------------
 
@@ -183,6 +187,7 @@ naming convention or implicit creation of child queues. A queue alias can
 only be used in set operations. Kestrel responds to attempts to retrieve
 items from the alias as if it were an empty queue. Delete and flush requests
 are also ignored.
+
 
 Thrift protocol
 ---------------
@@ -280,12 +285,12 @@ Memcache commands
 
 - `MONITOR <queue-name> <seconds> [max-items]`
 
-  Monitor a queue for a time, fetching any new items that arrive. Clients
-  are queued in a fair fashion, per-item, so many clients may monitor a
-  queue at once. After the given timeout, a separate `END` response will
-  signal the end of the monitor period. Any fetched items are open
-  transactions (see "Reliable Reads" below), and should be closed with
-  `CONFIRM`.
+  Monitor a queue for a time, fetching any new items that arrive, up to an
+  optional maximum number of items. Clients are queued in a fair fashion,
+  per-item, so many clients may monitor a queue at once. After the given
+  timeout, a separate `END` response will signal the end of the monitor
+  period. Any fetched items are open transactions (see "Reliable Reads"
+   below), and should be closed with `CONFIRM`.
 
 - `CONFIRM <queue-name> <count>`
 
@@ -296,6 +301,10 @@ Memcache commands
 
 Reliable reads
 --------------
+
+This section describes the implementation of reliable reads for the memcache
+protocol. See the thrift protocol documentation for details on using reliable
+reads with that protocol.
 
 Normally when a client removes an item from the queue, kestrel immediately
 discards the item and assumes the client has taken ownership. This isn't
