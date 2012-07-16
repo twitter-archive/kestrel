@@ -2,8 +2,10 @@
 A working guide to kestrel
 ==========================
 
-Kestrel is a very simple message queue that runs on the JVM and uses the
-memcache protocol (with some extensions) to talk to clients.
+Kestrel is a very simple message queue that runs on the JVM. It supports multiple protocols:
+
+- memcache: the memcache protocol, with some extensions
+- thrift: Apache Thrift-based RPC
 
 A single kestrel server has a set of queues identified by a name, which is
 also the filename of that queue's journal file (usually in
@@ -148,6 +150,14 @@ expired at the same time, `maxExpireSweep` limits the number of items that
 will be removed by the background thread in a single round. This is primarily
 useful as a throttling mechanism when using a queue as a way to delay work.
 
+Queue expiration
+----------------
+
+Whole queues can be configured to expire as well. If `maxQueueAge` is set
+`expirationTimerFrequency` is used to check the queue age. If the queue is
+empty, and it has been longer than `maxQueueAge` since it was created then
+the queue will be deleted.
+
 
 Fanout Queues
 -------------
@@ -167,6 +177,23 @@ When a fanout queue is first referenced by a client, the journal file (if any)
 is created, and it will start receiving new items written to the parent queue.
 Existing items are not copied over. A fanout queue can be deleted to stop it
 from receiving new items.
+
+
+Queue Aliases
+-------------
+
+Queue aliases are somewhat similar to fanout queues, but without a required
+naming convention or implicit creation of child queues. A queue alias can
+only be used in set operations. Kestrel responds to attempts to retrieve
+items from the alias as if it were an empty queue. Delete and flush requests
+are also ignored.
+
+
+Thrift protocol
+---------------
+
+The thrift protocol is documented in the thrift file here:
+[kestrel.thrift](https://github.com/robey/kestrel/blob/master/src/main/thrift/kestrel.thrift)
 
 
 Memcache commands
@@ -247,26 +274,6 @@ Memcache commands
   Reload the config file and reconfigure all queues. This should have no
   noticable effect on the server's responsiveness.
 
-- `DUMP_CONFIG`
-
-  Dump a list of each queue currently known to the server, and list the config
-  values for each queue. The format is:
-
-        queue 'master' {
-          max_items=2147483647
-          max_size=9223372036854775807
-          max_age=0
-          max_journal_size=16277216
-          max_memory_size=134217728
-          max_journal_overflow=10
-          max_journal_size_absolute=9223372036854775807
-          discard_old_when_full=false
-          journal=true
-          sync_journal=false
-        }
-
-  The last queue will be followed by `END` on a line by itself.
-
 - `STATS`
 
   Display server stats in memcache style. They're described below.
@@ -276,14 +283,14 @@ Memcache commands
   Display server stats in a more readable style, grouped by queue. They're
   described below.
 
-- `MONITOR <queue-name> <seconds>`
+- `MONITOR <queue-name> <seconds> [max-items]`
 
-  Monitor a queue for a time, fetching any new items that arrive. Clients
-  are queued in a fair fashion, per-item, so many clients may monitor a
-  queue at once. After the given timeout, a separate `END` response will
-  signal the end of the monitor period. Any fetched items are open
-  transactions (see "Reliable Reads" below), and should be closed with
-  `CONFIRM`.
+  Monitor a queue for a time, fetching any new items that arrive, up to an
+  optional maximum number of items. Clients are queued in a fair fashion,
+  per-item, so many clients may monitor a queue at once. After the given
+  timeout, a separate `END` response will signal the end of the monitor
+  period. Any fetched items are open transactions (see "Reliable Reads"
+   below), and should be closed with `CONFIRM`.
 
 - `CONFIRM <queue-name> <count>`
 
@@ -294,6 +301,10 @@ Memcache commands
 
 Reliable reads
 --------------
+
+This section describes the implementation of reliable reads for the memcache
+protocol. See the thrift protocol documentation for details on using reliable
+reads with that protocol.
 
 Normally when a client removes an item from the queue, kestrel immediately
 discards the item and assumes the client has taken ownership. This isn't
@@ -355,6 +366,9 @@ Global stats reported by kestrel are:
 - `get_misses` - total `GET` requests on an empty queue
 - `bytes_read` - total bytes read from clients
 - `bytes_written` - total bytes written to clients
+- `queue_creates` - total number of queues created
+- `queue_deletes` - total number of queues deleted (includes expires)
+- `queue_expires` - total number of queues expires
 
 For each queue, the following stats are also reported:
 
@@ -376,7 +390,9 @@ For each queue, the following stats are also reported:
 - `waiters` - number of clients waiting for an item from this queue (using
   `GET/t`)
 - `open_transactions` - items read with `/open` but not yet confirmed
-
+- `total_flushes` - total number of times this queue has been flushed
+- `age_msec` - age of the last item read from the queue
+- `create_time` - the time that the queue was created (in milliseconds since epoch)
 
 Kestrel as a library
 --------------------
