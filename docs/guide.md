@@ -6,6 +6,7 @@ Kestrel is a very simple message queue that runs on the JVM. It supports multipl
 
 - memcache: the memcache protocol, with some extensions
 - thrift: Apache Thrift-based RPC
+- text: a simple text-based protocol
 
 A single kestrel server has a set of queues identified by a name, which is
 also the filename of that queue's journal file (usually in
@@ -63,6 +64,9 @@ syntax is described here:
 
 Per-queue configuration is documented here:
 [QueueBuilder.html](http://robey.github.com/kestrel/api/main/api/net/lag/kestrel/config/QueueBuilder.html)
+
+Queue alias configuration is documented here:
+[AliasBuilder.html](http://robey.github.com/kestrel/api/main/api/net/lag/kestrel/config/AliasBuilder.html)
 
 
 Full queues
@@ -189,15 +193,30 @@ items from the alias as if it were an empty queue. Delete and flush requests
 are also ignored.
 
 
-Thrift protocol
----------------
+Protocols
+---------
 
-The thrift protocol is documented in the thrift file here:
+Kestrel supports three protocols: memcache, thrift and text. The
+[Finagle project](http://twitter.github.com/finagle/) can be used to connect clients
+to a Kestrel server via the memcache or thrift protocols.
+
+### Thrift
+----------
+
+The thrift protocol is documented in the thrift IDL:
 [kestrel.thrift](https://github.com/robey/kestrel/blob/master/src/main/thrift/kestrel.thrift)
 
+Reliable reads via the thrift protocol are specified by indicating how long the server
+should wait before aborting the unacknowledged read.
 
-Memcache commands
------------------
+
+### Memcache
+------------
+
+The official memcache protocol is described here:
+[protocol.txt](https://github.com/memcached/memcached/blob/master/doc/protocol.txt)
+
+The kestrel implementation of the memcache protocol commands is described below.
 
 - `SET <queue-name> <flags (ignored)> <expiration> <# bytes>`
 
@@ -299,12 +318,10 @@ Memcache commands
   period.
 
 
-Reliable reads
---------------
+#### Reliable reads
+-------------------
 
-This section describes the implementation of reliable reads for the memcache
-protocol. See the thrift protocol documentation for details on using reliable
-reads with that protocol.
+Note: this section is specific to the memcache protocol.
 
 Normally when a client removes an item from the queue, kestrel immediately
 discards the item and assumes the client has taken ownership. This isn't
@@ -342,6 +359,15 @@ Example:
     GET dirty_jobs/close/open
     (closes job 1, receives job 2)
     ...etc...
+
+
+### Text protocol
+-----------------
+
+Kestrel supports a limited, text-only protocol. You are encouraged to use the
+memcache protocol instead.
+
+The text protocol does not support reliable reads.
 
 
 Server stats
@@ -393,6 +419,13 @@ For each queue, the following stats are also reported:
 - `total_flushes` - total number of times this queue has been flushed
 - `age_msec` - age of the last item read from the queue
 - `create_time` - the time that the queue was created (in milliseconds since epoch)
+
+Statistics may be retrieved by accessing the
+[Ostrich admin HTTP service](https://github.com/twitter/ostrich) on the admin HTTP port.
+For example: `http://kestrel.host:2223/stats.json?period=60`.
+
+Statistics are also available via the memcache protocol using the `STATS` command.
+
 
 Kestrel as a library
 --------------------
