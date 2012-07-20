@@ -1,0 +1,6 @@
+This file contains information that is probably painfully obvious to
+anyone accustomed to ruby gem development.
+
+From this directory, you can build the gem:
+
+$ gem build kcluster.gemspec
