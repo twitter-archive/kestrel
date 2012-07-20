@@ -178,6 +178,9 @@ parser = OptionParser.new do |opts|
   opts.on("-f", "--file=FILENAME", "load kestrel server list from file (use '-' for stdin) (default: #{$options[:config_filename]})") do |filename|
     $options[:config_filename] = filename
   end
+  opts.on("-h", "--host=HOSTNAME", "use a specific server") do |singlehost|
+    $options[:singlehost] = singlehost
+  end
   opts.on("-p", "--port=N", "use port (default: #{$options[:port]})") do |port|
     $options[:port] = port.to_i
   end
@@ -220,6 +223,8 @@ end
 if $options[:role]
   data = Net::HTTP.get URI.parse("http://#{$colony_host}:#{$colony_port}/query?q=mo+audubon.role.#{$options[:role]}")
   $options[:server_list] = JSON.parse(data).values.flatten
+elsif $options[:singlehost]
+  $options[:server_list] = Array[$options[:singlehost]]
 else
   server_file = $options[:config_filename] == "-" ? STDIN : File.open($options[:config_filename], "r")
   $options[:server_list] = server_file.readlines.map { |line| line.chomp }
