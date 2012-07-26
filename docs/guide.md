@@ -182,6 +182,11 @@ is created, and it will start receiving new items written to the parent queue.
 Existing items are not copied over. A fanout queue can be deleted to stop it
 from receiving new items.
 
+`fanoutOnly` may be set to true if the queue in question will only serve write
+point for fanout queues.  No journal file will be kept for the parent, only
+for the child queues.  This saves the overhead of writing to the parent and
+removes the need to empty it.  Note that setting `fanoutOnly` to true and
+having no fanouts for the queue effectively makes it a black hole.
 
 Queue Aliases
 -------------
