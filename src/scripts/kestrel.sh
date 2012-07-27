@@ -73,6 +73,12 @@ case "$1" in
       exit 0
     fi
 
+    # Move the existing gc log to a timestamped file in case we cant to examine it.
+    if [ -f /var/log/$APP_NAME/gc.log ]; then
+      TIMESTAMP=$(date +%Y%m%d%H%M%S);
+      mv /var/log/$APP_NAME/gc.log /var/log/$APP_NAME/gc_$TIMESTAMP.log;
+    fi
+
     ulimit -n $FD_LIMIT || echo -n " (no ulimit)"
     ulimit -c unlimited || echo -n " (no coredump)"
     $DAEMON $daemon_args $daemon_start_args -- sh -c "echo "'$$'" > $pidfile; exec ${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar ${APP_HOME}/${JAR_NAME}"
