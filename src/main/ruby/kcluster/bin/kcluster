@@ -56,6 +56,7 @@ def fetch_stats(hostname, port, data)
           when /([\w\+\-]+)_total_items/   then [:total_items, $1]
           when /([\w\+\-]+)_expired_items/ then [:expired_items, $1]
           when /([\w\+\-]+)_mem_items/     then [:mem_items, $1]
+          when /([\w\+\-]+)_put_items/     then [] # ignore queue alias put_items stat
           when /([\w\+\-]+)_items/         then [:items, $1]
           when /([\w\+\-]+)_mem_bytes/     then [:mem_bytes, $1]
           when /([\w\+\-]+)_bytes/         then [:bytes, $1]
@@ -77,14 +78,27 @@ def fetch_stats(hostname, port, data)
   end
 end
 
-def fetch_all
-  data = Hash.new do |h, data_type|
+def new_queue_stats
+  Hash.new do |h, data_type|
     h[data_type] = Hash.new do |h, k|
       h[k] = (data_type == :min_age) ? 2**31 : 0
     end
   end
+end
+
+def fetch_all
+  data = new_queue_stats
   $options[:server_list].each do |server|
     fetch_stats(server, $options[:port], data)
+  end
+  data
+end
+
+def fetch_all_by_host
+  data = {}
+  $options[:server_list].each do |server|
+    data[server] = new_queue_stats
+    fetch_stats(server, $options[:port], data[server])
   end
   data
 end
@@ -107,6 +121,24 @@ end
 def report_all(data, keys)
   keys.each { |key| report(data, key) }
   puts ""
+end
+
+def report_all_by_host(data, queue_name, keys)
+  keys.each { |key| report_by_host(data, queue_name, key) }
+  puts ""
+end
+
+def report_by_host(data, queue_name, key)
+  by_host = data.inject({}) do |accum, (host, host_data)|
+    stats = host_data[key]
+    # nil represents "host does not know this queue" as distinct from value is 0
+    accum[host] = stats.has_key?(queue_name) ? stats[queue_name] : nil
+    accum
+  end
+  format = "%14s %s\n"
+  printf(format, key, "host")
+  printf(format, "============", "====================")
+  by_host.sort.each { |host, v| printf(format, v || "n/a", host) }
 end
 
 def broadcast(command, queue_name, verb)
@@ -196,6 +228,9 @@ parser = OptionParser.new do |opts|
   opts.on("-s", "--script-mode", "eliminates the interactive prompt when deleting or flushing queues") do
     $options[:scriptmode] = true
   end
+  opts.on("-b", "--by-host=QUEUE", "show a single queue's data per host") do |queue_name|
+    $options[:by_host] = queue_name
+  end
 
   opts.separator ""
   opts.separator "Commands:"
@@ -272,7 +307,11 @@ elsif command == "stale"
 end
 
 if $show
-  report_all(sort_data(fetch_all), $show)
+  if $options[:by_host]
+    report_all_by_host(fetch_all_by_host, $options[:by_host], $show)
+  else
+    report_all(sort_data(fetch_all), $show)
+  end
   exit 0
 else
   puts
