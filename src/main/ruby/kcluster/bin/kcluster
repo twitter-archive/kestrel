@@ -268,6 +268,21 @@ end
 
 command = ARGV[0].downcase
 
+if (command == "delete" || command == "flush") && !$options[:scriptmode]
+  $options[:verbose] = true
+end
+
+if $options[:verbose]
+  puts ""
+  puts "Commands will be run against the following hosts:"
+  puts $options[:server_list].join(", ")
+  puts ""
+  print "Really use these hosts? (yes/no) "
+  STDOUT.flush
+  abort("Exited due to host confirmation") if STDIN.gets.chomp != 'yes'
+end
+
+
 if command == "all"
   $show = [ :items, :bytes, :mem_bytes, :min_age, :max_age ]
 elsif command == "items"
