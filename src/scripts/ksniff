@@ -1,0 +1,483 @@
+#!/usr/bin/env ruby
+
+require 'rubygems'
+gem 'pcap', '~> 0.7'
+
+require 'pcap'
+require 'optparse'
+require 'stringio'
+require 'open3'
+
+DEFAULT_COUNT = 1000
+DEFAULT_PORT = 22133
+DEFAULT_SNAP_LEN = 132
+TS = Time.now.strftime('%Y%m%d-%H%M%S')
+
+QUEUE_OP_REGEXP = %r[^([A-Za-z_]+) ([-A-Za-z0-9_\$%\+:]+)[ /]]
+QUEUE_OPS = [:set, :get, :monitor, :delete, :flush, :other]
+
+HEADER_FORMAT = "%-7s %-7s %-7s %-7s %-7s %-7s %s"
+OUTPUT_FORMAT = "%7d %7d %7d %7d %7d %7d %s"
+
+$options = {
+  :hosts => [],
+  :ssh => false,
+  :use_sudo => false,
+  :port => DEFAULT_PORT,
+  :tcpdump => {
+    :path => 'tcpdump',
+    :interface => nil,
+    :count => DEFAULT_COUNT,
+    :snap_len => DEFAULT_SNAP_LEN,
+  },
+  :remote_path => "/tmp/ksniff.#{TS}",
+  :local_path => "/tmp/ksniff.#{TS}",
+  :command_filter => nil,
+  :reverse_dns => false,
+  :verbose => 0,
+  :quiet => false,
+  :dry_run => false,
+  :include_summary_stats => true,
+  :include_host_stats => true,
+  :include_queue_stats => true,
+}
+$sudo_password = nil
+
+def verbose(level, str = nil)
+  if (str.nil?) then
+    str = level
+    level = 1
+  end
+  puts str if $options[:verbose] >= level
+end
+
+def quiet?
+  $options[:quiet]
+end
+
+def dry_run?
+  !!$options[:dry_run]
+end
+
+def get_sudo_password
+  if $sudo_password
+    return $sudo_password
+  end
+
+  if dry_run?
+    puts "skipped: sudo password request"
+    $sudo_password = "PASSWORD"
+    return $sudo_password
+  end
+
+  if $options[:ssh]
+    if $options[:hosts].length > 0
+      print "sudo password (for #{$options[:hosts].length} hosts):"
+    else
+      print "sudo password (for #{$options[:host]}):"
+    end
+  else
+    print "sudo password:"
+  end
+  STDOUT.flush
+  system "stty -echo"
+  begin
+    pw = STDIN.gets
+  ensure
+    system "stty echo"
+    puts
+  end
+  $sudo_password = pw.strip
+  $sudo_password
+end
+
+def tcpdump_command
+  cmd = StringIO.new
+  cmd << $options[:tcpdump][:path]
+  cmd << " -i " << $options[:tcpdump][:interface] if $options[:tcpdump][:interface]
+  cmd << " -s " << $options[:tcpdump][:snap_len]
+  cmd << " -c " << $options[:tcpdump][:count]
+  if $options[:ssh]
+    cmd << " -w " << $options[:remote_path]
+    cmd << " dst port " << $options[:port] << " and '(' dst " << $options[:host] << " or dst localhost ')'"
+  else
+    cmd << " -w " << $options[:local_path]
+    cmd << " dst host " << $options[:host] << " and dst port " << $options[:port]
+  end
+  cmd << " 2>/dev/null" if quiet?
+  cmd.string
+end
+
+def execute(command, sending = nil)
+  if dry_run?
+    puts "skipped: #{command}"
+    return 0
+  else
+    verbose "command: #{command}"
+  end
+
+  if sending
+    output = Open3.popen3(command) do |sin, sout, serr|
+      sin.puts(sending)
+
+      out = StringIO.new
+      done = false
+      while !done
+        select([serr, sout]).flatten.each do |o|
+          line = o.gets
+          if line
+            if (o == serr)
+              $stderr.puts "remote: #{line}" unless quiet?
+            else
+              out << line
+            end
+          else
+            done = true
+          end
+        end
+      end
+      while(line = serr.gets) do
+        $stderr.puts "remote: #{line}" unless quiet?
+      end
+      out << sout.read
+      out.string
+    end
+    result = $?
+    verbose output
+    result
+  else
+    system(command)
+    $?
+  end
+end
+
+def execute_local_capture
+  verbose "check for tcpdump"
+  if `which #{$options[:tcpdump][:path]}`.empty? then
+    puts "ERROR: cannot find #{$options[:tcpdump][:path]}: is tcpdump installed?"
+    exit 3
+  end
+
+  verbose "start local capture"
+  if $options[:use_sudo]
+    password = get_sudo_password
+    execute("sudo -S \"#{tcpdump_command}\"", password)
+  else
+    execute(tcpdump_command)
+  end
+end
+
+def execute_remote_capture
+  verbose 2, "check for ssh/scp"
+  if `which ssh`.empty? || `which scp`.empty? then
+    puts "ERROR: cannot find ssh and/or scp: is ssh installed?"
+    exit 3
+  end
+
+  verbose "start remote capture"
+  password = nil
+  sudo = ""
+  if $options[:use_sudo]
+    password = get_sudo_password
+    sudo = "sudo -S"
+  end
+
+  result = execute("ssh #{$options[:host]} \"#{sudo} #{tcpdump_command}\"", password)
+  if (result != 0)
+    puts "ERROR: failed to execute #{$options[:tcpdump][:path]} on #{$options[:host]}: is tcpdump installed?"
+    exit 3
+  end
+
+  verbose "copying capture to local"
+  execute("scp -q #{$options[:host]}:#{$options[:remote_path]} #{$options[:local_path]}")
+  if !File.exists?($options[:local_path]) && !dry_run? then
+    puts "ERROR: failed to copy #{$options[:host]}:#{$options[:remote_path]} to #{$options[:local_path]}"
+    exit 4
+  end
+
+  verbose "removing remote capture file"
+  execute("ssh #{$options[:host]} #{sudo} rm #{$options[:remote_path]}", password)
+
+  0
+end
+
+def make_stats_hash
+  Hash.new { |hash, key|
+    h = {}
+    QUEUE_OPS.each { |op| h[op] = 0 }
+    hash[key] = h
+  }
+end
+
+def process_capture
+  if dry_run?
+    puts "skipped: processing of #{$options[:local_path]}"
+    return
+  else
+    verbose "processing #{$options[:local_path]}"
+  end
+
+  pcap = Pcap::Capture.open_offline($options[:local_path])
+  if pcap.nil? then
+    puts "ERROR: unable to open offline capture file #{$options[:local_path]}"
+    exit 10
+  end
+
+  stats = {
+    :count => 0,
+    :count_with_data => 0,
+    :count_filtered => 0,
+    :count_matched => 0,
+    :queues => make_stats_hash,
+    :ips => make_stats_hash,
+    :total => make_stats_hash,
+  }
+
+  puts "HOST #{$options[:host]}"
+  puts "=" * 70
+
+  regexp = $options[:command_filter]
+  pcap.each_packet do |pkt|
+    stats[:count] += 1
+    if pkt.tcp? && pkt.tcp_data_len > 0
+      stats[:count_with_data] += 1
+      (operation, queue) =
+        if QUEUE_OP_REGEXP =~ pkt.tcp_data
+          op = $1.to_sym
+          q = $2
+          if QUEUE_OPS.member?(op)
+            [op, q]
+          else
+            [:other, q]
+          end
+        else
+          [:other, nil]
+        end
+
+      stats[:total][:all][operation] += 1
+      if regexp.nil? || regexp =~ pkt.tcp_data
+        verbose 2, "#{pkt.ip_src}:#{pkt.tcp_sport}->#{pkt.ip_dst}:#{pkt.tcp_dport}"
+        verbose 3, " #{pkt.tcp_data_len}: #{pkt.tcp_data}"
+
+        stats[:count_matched] += 1
+        stats[:total][:matched][operation] += 1
+        stats[:ips][pkt.ip_src.to_s][operation] += 1
+        stats[:queues][queue][operation] += 1 unless queue.nil?
+      else
+        stats[:count_filtered] += 1
+        stats[:total][:filtered][operation] += 1
+      end
+    end
+  end
+
+  puts "#{stats[:count]} packets captured, #{stats[:count_with_data]} contained data, #{stats[:count_matched]} matched"
+
+  if stats[:count_matched] > 0
+    puts
+    stat_names = QUEUE_OPS.map { |op| op.to_s }
+
+    if $options[:include_summary_stats] then
+      puts HEADER_FORMAT % (stat_names + [''])
+      puts HEADER_FORMAT % (QUEUE_OPS.map { |x| '-' * 7 } + ['----------'])
+      values = QUEUE_OPS.map { |op| stats[:total][:all][op] } + [ 'Total' ]
+      puts OUTPUT_FORMAT % values
+      values = QUEUE_OPS.map { |op| stats[:total][:matched][op] } + [ 'Matched' ]
+      puts OUTPUT_FORMAT % values
+      values = QUEUE_OPS.map { |op| stats[:total][:filtered][op] } + [ 'Filtered' ]
+      puts OUTPUT_FORMAT % values
+      puts
+    end
+
+    if $options[:include_host_stats] then
+      puts HEADER_FORMAT % (stat_names + ['Host'])
+      puts HEADER_FORMAT % (QUEUE_OPS.map { |x| '-' * 7 } + ['----------'])
+      ips = stats[:ips].keys.sort
+      ips.each do |ip|
+        ip_stats = stats[:ips][ip]
+        display = `dig -x #{ip} +short`.strip if $options[:reverse_dns]
+        display = ip if display.nil? || display.empty?
+        values = QUEUE_OPS.map { |op| ip_stats[op] } + [ display ]
+        puts OUTPUT_FORMAT % values
+      end
+      puts
+    end
+
+    if $options[:include_queue_stats] then
+      puts HEADER_FORMAT % (stat_names + ['Queue'])
+      puts HEADER_FORMAT % (QUEUE_OPS.map { |x| '-' * 7 } + ['----------'])
+      queues = stats[:queues].keys.sort
+      queues.each do |queue|
+        queue_stats = stats[:queues][queue]
+        values = QUEUE_OPS.map { |op| queue_stats[op] } + [ queue ]
+        puts OUTPUT_FORMAT % values
+      end
+      puts
+    end
+  end
+
+  pcap.close
+end
+
+parser = OptionParser.new do |opts|
+  opts.banner = "Usage: #{$0} [options] <command>"
+  opts.separator "Example: #{$0} -h 127.0.0.1"
+
+  opts.on("-h", "--host=HOST",
+          "Host(s) to sniff. Unless --ssh is given,",
+          "each host must be on same network segment",
+          "as localhost and requires tcpdump to be",
+          "installed on localhost. May be repeated.",
+          "HOST may also be a list with comma or",
+          "whitespace delimiters.") do |host|
+    $options[:hosts] += host.split(/[,\s]+/)
+  end
+
+  opts.on("--ssh",
+          "Execute tcpdump on the remote host.",
+          "Requires SSH access to the remote host,",
+          "and that tcpdump is installed there.") do
+    $options[:ssh] = true
+  end
+
+  opts.on("-S", "--use-sudo",
+          "Invoke tcpdump with sudo. Causes ksniff to",
+          "request your password via the tty. If ssh",
+          "and multiple hosts are specified, the password",
+          "is re-used for all hosts.") do
+    $options[:use_sudo] = true
+  end
+
+  opts.on("-i" , "--iface=INTERFACE",
+          "Use the given interface instead of the",
+          "default. To determine a list of valid ",
+          "interfaces, use 'tcpdump -D'") do |iface|
+    $options[:tcpdump][:interface] = iface
+  end
+
+  opts.on("-p", "--port=PORT", OptionParser::DecimalInteger,
+          "The PORT to sniff. Must be a Kestrel",
+          "memcache protocol port. Default: #{DEFAULT_PORT}") do |port|
+    $options[:port] = port
+  end
+
+  opts.on("-c", "--count=COUNT", OptionParser::DecimalInteger,
+          "Capture COUNT packets for processing.",
+          "Default: #{DEFAULT_COUNT}") do |count|
+    $options[:tcpdump][:count] = count
+  end
+
+  opts.on("-f", "--filter=FILTER",
+          "Specify a regular expression to match",
+          "against the Kestrel memcache commands",
+          "captured. By default, no filtering occurs.") do |filter|
+    begin
+      $options[:command_filter] = Regexp.new(filter)
+    rescue RegexpError => e
+      puts "ERROR: invalid regexp: #{e.message}"
+      exit 1
+    end
+  end
+
+  opts.on("-s", "--snap-len=LENGTH", OptionParser::DecimalInteger,
+          "Capture LENGTH bytes from each packet.",
+          "Smaller values reduce tcpdump overhead.",
+          "Larger values allow for filtering on",
+          "longer queue names and filtering on set",
+          "operation payloads at the (possible)",
+          "expense of missing packets. Default: #{DEFAULT_SNAP_LEN}") do |len|
+    $options[:tcpdump][:snap_len] = len
+  end
+
+  opts.on("-r", "--remote-file=FILE",
+          "If --ssh is enabled, this path is used to",
+          "temporarily store the packet capture file",
+          "on the remote host. The file is copied to",
+          "the local capture path and the remote file",
+          "is deleted. The default is to use a",
+          "timestamped filename in /tmp.") do |file|
+    $options[:remote_path] = f
+  end
+
+  opts.on("-l", "--local-file=FILE",
+          "This path is used to store the packet",
+          "capture locally. Normally tcpdump writes",
+          "to this file directly, but when --ssh is",
+          "enabled, the remote capture file is copied",
+          "to this location. The default is a",
+          "timestamped filename in /tmp.") do |file|
+    $options[:local_path] = file
+  end
+
+  opts.on("-t", "--tcpdump=PATH",
+          "Specifies full PATH to tcpdump. By default",
+          "it is assumed to be on the path.") do |path|
+    $options[:tcpdump][:path] = path
+  end
+
+  opts.on("-d", "--reverse-dns",
+          "Attempt to perform a reverse DNS lookup on",
+          "the IP addresses of captured packets that",
+          "match the command filter.") do
+    $options[:reverse_dns] = true
+  end
+
+  opts.on("--skip-summary", "Skip reporting summary statistics.") do
+    $options[:include_summary_stats] = false
+  end
+
+  opts.on("--skip-host-stats", "Skip reporting per-host statistics.") do
+    $options[:include_host_stats] = false
+  end
+
+  opts.on("--skip-queue-stats", "Skip reporting per-queue statistics.") do
+    $options[:include_queue_stats] = false
+  end
+
+  opts.on("-v", "--verbose",
+          "Enable verbose mode. May be repeated for",
+          "more verbosity.") do
+    $options[:verbose] += 1
+  end
+
+  opts.on("-q", "--quiet",
+          "Enable quiet mode. Disables display of",
+          "stderr from tcpdump. Trumps verbose.") do
+    $options[:quiet] = true
+    $options[:verbose] = 0
+  end
+
+  opts.on("-n", "--dry-run",
+          "Display information about what actions",
+          "would be taken, but do not perform them.",
+          "You can use this to see what commands",
+          "would be executed to capture data.") do
+    $options[:dry_run] = true
+  end
+
+  opts.on_tail("-h", "--help", "Shows this message.") do
+    puts opts
+    exit
+  end
+end
+parser.parse!(ARGV)
+
+if $options[:hosts].empty?
+  puts "ERROR: at least one host must be specified"
+  exit 1
+end
+
+$options[:hosts].each do |host|
+  $options[:host] = host
+
+  result =
+    if $options[:ssh] then
+      execute_remote_capture
+    else
+      execute_local_capture
+    end
+  if result == 0 then
+    process_capture
+  else
+    puts "ERROR: failed to capture packets for #{host}"
+  end
+end
