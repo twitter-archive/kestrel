@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
 $:.push(File.dirname($0))
+require 'rubygems'
 require 'optparse'
 require 'socket'
 require 'net/http'
@@ -14,7 +15,7 @@ $colony_port = ENV["COLONY_PORT"] || 9080
 $options = {
   :config_filename => ENV['HOME'] + "/.kestrel_cluster",
   :server_list => [],
-  :port => 22133,
+  :port => 2223,
   :verbose => false,
 }
 
@@ -43,35 +44,29 @@ end
 
 def fetch_stats(hostname, port, data)
   verbose "--- Fetching stats from #{hostname}:#{port}"
-  with_server(hostname, port) do |sock|
-    sock.puts("stats")
-    done = false
-    while !done && line = sock.gets.chomp
-      if (line == 'END') then
-        done = true
-      elsif line =~ /STAT queue_([\w\+\-]+) (\d+)/
-        key = $1
-        value = $2.to_i
-        (stat, queue_name) = case key
-          when /([\w\+\-]+)_total_items/   then [:total_items, $1]
-          when /([\w\+\-]+)_expired_items/ then [:expired_items, $1]
-          when /([\w\+\-]+)_mem_items/     then [:mem_items, $1]
-          when /([\w\+\-]+)_put_items/     then [] # ignore queue alias put_items stat
-          when /([\w\+\-]+)_items/         then [:items, $1]
-          when /([\w\+\-]+)_mem_bytes/     then [:mem_bytes, $1]
-          when /([\w\+\-]+)_bytes/         then [:bytes, $1]
-          when /([\w\+\-]+)_age/           then [:age, $1]
-        end
+  begin
+    stats = JSON.parse Net::HTTP.get URI.parse("http://#{hostname}:#{port}/stats.json?period=60")
+  rescue
+    puts "WARNING: Unable to fetch stats for #{hostname}:#{port}"
+    return
+  end
 
-        if (queue_name)
-          queue_name = queue_name.split('+', 2).first if $options[:rollup_fanouts]
+  collections = [ 'gauges', 'counters' ]
 
-          if (stat == :age)
-            data[:min_age][queue_name] = value if value < data[:min_age][queue_name]
-            data[:max_age][queue_name] = value if value > data[:max_age][queue_name]
-          else
-            data[stat][queue_name] += value
-          end
+  collections.each do |coll|
+    stats[coll].each_pair do |k,value|
+      parts = k.split('/')
+      if(parts.first == 'q')
+        queue_name = parts[-2]
+        stat = parts[-1].to_sym
+
+        queue_name = queue_name.split('+', 2).first if $options[:rollup_fanouts]
+
+        if (stat == :age_msec)
+          data[:min_age][queue_name] = value if value < data[:min_age][queue_name]
+          data[:max_age][queue_name] = value if value > data[:max_age][queue_name]
+        else
+          data[stat][queue_name] += value
         end
       end
     end
