@@ -113,6 +113,8 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
              listenAddress, memcacheListenPort, textListenPort, queuePath,
              expirationTimerFrequency, clientTimeout, maxOpenTransactions, connectionBacklog)
 
+    Stats.setLabel("version", Kestrel.runtime.jarVersion)
+
     // this means no timeout will be at better granularity than 100 ms.
     timer = new HashedWheelTimer(100, TimeUnit.MILLISECONDS)
 

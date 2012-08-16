@@ -195,6 +195,17 @@ def find_stale(rounds)
   end
 end
 
+def show_versions
+  $options[:server_list].each do |server|
+    verbose "--- Fetching version from #{server}:#{$options[:port]}"
+    with_server(server, $options[:port]) do |sock|
+      sock.puts("version")
+      line = sock.gets.chomp
+      line =~ /VERSION (.*)/
+      puts "#{server}: #{$1}"
+    end
+  end
+end
 
 # ----------
 
@@ -239,6 +250,7 @@ parser = OptionParser.new do |opts|
   opts.separator "    delete <name>   remove a queue across the cluster"
   opts.separator "    flush <name>    drain a queue across the cluster"
   opts.separator "    stale [rounds]  try to detect stale queues (default: 5 rounds)"
+  opts.separator "    version         report versions of kestrel across the cluster"
   opts.separator ""
 end
 
@@ -290,6 +302,9 @@ elsif command == "min_age"
   $show = [ :min_age ]
 elsif command == "max_age"
   $show = [ :max_age ]
+elsif command == "version"
+  show_versions()
+  exit 0
 elsif command == "delete" && ARGV.size == 2
   queue_name = ARGV[1]
   if $options[:scriptmode]
