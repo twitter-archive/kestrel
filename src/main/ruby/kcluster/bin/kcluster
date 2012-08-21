@@ -16,6 +16,7 @@ $options = {
   :datacenter => 'smf1',
   :server_list => [],
   :port => 2223,
+  :memcache_port => 22133,
   :verbose => false,
 }
 
@@ -138,8 +139,8 @@ end
 
 def broadcast(command, queue_name, verb)
   $options[:server_list].each do |server|
-    status "--- #{verb} queue #{queue_name} from #{server}:#{$options[:port]} ... "
-    with_server(server, $options[:port]) do |sock|
+    status "--- #{verb} queue #{queue_name} from #{server}:#{$options[:memcache_port]} ... "
+    with_server(server, $options[:memcache_port]) do |sock|
       sock.puts("#{command} " + queue_name)
       puts sock.readline.chomp
     end
@@ -197,8 +198,8 @@ end
 
 def show_versions
   $options[:server_list].each do |server|
-    verbose "--- Fetching version from #{server}:#{$options[:port]}"
-    with_server(server, $options[:port]) do |sock|
+    verbose "--- Fetching version from #{server}:#{$options[:memcache_port]}"
+    with_server(server, $options[:memcache_port]) do |sock|
       sock.puts("version")
       line = sock.gets.chomp
       line =~ /VERSION (.*)/
@@ -221,6 +222,9 @@ parser = OptionParser.new do |opts|
   end
   opts.on("-h", "--host=HOSTNAME", "use a specific server") do |singlehost|
     $options[:singlehost] = singlehost
+  end
+  opts.on("-m", "--memcache-port=N", "use memcache port (default: #{$options[:memcache_port]})") do |memcacheport|
+    $options[:memcache_port] = memcacheport
   end
   opts.on("-p", "--port=N", "use port (default: #{$options[:port]})") do |port|
     $options[:port] = port.to_i
