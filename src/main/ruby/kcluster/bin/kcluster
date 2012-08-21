@@ -9,11 +9,11 @@ require 'json'
 
 # FIXME this really only works inside twitter. it would be nice to support
 # a general serverset interface (or opensource colony).
-$colony_host = ENV["COLONY_HOST"] || "colony.smf1.twitter.com"
 $colony_port = ENV["COLONY_PORT"] || 9080
 
 $options = {
   :config_filename => ENV['HOME'] + "/.kestrel_cluster",
+  :datacenter => 'smf1',
   :server_list => [],
   :port => 2223,
   :verbose => false,
@@ -213,6 +213,9 @@ parser = OptionParser.new do |opts|
   opts.banner = "Usage: #{$0} [options] <command>"
   opts.separator "Example: #{$0} -f kestrel max_age"
 
+  opts.on("-D", "--datacenter=DC", "use the specified datacenter (default: #{$options[:datacenter]}") do |datacenter|
+    $options[:datacenter] = datacenter
+  end
   opts.on("-f", "--file=FILENAME", "load kestrel server list from file (use '-' for stdin) (default: #{$options[:config_filename]})") do |filename|
     $options[:config_filename] = filename
   end
@@ -263,7 +266,7 @@ if ARGV.size < 1
 end
 
 if $options[:role]
-  data = Net::HTTP.get URI.parse("http://#{$colony_host}:#{$colony_port}/query?q=mo+audubon.role.#{$options[:role]}")
+  data = Net::HTTP.get URI.parse("http://colony.#{$options[:datacenter]}.twitter.com:#{$colony_port}/query?q=mo+audubon.role.#{$options[:role]}")
   $options[:server_list] = JSON.parse(data).values.flatten
 elsif $options[:singlehost]
   $options[:server_list] = Array[$options[:singlehost]]
