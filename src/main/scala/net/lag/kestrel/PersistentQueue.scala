@@ -71,6 +71,12 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   Stats.removeCounter(statNamed("get_items_miss"))
   Stats.makeCounter(statNamed("get_items_miss"), getItemsMiss)
 
+  // # of transactions attempted/canceled
+  val totalTransactions = Stats.getCounter(statNamed("transactions"))
+  totalTransactions.reset()
+  val totalCanceledTransactions = Stats.getCounter(statNamed("canceled_transactions"))
+  totalCanceledTransactions.reset()
+
   // # of items that were expired by the time they were read:
   val totalExpired = Stats.getCounter(statNamed("expired_items"))
   totalExpired.reset()
@@ -136,6 +142,8 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       ("discarded", totalDiscarded().toString),
       ("waiters", waiterCount.toString),
       ("open_transactions", openTransactionCount.toString),
+      ("transactions", totalTransactions().toString),
+      ("canceled_transactions", totalCanceledTransactions().toString),
       ("total_flushes", totalFlushes().toString)
     )
   }
@@ -285,6 +293,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       if (closed || paused || queueLength == 0) {
         None
       } else {
+        if (transaction) totalTransactions.incr()
         val item = _remove(transaction, None)
         if (config.keepJournal && item.isDefined) {
           if (transaction) journal.removeTentative(item.get.xid) else journal.remove()
@@ -375,7 +384,10 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     synchronized {
       if (!closed) {
         if (config.keepJournal) journal.unremove(xid)
-        _unremove(xid)
+        _unremove(xid) match {
+          case Some(_) => totalCanceledTransactions.incr()
+          case None => ()
+        }
         waiters.trigger()
       }
     }
@@ -440,6 +452,8 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     Stats.removeCounter(statNamed("put_bytes"))
     Stats.removeCounter(statNamed("put_items"))
     Stats.removeCounter(statNamed("expired_items"))
+    Stats.removeCounter(statNamed("transactions"))
+    Stats.removeCounter(statNamed("canceled_transactions"))
     Stats.removeCounter(statNamed("discarded"))
     Stats.removeCounter(statNamed("total_flushes"))
     Stats.clearGauge(statNamed("items"))
