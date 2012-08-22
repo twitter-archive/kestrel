@@ -53,6 +53,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
   var memcacheService: Option[Server] = None
   var textService: Option[Server] = None
   var thriftService: Option[Server] = None
+  var expirationBackgroundProcess: Option[PeriodicBackgroundProcess] = None
 
   def thriftCodec = ThriftServerFramedCodec()
 
@@ -164,9 +165,9 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
     thriftService = thriftListenPort.map { port => startThriftServer("kestrel-thrift", port) }
 
     // optionally, start a periodic timer to clean out expired items.
-    if (expirationTimerFrequency.isDefined) {
+    expirationBackgroundProcess = expirationTimerFrequency.map { period =>
       log.info("Starting up background expiration task.")
-      new PeriodicBackgroundProcess("background-expiration", expirationTimerFrequency.get) {
+      val proc = new PeriodicBackgroundProcess("background-expiration", period) {
         def periodic() {
           val expired = Kestrel.this.queueCollection.flushAllExpired(true)
           if (expired > 0) {
@@ -176,7 +177,9 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
           // ready to be expired.
           Kestrel.this.queueCollection.deleteExpiredQueues()
         }
-      }.start()
+      }
+      proc.start()
+      proc
     }
   }
 
@@ -187,6 +190,8 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
     memcacheService.foreach { _.close(1.second) }
     textService.foreach { _.close(1.second) }
     thriftService.foreach { _.close(1.second) }
+
+    expirationBackgroundProcess.foreach { _.shutdown() }
 
     if (queueCollection ne null) {
       queueCollection.shutdown()
