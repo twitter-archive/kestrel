@@ -58,7 +58,7 @@ class MemcacheHandler(
 
   final def apply(request: MemcacheRequest): Future[MemcacheResponse] = {
     request.line(0) match {
-      case "get" =>
+      case "get" | "gets" =>
         get(request.line(1))
       case "monitor" =>
         val maxItems = if (request.line.size > 3) request.line(3).toInt else maxOpenReads
