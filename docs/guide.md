@@ -182,6 +182,11 @@ is created, and it will start receiving new items written to the parent queue.
 Existing items are not copied over. A fanout queue can be deleted to stop it
 from receiving new items.
 
+`fanoutOnly` may be set to true if the queue in question will only serve write
+point for fanout queues.  No journal file will be kept for the parent, only
+for the child queues.  This saves the overhead of writing to the parent and
+removes the need to empty it.  Note that setting `fanoutOnly` to true and
+having no fanouts for the queue effectively makes it a black hole.
 
 Queue Aliases
 -------------
@@ -416,6 +421,10 @@ For each queue, the following stats are also reported:
 - `waiters` - number of clients waiting for an item from this queue (using
   `GET/t`)
 - `open_transactions` - items read with `/open` but not yet confirmed
+- `transactions` - number of transactional get requests (irrespective of whether an
+  item was read or not)
+- `canceled_transactions` - number of transactional get requests canceled (for any
+  reason)
 - `total_flushes` - total number of times this queue has been flushed
 - `age_msec` - age of the last item read from the queue
 - `create_time` - the time that the queue was created (in milliseconds since epoch)
