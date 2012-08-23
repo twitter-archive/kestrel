@@ -15,3 +15,6 @@ ignore/
 go
 kestrel.sublime-*
 kcluster-*.gem
+.ensime
+.ensime/
+.ensime_lucene/
