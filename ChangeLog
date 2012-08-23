@@ -1,3 +1,14 @@
+2.3.2
+-----
+release: 23 Aug 2012
+
+- support gets in memcache protocol [David Pershouse]
+- add transactions, canceled_transactions stats per-queue
+- kcluster updates
+- ksniff tcpdump helper
+- aliased queue tests [Radu Voicilas]
+- removed daemon from kestrel.sh to resolve SIGHUP problems
+
 2.3.1
 -----
 release: 16 July 2012
