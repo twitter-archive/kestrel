@@ -12,7 +12,7 @@ ADMIN_PORT="2223"
 VERSION="@VERSION@"
 SCALA_VERSION="2.9.1"
 APP_HOME="/usr/local/$APP_NAME/current"
-DAEMON="/usr/local/bin/daemon"
+INITIAL_SLEEP=15
 
 JAR_NAME="${APP_NAME}_${SCALA_VERSION}-${VERSION}.jar"
 STAGE="production"
@@ -30,13 +30,13 @@ test -f /etc/sysconfig/kestrel && . /etc/sysconfig/kestrel
 JAVA_OPTS="-server -Dstage=$STAGE $GC_OPTS $GC_TRACE $GC_LOG $HEAP_OPTS $DEBUG_OPTS"
 
 pidfile="/var/run/$APP_NAME/$APP_NAME.pid"
+# This second pidfile exists for legacy purposes, from the days when kestrel
+# was started by daemon(1)
 daemon_pidfile="/var/run/$APP_NAME/$APP_NAME-daemon.pid"
-daemon_args="--name $APP_NAME --pidfile $daemon_pidfile --core --chdir /"
-daemon_start_args="--stdout=/var/log/$APP_NAME/stdout --stderr=/var/log/$APP_NAME/error"
 
 
 running() {
-  $DAEMON $daemon_args --running
+  curl -m 5 -s "http://localhost:$ADMIN_PORT/ping.txt" > /dev/null 2> /dev/null
 }
 
 find_java() {
@@ -73,15 +73,21 @@ case "$1" in
       exit 0
     fi
 
-    # Move the existing gc log to a timestamped file in case we cant to examine it.
+    TIMESTAMP=$(date +%Y%m%d%H%M%S);
+    # Move the existing gc log to a timestamped file in case we want to examine it.
+    # We must do this here because we have no option to append this via the JVM's
+    # command line args.
     if [ -f /var/log/$APP_NAME/gc.log ]; then
-      TIMESTAMP=$(date +%Y%m%d%H%M%S);
       mv /var/log/$APP_NAME/gc.log /var/log/$APP_NAME/gc_$TIMESTAMP.log;
     fi
 
     ulimit -n $FD_LIMIT || echo -n " (no ulimit)"
     ulimit -c unlimited || echo -n " (no coredump)"
-    $DAEMON $daemon_args $daemon_start_args -- sh -c "echo "'$$'" > $pidfile; exec ${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar ${APP_HOME}/${JAR_NAME}"
+
+    sh -c "echo "'$$'" > $pidfile; echo "'$$'" > $daemon_pidfile; exec ${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar ${APP_HOME}/${JAR_NAME} >> /var/log/$APP_NAME/stdout 2>> /var/log/$APP_NAME/error" &
+    disown %-
+    sleep $INITIAL_SLEEP
+
     tries=0
     while ! running; do
       tries=$((tries + 1))
