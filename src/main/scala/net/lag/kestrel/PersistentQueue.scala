@@ -172,7 +172,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
 
   /**
    * Check if this Queue is eligible for expiration by way of it being empty
-   * and it's age being greater than or equal to maxQueueAge
+   * and its age being greater than or equal to maxQueueAge
    */
   def isReadyForExpiration: Boolean = {
     // Don't even bother if the maxQueueAge is None
