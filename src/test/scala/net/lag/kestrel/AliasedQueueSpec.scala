@@ -35,15 +35,15 @@ class AliasedQueueSpec extends Specification with TempFolder {
 
     doBefore {
       withTempFolder {
-	Stats.clearAll()
-	qc = new QueueCollection(folderName, timer, scheduler, queueConfig, Nil, Nil)
-	aq = new AliasedQueue("kestrel", aliasConfig, qc)
+        Stats.clearAll()
+        qc = new QueueCollection(folderName, timer, scheduler, queueConfig, Nil, Nil)
+        aq = new AliasedQueue("kestrel", aliasConfig, qc)
       }
     }
 
     doAfter {
       if (qc ne null) {
-	qc.shutdown
+        qc.shutdown
       }
     }
 
@@ -56,52 +56,18 @@ class AliasedQueueSpec extends Specification with TempFolder {
     }
 
     "return an array of empty stats when no value was added to the queue" in {
-      val stats: Array[(String, String)] = aq.dumpStats()
-
-      for (i <- 0 to 2) i match {
-	case 0 => {
-	  val (key, value) = stats(i)
-	  key mustEqual "put_items"
-	  value mustEqual "0"
-	}
-
-	case 1 => {
-	  val (key, value) = stats(i)
-	  key mustEqual "put_bytes"
-	  value mustEqual "0"
-	}
-
-	case 2 => {
-	  val (key, value) = stats(i)
-	  key mustEqual "children"
-	  value mustEqual ""
-	}
-      }
+      val stats = aq.dumpStats().toMap
+      stats("put_items") mustEqual "0"
+      stats("put_bytes") mustEqual "0"
+      stats("children") mustEqual ""
     }
 
     "return an array of stats when a value is added to the aliased queue" in {
       aq.add(Array(1, 2, 3, 4), None, Time.now)
-      val stats: Array[(String, String)] = aq.dumpStats()
-
-      for (i <- 0 to 2) i match {
-	case 0 => {
-	  val (key, value) = stats(i)
-	  key mustEqual "put_items"
-	  value mustEqual "1"
-	}
-
-	case 1 => {
-	  val (key, value) = stats(i)
-	  key mustEqual "put_bytes"
-	  value mustEqual "4"
-	}
-
-	case 2 => {
-	  val (key, value) = stats(i)
-	  key mustEqual "children"
-	  value mustEqual ""
-	}
-      }
+      val stats = aq.dumpStats().toMap
+      stats("put_items") mustEqual "1"
+      stats("put_bytes") mustEqual "4"
+      stats("children") mustEqual ""
     }
   }
 }
