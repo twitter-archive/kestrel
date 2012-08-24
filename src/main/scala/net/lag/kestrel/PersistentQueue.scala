@@ -43,8 +43,8 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   // current size of all data in the queue:
   private var queueSize: Long = 0
 
-  // age of the last item read from the queue:
-  private var _currentAge: Duration = 0.milliseconds
+  // timestamp of the last item read from the queue:
+  private var _currentAge: Time = Time.epoch
 
   // time the queue was created
   private var _createTime = Time.now
@@ -115,7 +115,9 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   def maxMemoryBytes: Long = synchronized { config.maxMemorySize.inBytes }
   def journalSize: Long = synchronized { journal.size }
   def journalTotalSize: Long = journal.archivedSize + journalSize
-  def currentAge: Duration = synchronized { if (queueSize == 0) 0.milliseconds else _currentAge }
+  def currentAge: Duration = synchronized {
+    if (queueSize == 0) 0.milliseconds else Time.now - _currentAge
+  }
   def waiterCount: Long = synchronized { waiters.size }
   def isClosed: Boolean = synchronized { closed || paused }
   def createTime: Long = synchronized { _createTime.inSeconds }
@@ -565,7 +567,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     _memoryBytes -= len
     queueLength -= 1
     fillReadBehind()
-    _currentAge = now - item.addTime
+    _currentAge = item.addTime
     if (transaction) {
       item.xid = xid.getOrElse { nextXid() }
       openTransactions(item.xid) = item

@@ -525,6 +525,24 @@ class PersistentQueueSpec extends Specification
       }
     }
 
+    "report the age of the queue in the absence of gets" in {
+      withTempFolder {
+        Time.withCurrentTimeFrozen { time =>
+          val q = new PersistentQueue("things", folderName, new QueueBuilder().apply(), timer, scheduler)
+          q.setup
+          put(q, 128, 0)
+          put(q, 128, 0)
+          q.remove()
+
+          time.advance(10.milliseconds)
+          q.currentAge mustEqual 10.milliseconds
+
+          time.advance(10.milliseconds)
+          q.currentAge mustEqual 20.milliseconds
+        }
+      }
+    }
+
     "remove all stats" in {
       def stats(queueName: String): List[String] = {
         val prefix = "q/" + queueName + "/"
