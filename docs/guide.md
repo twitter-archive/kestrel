@@ -2,7 +2,8 @@
 A working guide to kestrel
 ==========================
 
-Kestrel is a very simple message queue that runs on the JVM. It supports multiple protocols:
+Kestrel is a very simple message queue that runs on the JVM. It supports
+multiple protocols:
 
 - memcache: the memcache protocol, with some extensions
 - thrift: Apache Thrift-based RPC
@@ -26,9 +27,10 @@ case-sensitive.
 
 A cluster of kestrel servers is like a memcache cluster: the servers don't
 know about each other, and don't do any cross-communication, so you can add as
-many as you like. Clients have a list of all servers in the cluster, and pick
-one at random for each operation. In this way, each queue appears to be spread
-out across every server, with items in a loose ordering.
+many as you like. The simplest clients have a list of all servers in the
+cluster, and pick one at random for each operation. In this way, each queue
+appears to be spread out across every server, with items in a loose ordering.
+More advanced clients can find kestrel servers via ZooKeeper.
 
 When kestrel starts up, it scans the journal folder and creates queues based
 on any journal files it finds there, to restore state to the way it was when
@@ -55,8 +57,8 @@ a server (which can be done over telnet).
 
 To reload the config file on a running server, send "reload" the same way.
 You should immediately see the changes in "dump_config", to confirm. Reloading
-will only affect queue configuration, not global server configuration. To
-change the server configuration, restart the server.
+will only affect queue and alias configuration, not global server configuration.
+To change the server configuration, restart the server.
 
 Logging is configured according to `util-logging`. The logging configuration
 syntax is described here:
@@ -322,6 +324,16 @@ The kestrel implementation of the memcache protocol commands is described below.
   to a `MONITOR` command, to confirm the items that arrived during the monitor
   period.
 
+- `STATUS`
+
+Displays the kestrel server's current status (see section on Server Status,
+below).
+
+- `STATUS <new-status>`
+
+Switches the kestrel server's current status to the given status (see section
+on Server Status, below).
+
 
 #### Reliable reads
 -------------------
@@ -373,6 +385,79 @@ Kestrel supports a limited, text-only protocol. You are encouraged to use the
 memcache protocol instead.
 
 The text protocol does not support reliable reads.
+
+
+Server Status
+-------------
+
+Each kestrel server maintains its current status. Normal statuses are
+
+- `Up`: the server is available for all operations
+- `ReadOnly`: the server is available for non-modifying operations only;
+              commands that modify queues (set, delete, flush) are rejected as
+	      errors.
+- `Quiescent`: the server rejects as an error operations on any queue. One
+               notable exception is transactions begun before the server entered
+	       the quiesecent state may still be confirmed.
+
+One additional status is `Down`, which is only used transiently when kestrel is
+in the process of shutting down.
+
+The server's current status is persisted (specified in
+[KestrelConfig](http://robey.github.com/kestrel/api/main/api/net/lag/kestrel/config/KestrelConfig.html)).
+When kestrel is restarted it automatically returns to it's previous status,
+based on the value in the status file. If the status file does not exist or
+cannot be read, kestrel uses a default status, also configured in KestrelConfig.
+
+When changing from a less restrictive status to a more restrictive status
+(e.g., from `Up` to `ReadOnly` or from `ReadOnly` to `Quiescent`), the
+config option `statusChangeGracePeriod` determines how long kestrel will
+continue to allow restricted operations to continue before it begins rejecting
+them. This allows clients that are aware of the kestrel server's status a
+grace period to learn the new status and cease the forbidden operations before
+beginning to encounter errors.
+
+### ZooKeeper Server Sets
+-------------------------
+
+Kestrel uses Twitter's ServerSet library to support discovery of kestrel
+servers allowing a given operation. The ServerSet class is documented here:
+[ServerSet](http://twitter.github.com/commons/apidocs/index.html#com.twitter.common.zookeeper.ServerSet)
+
+If the optional `zookeeper` field of `KestrelConfig` is specified, kestrel will
+attempt to use the given configuration to join a logical set of kestrel servers.
+The ZooKeeper host, port and other connection options are documented here:
+[ZooKeeperBuilder](http://robey.github.com/kestrel/api/main/api/net/lag/kestrel/config/ZooKeeperBuilder.html)
+
+Kestrel servers will join 0, 1, or 2 server sets depending on their current
+status. When `Up`, the server joins two server sets: one for writes and one for
+reads. When `ReadOnly`, the server joins only the read set. When `Quiescent`,
+the server joins no sets. ZooKeeper-aware kestrel clients can watch the
+server set for changes and adjust their connections accordingly. The
+`statusChangeGracePeriod` configuration option may be used to allow clients
+time to detect and react to the status change before they begin receiving
+errors from kestrel.
+
+The ZooKeeper path used to register the server set
+is based on the `pathPrefix` option. Kestrel automatically appends `/write` and
+`/read` to distinguish the write and read sets.
+
+Kestrel advertises all of its endpoints in each server set that it joins.
+The default endpoint is memcache, if configured. The default endpoint falls
+back to the thrift endpoint and then the text protocol endpoint. All three
+endpoints are advertised as additional endpoints under the names `memcache`,
+`thrift` and `text`.
+
+Consider setting the  `defaultStatus` option to `Quiescent` to prevent kestrel
+from prematurely advertising its status via ZooKeeper.
+
+Installations that require additional customization of ZooKeeper credentials,
+or other site-specific ZooKeeper initialization can override the
+`clientInitializer` and `serverSetInitializer` options to invoke the
+necessary site-specific code. The recommended implementation is to place
+the site-specific code in its own JAR file, take the necessary steps to
+include the JAR in kestrel's class path, and place as little logic as possible
+in the kestrel configuration file.
 
 
 Server stats

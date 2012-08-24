@@ -31,6 +31,20 @@ struct QueueInfo {
   7: i32 open_transactions
 }
 
+enum Status {
+  /* Server status not configured, status levels not in use. */
+  NOT_CONFIGURED = 0,
+
+  /* Server marked quiescent -- clients should stop reading and writing. */
+  QUIESCENT = 1,
+
+  /* Server marked read only -- clients should stop writing. */
+  READ_ONLY = 2,
+
+  /* Server marked up -- clients may read or write. */
+  UP = 3,
+}
+
 service Kestrel {
   /*
    * Put one or more items into a queue.
@@ -107,8 +121,18 @@ service Kestrel {
   void delete_queue(1: string queue_name)
 
   /*
+   * Retrieve server's current advertised status.
+   */
+  Status current_status()
+
+  /*
+   * Set the server's current status. Throws an exception if server status
+   * is not configured.
+   */
+  void set_status(1: Status status)
+
+  /*
    * Return a string form of the version of this kestrel server.
    */
   string get_version()
 }
-

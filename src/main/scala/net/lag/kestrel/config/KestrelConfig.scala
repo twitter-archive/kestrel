@@ -18,6 +18,7 @@
 package net.lag.kestrel
 package config
 
+import com.twitter.common.zookeeper.{ServerSet, ZooKeeperClient, ZooKeeperUtils}
 import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
@@ -25,6 +26,8 @@ import com.twitter.logging.config._
 import com.twitter.ostrich.admin.{RuntimeEnvironment, ServiceTracker}
 import com.twitter.ostrich.admin.config._
 import com.twitter.util.{Config, Duration, StorageUnit}
+import org.apache.zookeeper.data.ACL
+import scala.collection.JavaConversions
 
 case class QueueConfig(
   maxItems: Int,
@@ -79,8 +82,7 @@ class QueueBuilder extends Config[QueueConfig] {
   /**
    * Expiration time for items on this queue. Any item that has been sitting on the queue longer
    * than this duration will be discarded. Clients may also attach an expiration time when adding
-   * items to a queue, but if the expiration time is longer than `maxAge`, `max_Age` will be
-   * used instead.
+   * items to a queue, in which case the item expires at the earlier of the two expiration times.
    */
   var maxAge: Option[Duration] = None
 
@@ -178,6 +180,121 @@ class AliasBuilder extends Config[AliasConfig] {
   }
 }
 
+case class ZooKeeperConfig(
+  host: String,
+  port: Int,
+  pathPrefix: String,
+  sessionTimeout: Duration,
+  credentials: Option[(String, String)],
+  acl: ZooKeeperACL,
+  clientInitializer: Option[(ZooKeeperConfig) => ZooKeeperClient],
+  serverSetInitializer: Option[(ZooKeeperConfig, ZooKeeperClient, String) => ServerSet]) {
+  override def toString() = {
+    val creds = credentials.map { _ => "<set>" }.getOrElse("<none>")
+    val clientInit = clientInitializer.map { _ => "<custom>" }.getOrElse("<default>")
+    val serverSetInit = serverSetInitializer.map { _ => "<custom>" }.getOrElse("<default>")
+
+    ("host=%s port=%d pathPrefix=%s sessionTimeout=%s credentials=%s acl=%s " +
+     "clientInitializer=%s serverSetInitializer=%s").format(
+      host, port, pathPrefix, sessionTimeout, creds, acl, clientInit, serverSetInit)
+  }
+}
+
+sealed abstract class ZooKeeperACL {
+  def asList: List[ACL]
+}
+
+/**
+ * Predefined, "open" ZooKeeper ACL. This allows any ZooKeeper session to modify or delete the server set and
+ * is therefore unsafe for production use. It does, however, work with unauthenticated sessions.
+ */
+case object OpenUnsafeACL extends ZooKeeperACL {
+  def asList = List[ACL]() ++ JavaConversions.asScalaBuffer(ZooKeeperUtils.OPEN_ACL_UNSAFE)
+  override def toString() = "<open-unsafe>"
+}
+
+/**
+ * Predefined ZooKeeper ACL. This allows any ZooKeeper session to read the server set, but only sessions with
+ * the creator's credentials may modify it. May only be used with properly configured credentials.
+ */
+case object EveryoneReadCreatorAllACL extends ZooKeeperACL {
+  def asList = List[ACL]() ++ JavaConversions.asScalaBuffer(ZooKeeperUtils.EVERYONE_READ_CREATOR_ALL)
+  override def toString() = "<everyone-read/creator-all>"
+}
+
+/**
+ * Custom ZooKeeper ACL.
+ */
+case class CustomACL(val asList: List[ACL]) extends ZooKeeperACL {
+  override def toString() = "<custom>"
+}
+
+class ZooKeeperBuilder {
+  /**
+   * Hostname for an Apache ZooKeeper cluster to be used for tracking Kestrel
+   * server availability. Required.
+   *
+   * Valid values include "zookeeper.domain.com" and "10.1.2.3".
+   */
+  var host: String = null
+
+  /**
+   * Port for Apache ZooKeeper cluster. Defaults to 2181.
+   */
+  var port: Int = 2181
+
+  /**
+   * Path prefix used to publish Kestrel server availability to the Apache ZooKeeper cluster.
+   * Kestrel will append an additional level of hierarchy for the type of operations accepted
+   * (e.g., "/read" or "/write"). Required.
+   *
+   * Example: "/kestrel/production"
+   */
+  var pathPrefix: String = null
+
+  /**
+   * ZooKeeper session timeout. Defaults to 10 seconds.
+   */
+  var sessionTimeout = 10.seconds
+
+  /**
+   * ZooKeeper client connection credentials (username, password). Defaults to unauthenticated
+   * connections.
+   */
+  var credentials: Option[(String, String)] = None
+
+  /**
+   * A ZooKeeper ACL to apply to nodes created in the paths created by Kestrel.
+   */
+  var acl: ZooKeeperACL = OpenUnsafeACL
+
+  /**
+   * Overrides ZooKeeperClient intialization. The default implementation uses the configuration
+   * options above in a straightforward way. If your environment requires obtaining server set
+   * configuration information (e.g., credentials) via another mechanism, you can provide a custom
+   * initializer method here. The default implemenation is ZooKeeperServerStatus.createClient.
+   *
+   * It is strongly recommended that you reference an object method provided in an external JAR
+   * rather than placing arbitary code in this configuration file.
+   */
+  var clientInitializer: Option[(ZooKeeperConfig) => ZooKeeperClient] = None
+
+  /**
+   * Overrides ServerSet intialization. The default implementation uses a ZooKeeperClient, the
+   * configured pathPrefix and "read" or "write" to produce a ServerSet. The default implementation
+   * is ZooKeeperServerStatus.createServerSet.
+   *
+   * It is strongly recommended that you reference an object method provided in an external JAR
+   * rather than placing arbitary code in this configuration file.
+   */
+  var serverSetInitializer: Option[(ZooKeeperConfig, ZooKeeperClient, String) => ServerSet] = None
+
+  def apply() = {
+    ZooKeeperConfig(host, port, pathPrefix, sessionTimeout, credentials, acl, clientInitializer,
+                    serverSetInitializer)
+  }
+}
+
 trait KestrelConfig extends ServerConfig[Kestrel] {
   /**
    * Settings for a queue that isn't explicitly listed in `queues`.
@@ -242,16 +359,46 @@ trait KestrelConfig extends ServerConfig[Kestrel] {
    */
   var connectionBacklog: Option[Int] = None
 
+  /**
+   * Path to a file where Kestrel can store information about its current status.
+   * When restarted, the server will come up with the same status that it had at shutdown,
+   * provided data in this file can be accessed.
+   *
+   * Kestrel will attempt to create the parent directories of this file if they do not already
+   * exist.
+   */
+  var statusFile: String = "/tmp/.kestrel-status"
+
+  /**
+   * In the absence of a readable status file, Kestrel will default to this status.
+   */
+  var defaultStatus: Status = Up
+
+  /**
+   * When changing to a more restricted status (e.g., from Up to ReadOnly), Kestrel will wait
+   * until this duration expires before beginning to reject operations. Non-zero settings
+   * are useful when using ZooKeeper-based server status. It allows clients to gracefully
+   * cease operations without incurring errors.
+   */
+  var statusChangeGracePeriod = 0.seconds
+
+  /**
+   * Optional Apache Zookeeper configuration used to publish serverset-based availability of Kestrel
+   * instances. By default no such information is published.
+   */
+  var zookeeper: Option[ZooKeeperBuilder] = None
+
   def apply(runtime: RuntimeEnvironment) = {
     new Kestrel(
       default(), queues, aliases, listenAddress, memcacheListenPort, textListenPort, thriftListenPort,
-      queuePath, expirationTimerFrequency, clientTimeout, maxOpenTransactions, connectionBacklog
+      queuePath, expirationTimerFrequency, clientTimeout, maxOpenTransactions, connectionBacklog,
+      statusFile, defaultStatus, statusChangeGracePeriod, zookeeper.map { _() }
     )
   }
 
   def reload(kestrel: Kestrel) {
     Logger.configure(loggers)
-    // only the queue configs can be changed.
+    // only the queue and alias configs can be changed.
     kestrel.reload(default(), queues, aliases)
   }
 }

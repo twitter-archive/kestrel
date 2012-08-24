@@ -29,6 +29,12 @@ import scala.collection.Set
 class TooManyOpenReadsException extends Exception("Too many open reads.")
 object TooManyOpenReadsException extends TooManyOpenReadsException
 
+class ServerStatusNotConfiguredException
+extends Exception("Server status not configured.")
+
+class AvailabilityException(op: String)
+extends Exception("Server not available for operation %s".format(op))
+
 trait SimplePendingReads {
   def queues: QueueCollection
   protected def log: Logger
@@ -120,7 +126,8 @@ abstract class KestrelHandler(
   val queues: QueueCollection,
   val maxOpenReads: Int,
   val clientDescription: () => String,
-  val sessionId: Int
+  val sessionId: Int,
+  val serverStatus: Option[ServerStatus]
 ) {
   protected val log = Logger.get(getClass.getName)
 
@@ -142,6 +149,7 @@ abstract class KestrelHandler(
   }
 
   def flushAllQueues() {
+    checkBlockWrites("flushAll", "<all>")
     queues.queueNames.foreach { qName => queues.flush(qName) }
   }
 
@@ -151,10 +159,17 @@ abstract class KestrelHandler(
 
   // will do a continuous fetch on a queue until time runs out or read buffer is full.
   final def monitorUntil(key: String, timeLimit: Option[Time], maxItems: Int, opening: Boolean)(f: (Option[QItem], Option[Long]) => Unit) {
+    checkBlockReads("monitorUntil", key)
+
     log.debug("monitor -> q=%s t=%s max=%d open=%s", key, timeLimit, maxItems, opening)
     Stats.incr("cmd_monitor")
 
     def monitorLoop(maxItems: Int) {
+      if (safeCheckBlockReads) {
+        f(None, None)
+        return
+      }
+
       log.debug("monitor loop -> q=%s t=%s max=%d open=%s", key, timeLimit, maxItems, opening)
       if (maxItems == 0 || (timeLimit.isDefined && timeLimit.get <= Time.now) || countPendingReads(key) >= maxOpenReads) {
         f(None, None)
@@ -175,6 +190,8 @@ abstract class KestrelHandler(
   }
 
   def getItem(key: String, timeout: Option[Time], opening: Boolean, peeking: Boolean): Future[Option[QItem]] = {
+    checkBlockReads("getItem", key)
+
     if (opening && countPendingReads(key) >= maxOpenReads) {
       log.warning("Attempt to open too many reads on '%s' (sid %d, %s)", key, sessionId,
                   clientDescription)
@@ -210,6 +227,7 @@ abstract class KestrelHandler(
   }
 
   def setItem(key: String, flags: Int, expiry: Option[Time], data: Array[Byte]) = {
+    checkBlockWrites("setItem", key)
     log.debug("set -> q=%s flags=%d expiry=%s size=%d", key, flags, expiry, data.length)
     Stats.incr("cmd_set")
     val (rv, nsec) = Duration.inNanoseconds {
@@ -221,18 +239,66 @@ abstract class KestrelHandler(
   }
 
   def flush(key: String) {
+    checkBlockWrites("flush", key)
     log.debug("flush -> q=%s", key)
     queues.flush(key)
   }
 
   def delete(key: String) {
+    checkBlockWrites("delete", key)
     log.debug("delete -> q=%s", key)
     queues.delete(key)
   }
 
   def flushExpired(key: String) = {
+    checkBlockWrites("flushExpired", key)
     log.debug("flush_expired -> q=%s", key)
     queues.flushExpired(key)
+  }
+
+  private def withServerStatus[T](f: (ServerStatus) => T): T = {
+    serverStatus match {
+      case Some(s) => f(s)
+      case None => throw new ServerStatusNotConfiguredException
+    }
+  }
+
+  def safeCheckBlockReads: Boolean = serverStatus map { _.blockReads } getOrElse(false)
+
+  def checkBlockReads(op: String, key: String) {
+    if (safeCheckBlockReads) {
+      log.debug("Blocking %s on '%s' (sid %d, %s)", op, key, sessionId, clientDescription)
+      throw new AvailabilityException(op)
+    }
+  }
+
+  def checkBlockWrites(op: String, key: String) {
+    if (serverStatus map { _.blockWrites } getOrElse(false)) {
+      log.debug("Blocking %s on '%s' (sid %d, %s)", op, key, sessionId, clientDescription)
+      throw new AvailabilityException(op)
+    }
+  }
+
+  def currentStatus: String = {
+    log.debug("read status")
+    withServerStatus(_.status.toString)
+  }
+
+  def setStatus(status: String) {
+    log.debug("status to %s", status)
+    withServerStatus(_.setStatus(status))
+  }
+
+  def markQuiescecent() {
+    withServerStatus(_.markQuiescent)
+  }
+
+  def markReadOnly() {
+    withServerStatus(_.markReadOnly)
+  }
+
+  def markUp() {
+    withServerStatus(_.markUp)
   }
 
   def shutdown() {

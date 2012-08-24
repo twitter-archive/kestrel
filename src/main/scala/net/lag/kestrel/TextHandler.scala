@@ -103,12 +103,14 @@ case class StringResponse(message: String) extends TextResponse {
 class TextHandler(
   connection: ClientConnection,
   queueCollection: QueueCollection,
-  maxOpenReads: Int
+  maxOpenReads: Int,
+  serverStatus: Option[ServerStatus] = None
 ) extends Service[TextRequest, TextResponse] {
   val log = Logger.get(getClass)
 
   val sessionId = Kestrel.sessionId.incrementAndGet()
-  val handler = new KestrelHandler(queueCollection, maxOpenReads, clientDescription _, sessionId) with SimplePendingReads
+  val handler = new KestrelHandler(queueCollection, maxOpenReads, clientDescription _, sessionId,
+                                   serverStatus) with SimplePendingReads
   log.debug("New text session %d from %s", sessionId, clientDescription)
 
   protected def clientDescription: String = {
@@ -121,7 +123,16 @@ class TextHandler(
     super.release()
   }
 
-  def apply(request: TextRequest) = {
+  def apply(request: TextRequest): Future[TextResponse] = {
+    try {
+      handle(request)
+    } catch {
+      case e: AvailabilityException =>
+        Future(ErrorResponse(e.getMessage))
+    }
+  }
+
+  def handle(request: TextRequest): Future[TextResponse] = {
     request.command match {
       case "put" =>
         // put <queue> [expiry]:
@@ -222,6 +233,17 @@ class TextHandler(
         } else {
           handler.delete(request.args(0))
           Future(CountResponse(0))
+        }
+      case "status" =>
+        Future {
+          if (request.args.size < 1) {
+            StringResponse(handler.currentStatus.toUpperCase)
+          } else {
+            handler.setStatus(request.args(0))
+            CountResponse(0)
+          }
+        } rescue {
+          case e => Future(ErrorResponse(e.getMessage))
         }
       case "quit" =>
         connection.close()

@@ -27,10 +27,12 @@ import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{TempFolder, Time, Timer}
 import org.specs.Specification
 import org.specs.matcher.Matcher
+import org.specs.mock.{ClassMocker, JMocker}
 import config._
 
-class FakeKestrelHandler(queues: QueueCollection, maxOpenTransactions: Int)
-  extends KestrelHandler(queues, maxOpenTransactions, () => "none", 0) with SimplePendingReads
+class FakeKestrelHandler(queues: QueueCollection, maxOpenTransactions: Int,
+                         serverStatus: Option[ServerStatus] = None)
+  extends KestrelHandler(queues, maxOpenTransactions, () => "none", 0, serverStatus) with SimplePendingReads
 
 class ItemIdListSpec extends Specification with TestLogging {
   "ItemIdList" should {
@@ -62,7 +64,7 @@ class ItemIdListSpec extends Specification with TestLogging {
   }
 }
 
-class KestrelHandlerSpec extends Specification with TempFolder with TestLogging {
+class KestrelHandlerSpec extends Specification with JMocker with ClassMocker with TempFolder with TestLogging {
   val config = new QueueBuilder().apply()
 
   case class beString(expected: String) extends Matcher[Option[QItem]]() {
@@ -294,6 +296,37 @@ class KestrelHandlerSpec extends Specification with TempFolder with TestLogging 
           handler.closeAllReads("red") mustEqual 2
           handler.abortRead("red") mustEqual false
           handler.pendingReads.size("red") mustEqual 0
+        }
+      }
+    }
+
+    "manage server status" in {
+      "by updating server status, if configured" in {
+        withTempFolder {
+          queues = new QueueCollection(folderName, timer, scheduler, config, Nil, Nil)
+          val serverStatus = mock[ServerStatus]
+          val handler = new FakeKestrelHandler(queues, 10, Some(serverStatus))
+
+          expect {
+            one(serverStatus).markQuiescent()
+            one(serverStatus).status willReturn Quiescent
+            one(serverStatus).setStatus("ReadOnly")
+            one(serverStatus).markUp()
+          }
+
+          handler.markQuiescecent()
+          handler.currentStatus mustEqual "Quiescent"
+          handler.setStatus("ReadOnly")
+          handler.markUp()
+        }
+      }
+
+      "by throwing an exception if server status not configured" in {
+        withTempFolder {
+          queues = new QueueCollection(folderName, timer, scheduler, config, Nil, Nil)
+          val handler = new FakeKestrelHandler(queues, 10, None)
+
+          handler.markQuiescecent() must throwA[ServerStatusNotConfiguredException]
         }
       }
     }

@@ -34,12 +34,14 @@ import com.twitter.util.{Future, Duration, Time}
 class MemcacheHandler(
   connection: ClientConnection,
   queueCollection: QueueCollection,
-  maxOpenReads: Int
+  maxOpenReads: Int,
+  serverStatus: Option[ServerStatus] = None
 ) extends Service[MemcacheRequest, MemcacheResponse] {
   val log = Logger.get(getClass.getName)
 
   val sessionId = Kestrel.sessionId.incrementAndGet()
-  protected val handler = new KestrelHandler(queueCollection, maxOpenReads, clientDescription _, sessionId) with SimplePendingReads
+  val handler = new KestrelHandler(queueCollection, maxOpenReads, clientDescription _, sessionId,
+                                   serverStatus) with SimplePendingReads
   log.debug("New session %d from %s", sessionId, clientDescription)
 
   override def release() {
@@ -57,6 +59,15 @@ class MemcacheHandler(
   }
 
   final def apply(request: MemcacheRequest): Future[MemcacheResponse] = {
+    try {
+      handle(request)
+    } catch {
+      case e: AvailabilityException =>
+        Future(new MemcacheResponse("ERROR") then Codec.Disconnect)
+    }
+  }
+
+  private def handle(request: MemcacheRequest): Future[MemcacheResponse] = {
     request.line(0) match {
       case "get" | "gets" =>
         get(request.line(1))
@@ -113,6 +124,18 @@ class MemcacheHandler(
       case "flush_all_expired" =>
         val flushed = queueCollection.flushAllExpired()
         Future(new MemcacheResponse(flushed.toString))
+      case "status" =>
+        Future {
+          if (request.line.size == 1) {
+            new MemcacheResponse(handler.currentStatus.toString.toUpperCase)
+          } else {
+            handler.setStatus(request.line(1))
+            new MemcacheResponse("END")
+          }
+        } rescue {
+          case e: ServerStatusNotConfiguredException => Future(new MemcacheResponse("ERROR") then Codec.Disconnect)
+          case e => Future(new MemcacheResponse("CLIENT_ERROR") then Codec.Disconnect)
+        }
       case "version" =>
         Future(version())
       case "quit" =>

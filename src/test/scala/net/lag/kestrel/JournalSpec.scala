@@ -59,6 +59,44 @@ class JournalSpec extends Specification with TempFolder with TestLogging with Du
       }
     }
 
+    "identify valid queue names" in {
+      "simple" in {
+        withTempFolder {
+          new FileOutputStream(folderName + "/j1").close()
+          new FileOutputStream(folderName + "/j2").close()
+          Journal.getQueueNamesFromFolder(new File(folderName)) mustEqual Set("j1", "j2")
+        }
+      }
+
+      "handle queues with archived journals" in {
+        withTempFolder {
+          new FileOutputStream(folderName + "/j1").close()
+          new FileOutputStream(folderName + "/j1.1000").close()
+          new FileOutputStream(folderName + "/j1.2000").close()
+          new FileOutputStream(folderName + "/j2").close()
+          Journal.getQueueNamesFromFolder(new File(folderName)) mustEqual Set("j1", "j2")
+        }
+      }
+
+      "ignore queues with journals being packed" in {
+        withTempFolder {
+          new FileOutputStream(folderName + "/j1").close()
+          new FileOutputStream(folderName + "/j2").close()
+          new FileOutputStream(folderName + "/j2~~").close()
+          Journal.getQueueNamesFromFolder(new File(folderName)) mustEqual Set("j1", "j2")
+        }
+      }
+
+      "ignore subdirectories" in {
+        withTempFolder {
+          new FileOutputStream(folderName + "/j1").close()
+          new FileOutputStream(folderName + "/j2").close()
+          new File(folderName, "subdir").mkdirs()
+          Journal.getQueueNamesFromFolder(new File(folderName)) mustEqual Set("j1", "j2")
+        }
+      }
+    }
+
     "identify valid journal files" in {
       "simple" in {
         withTempFolder {

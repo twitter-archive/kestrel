@@ -50,9 +50,10 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
       name = "wx_updates"
       destinationQueues = List("weather_updates")
     }
-
+    val statusFile = new File(canonicalFolderName, ".status")
     kestrel = new Kestrel(defaultConfig, List(weatherUpdatesConfig), List(aliasWeatherUpdatesConfig),
-      "localhost", Some(PORT), None, None, canonicalFolderName, None, None, 1, None)
+      "localhost", Some(PORT), None, None, canonicalFolderName, None, None, 1, None, statusFile.getPath,
+      Up, 30.seconds, None)
     kestrel.start()
   }
 

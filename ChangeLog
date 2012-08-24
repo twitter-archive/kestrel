@@ -1,3 +1,11 @@
+2.4.0
+-----
+release: TBD
+
+- Server status: up, read-only, quiescent
+- Support for service discovery via ZooKeeper
+- Kestrel now ignores directories in its queue path.
+
 2.3.2
 -----
 release: 23 Aug 2012

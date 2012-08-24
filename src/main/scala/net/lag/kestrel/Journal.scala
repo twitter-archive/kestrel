@@ -503,7 +503,11 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
 
 object Journal {
   def getQueueNamesFromFolder(path: File): Set[String] = {
-    path.list().filter { name =>
+    path.listFiles().filter { file =>
+      !file.isDirectory()
+    }.map { file =>
+      file.getName
+    }.filter { name =>
       !(name contains "~~")
     }.map { name =>
       name.split('.')(0)

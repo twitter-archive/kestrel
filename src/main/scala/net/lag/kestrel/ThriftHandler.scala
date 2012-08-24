@@ -149,12 +149,14 @@ class ThriftHandler (
   connection: ClientConnection,
   queueCollection: QueueCollection,
   maxOpenReads: Int,
-  timer: Timer
+  timer: Timer,
+  serverStatus: Option[ServerStatus] = None
 ) extends thrift.Kestrel.FutureIface {
   val log = Logger.get(getClass.getName)
 
   val sessionId = Kestrel.sessionId.incrementAndGet()
-  val handler = new KestrelHandler(queueCollection, maxOpenReads, clientDescription _, sessionId) with ThriftPendingReads
+  val handler = new KestrelHandler(queueCollection, maxOpenReads, clientDescription _, sessionId,
+                                   serverStatus) with ThriftPendingReads
   log.debug("New thrift session %d from %s", sessionId, clientDescription)
 
   protected def clientDescription: String = {
@@ -236,6 +238,22 @@ class ThriftHandler (
   def deleteQueue(queueName: String): Future[Unit] = {
     handler.delete(queueName)
     Future.Unit
+  }
+
+  def currentStatus(): Future[thrift.Status] = {
+    Future(
+      handler.serverStatus map { _ =>
+        thrift.Status.valueOf(handler.currentStatus) match {
+          case Some(thriftStatus) => thriftStatus
+          case None => thrift.Status.NotConfigured // e.g., down
+        }
+      } getOrElse {
+        thrift.Status.NotConfigured
+      })
+  }
+
+  def setStatus(thriftStatus: thrift.Status): Future[Unit] = {
+    Future(handler.setStatus(thriftStatus.name))
   }
 
   def getVersion(): Future[String] = Future(Kestrel.runtime.jarVersion)

@@ -23,7 +23,6 @@ import com.twitter.ostrich.admin.RuntimeEnvironment
 import com.twitter.util.{Future, Promise, Time}
 import java.net.InetSocketAddress
 import org.jboss.netty.buffer.ChannelBuffers
-//import org.jboss.netty.channel._
 import org.specs.Specification
 import org.specs.mock.{ClassMocker, JMocker}
 
@@ -196,6 +195,49 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
 
       val textHandler = new TextHandler(connection, queueCollection, 10)
       textHandler(TextRequest("version", Nil, Nil))() must haveClass[StringResponse]
+    }
+
+    "status request" in {
+      "without server status" in {
+        expect {
+          one(connection).remoteAddress willReturn new InetSocketAddress("", 0)
+        }
+
+        val textHandler = new TextHandler(connection, queueCollection, 10)
+
+        "check status should return an error" in {
+          textHandler(TextRequest("status", Nil, Nil))() must haveClass[ErrorResponse]
+        }
+
+        "set status should return an error" in {
+          textHandler(TextRequest("status", List("UP"), Nil))() must haveClass[ErrorResponse]
+        }
+      }
+
+      "with server status" in {
+        val serverStatus = mock[ServerStatus]
+
+        expect {
+          one(connection).remoteAddress willReturn new InetSocketAddress("", 0)
+        }
+
+        val textHandler = new TextHandler(connection, queueCollection, 10, Some(serverStatus))
+
+        "check status should return current status" in {
+          expect {
+            one(serverStatus).status willReturn Up
+          }
+          textHandler(TextRequest("status", Nil, Nil))() mustEqual StringResponse("UP")
+        }
+
+        "set status should set current status" in {
+          expect {
+            one(serverStatus).setStatus("ReadOnly")
+          }
+
+          textHandler(TextRequest("status", List("ReadOnly"), Nil))() mustEqual CountResponse(0)
+        }
+      }
     }
 
     // FIXME: peek, monitor, confirm, flush, quit, shutdown, unknown

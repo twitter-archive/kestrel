@@ -1,0 +1,211 @@
+/*
+ * Copyright 2012 Twitter, Inc.
+ * Copyright 2012 Robey Pointer <robeypointer@gmail.com>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License. You may obtain
+ * a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package net.lag.kestrel
+
+import com.twitter.common.quantity.{Amount, Time}
+import com.twitter.common.zookeeper.{ServerSet, ServerSets, ZooKeeperClient, ZooKeeperUtils}
+import com.twitter.common.zookeeper.ServerSet.EndpointStatus
+import com.twitter.conversions.time._
+import com.twitter.logging.Logger
+import com.twitter.thrift.{Status => TStatus}
+import com.twitter.util.{Duration, Timer}
+import java.net.{InetAddress, InetSocketAddress}
+import scala.collection.JavaConversions
+import config.ZooKeeperConfig
+
+object ZooKeeperServerStatus {
+  /**
+   * Default mechanism for creating a ZooKeeperClient from kestrel's ZooKeeperConfig.
+   *
+   * If credentials are given, they are passed as digest credentials along with the configured session timeout
+   * and host/port. In the absence of credentials, an unauthorized connection is attempted.
+   */
+  def createClient(zkConfig: ZooKeeperConfig): ZooKeeperClient = {
+    val address = new InetSocketAddress(zkConfig.host, zkConfig.port)
+    val timeout = Amount.of(zkConfig.sessionTimeout.inMilliseconds.toInt, Time.MILLISECONDS)
+    zkConfig.credentials match {
+      case Some((username, password)) =>
+        val credentials = ZooKeeperClient.digestCredentials(username, password)
+        new ZooKeeperClient(timeout, credentials, address)
+      case None =>
+        new ZooKeeperClient(timeout, address)
+    }
+  }
+
+  /**
+   * Default mechanism for creating a ServerSet from kestrel's ZooKeeperConfig, a previously created
+   * ZooKeeperClient, and the node type (always "read" or "write").
+   *
+   * The ZooKeeper node is determined by taking the configured path prefix and appending a slash and
+   * the node type. The configured ACL is used to create the node. If the ACL is not OpenUnsafeACL,
+   * credentials must have been provided during creation of the ZooKeeperClient.
+   */
+  def createServerSet(zkConfig: ZooKeeperConfig, zkClient: ZooKeeperClient, nodeType: String): ServerSet = {
+    val node = "%s/%s".format(zkConfig.pathPrefix, nodeType)
+    ServerSets.create(zkClient, JavaConversions.asJavaIterable(zkConfig.acl.asList), node)
+  }
+
+  def statusToReadStatus(status: Status): TStatus =
+    status match {
+      case Down => TStatus.DEAD
+      case Quiescent => TStatus.DEAD
+      case ReadOnly => TStatus.ALIVE
+      case Up => TStatus.ALIVE
+    }
+
+  def statusToWriteStatus(status: Status): TStatus =
+    status match {
+      case Down => TStatus.DEAD
+      case Quiescent => TStatus.DEAD
+      case ReadOnly => TStatus.DEAD
+      case Up => TStatus.ALIVE
+    }
+}
+
+class ZooKeeperServerStatus(val zkConfig: ZooKeeperConfig, statusFile: String, timer: Timer,
+                            defaultStatus: Status = Quiescent,
+                            statusChangeGracePeriod: Duration = 30.seconds)
+extends ServerStatus(statusFile, timer, defaultStatus, statusChangeGracePeriod) {
+
+  import ZooKeeperServerStatus._
+
+  private val log = Logger.get(getClass.getName)
+
+  protected val zkClient: ZooKeeperClient =
+    zkConfig.clientInitializer.getOrElse(ZooKeeperServerStatus.createClient _)(zkConfig)
+
+  private var readEndpointStatus: Option[EndpointStatus] = None
+  private var writeEndpointStatus: Option[EndpointStatus] = None
+
+  override def shutdown() {
+    synchronized {
+      super.shutdown()
+
+      try {
+        updateWriteMembership(Down)
+      } catch { case e =>
+        log.error(e, "error updating write server set to Down on shutdown")
+      }
+      writeEndpointStatus = None
+
+      try {
+        updateReadMembership(Down)
+      } catch { case e =>
+        log.error(e, "error updating read server set to Down on shutdown")
+      }
+      readEndpointStatus = None
+
+      zkClient.close()
+    }
+  }
+
+  protected def createServerSet(nodeType: String): ServerSet = {
+    zkConfig.serverSetInitializer.getOrElse(ZooKeeperServerStatus.createServerSet _)(zkConfig,
+                                                                                     zkClient,
+                                                                                     nodeType)
+  }
+
+  private def join(nodeType: String,
+                   mainAddr: InetSocketAddress,
+                   endpoints: Map[String, InetSocketAddress],
+                   status: TStatus): Option[EndpointStatus] = {
+    try {
+      val set = createServerSet(nodeType)
+      val endpointStatus = set.join(mainAddr, JavaConversions.asJavaMap(endpoints), status)
+      Some(endpointStatus)
+    } catch { case e =>
+      // join will auto-retry the retryable set of errors -- anything we catch
+      // here is not retryable
+      log.error(e, "error joining %s server set for endpoint '%s'".format(nodeType, mainAddr))
+      throw e
+    }
+  }
+
+  override def addEndpoints(mainEndpoint: String, endpoints: Map[String, InetSocketAddress]) {
+    val externalEndpoints = endpoints.map { case (name, givenAddress) =>
+      val givenInetAddress = givenAddress.getAddress
+      val address =
+        if (givenInetAddress.isAnyLocalAddress || givenInetAddress.isLoopbackAddress) {
+          // wildcard (e.g., 0.0.0.0) loopback (e.g., 127.0.0.1) address: replace it
+          // with one external address for this machine
+          val external = InetAddress.getLocalHost.getHostAddress
+          new InetSocketAddress(external, givenAddress.getPort)
+        } else {
+          givenAddress
+        }
+      (name, address)
+    }
+
+    val mainAddress = externalEndpoints(mainEndpoint)
+
+    // reader first, then writer in case of some failure
+    val readStatus = statusToReadStatus(status)
+    readEndpointStatus = join("read", mainAddress, externalEndpoints, readStatus)
+    log.info("joined read server set with status '%s'".format(status))
+
+    val writeStatus = statusToWriteStatus(status)
+    writeEndpointStatus = join("write", mainAddress, externalEndpoints, writeStatus)
+    log.info("joined write server set with status '%s'".format(status))
+  }
+
+  override protected def proposeStatusChange(oldStatus: Status, newStatus: Status): Boolean = {
+    if (!super.proposeStatusChange(oldStatus, newStatus)) return false
+
+    if (newStatus stricterThan oldStatus) {
+      // e.g. Up -> ReadOnly: update zk first, then allow change
+      updateWriteMembership(newStatus)
+      updateReadMembership(newStatus)
+      true
+    } else {
+      // looser or same strictness; go ahead
+      true
+    }
+  }
+
+  override protected def statusChanged(oldStatus: Status, newStatus: Status, immediate: Boolean) {
+    if (oldStatus stricterThan newStatus) {
+      // looser or same strictness; update zk now
+      updateReadMembership(newStatus)
+      updateWriteMembership(newStatus)
+    }
+
+    super.statusChanged(oldStatus, newStatus, immediate)
+  }
+
+  private def updateWriteMembership(newStatus: Status) {
+    writeEndpointStatus match {
+      case Some(endpointStatus) =>
+        val writeStatus = statusToWriteStatus(newStatus)
+        endpointStatus.update(writeStatus)
+        log.info("updated write server set with status '%s'", writeStatus)
+      case None =>
+        ()
+    }
+  }
+
+  private def updateReadMembership(newStatus: Status) {
+    readEndpointStatus match {
+      case Some(endpointStatus) =>
+        val readStatus = statusToReadStatus(newStatus)
+        endpointStatus.update(readStatus)
+        log.info("updated read server set with status '%s'".format(readStatus))
+      case None =>
+        ()
+    }
+  }
+}

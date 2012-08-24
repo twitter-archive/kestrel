@@ -27,11 +27,11 @@ import com.twitter.finagle.util.{Timer => FinagleTimer}
 import com.twitter.logging.Logger
 import com.twitter.naggati.Codec
 import com.twitter.naggati.codec.{MemcacheResponse, MemcacheRequest, MemcacheCodec}
-import com.twitter.ostrich.admin.{PeriodicBackgroundProcess, RuntimeEnvironment, Service,
-  ServiceTracker}
+import com.twitter.ostrich.admin.{PeriodicBackgroundProcess, RuntimeEnvironment, Service, ServiceTracker}
 import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{Duration, Eval, Future, Time}
 import java.net.InetSocketAddress
+import java.util.Collections._
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicInteger
 import org.apache.thrift.protocol.TBinaryProtocol
@@ -43,7 +43,9 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
               listenAddress: String, memcacheListenPort: Option[Int], textListenPort: Option[Int],
               thriftListenPort: Option[Int], queuePath: String,
               expirationTimerFrequency: Option[Duration], clientTimeout: Option[Duration],
-              maxOpenTransactions: Int, connectionBacklog: Option[Int])
+              maxOpenTransactions: Int, connectionBacklog: Option[Int], statusFile: String,
+              defaultStatus: Status, statusChangeGracePeriod: Duration,
+              zkConfig: Option[ZooKeeperConfig])
       extends Service {
   private val log = Logger.get(getClass.getName)
 
@@ -54,6 +56,8 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
   var textService: Option[Server] = None
   var thriftService: Option[Server] = None
   var expirationBackgroundProcess: Option[PeriodicBackgroundProcess] = None
+
+  var serverStatus: ServerStatus = null
 
   def thriftCodec = ThriftServerFramedCodec()
 
@@ -82,7 +86,8 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
 
   def startThriftServer(
     name: String,
-    port: Int
+    port: Int,
+    fTimer: FinagleTimer
   ): Server = {
     val address = new InetSocketAddress(listenAddress, port)
     var builder = ServerBuilder()
@@ -94,8 +99,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
     clientTimeout.foreach { timeout => builder = builder.readTimeout(timeout) }
     // calling build() is equivalent to calling start() in finagle.
     builder.build(connection => {
-      val handler = new ThriftHandler(connection, queueCollection, maxOpenTransactions,
-        new FinagleTimer(timer))
+      val handler = new ThriftHandler(connection, queueCollection, maxOpenTransactions, fTimer, Some(serverStatus))
       new ThriftFinagledService(handler, new TBinaryProtocol.Factory())
     })
   }
@@ -110,9 +114,11 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
 
   def start() {
     log.info("Kestrel config: listenAddress=%s memcachePort=%s textPort=%s queuePath=%s " +
-             "expirationTimerFrequency=%s clientTimeout=%s maxOpenTransactions=%d connectionBacklog=%s",
+             "expirationTimerFrequency=%s clientTimeout=%s maxOpenTransactions=%d connectionBacklog=%s " +
+             "statusFile=%s defaultStatus=%s statusChangeGracePeriod=%s zookeeper=<%s>",
              listenAddress, memcacheListenPort, textListenPort, queuePath,
-             expirationTimerFrequency, clientTimeout, maxOpenTransactions, connectionBacklog)
+             expirationTimerFrequency, clientTimeout, maxOpenTransactions, connectionBacklog,
+             statusFile, defaultStatus, statusChangeGracePeriod, zkConfig)
 
     Stats.setLabel("version", Kestrel.runtime.jarVersion)
 
@@ -129,8 +135,9 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
           }
         })
 
+    val finagleTimer = new FinagleTimer(timer)
     try {
-      queueCollection = new QueueCollection(queuePath, new FinagleTimer(timer), journalSyncScheduler,
+      queueCollection = new QueueCollection(queuePath, finagleTimer, journalSyncScheduler,
         defaultQueueConfig, builders, aliases)
       queueCollection.loadQueues()
     } catch {
@@ -143,13 +150,22 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
     Stats.addGauge("bytes") { queueCollection.currentBytes.toDouble }
     Stats.addGauge("reserved_memory_ratio") { queueCollection.reservedMemoryRatio }
 
+    serverStatus =
+      zkConfig.map { cfg =>
+        new ZooKeeperServerStatus(cfg, statusFile, finagleTimer, defaultStatus,
+                                  statusChangeGracePeriod)
+      } getOrElse {
+        new ServerStatus(statusFile, finagleTimer, defaultStatus, statusChangeGracePeriod)
+      }
+    serverStatus.start()
+
     // finagle setup:
     val memcachePipelineFactoryCodec = finagledCodec[MemcacheRequest, MemcacheResponse] {
       MemcacheCodec.asciiCodec(bytesRead, bytesWritten)
     }
     memcacheService = memcacheListenPort.map { port =>
       startFinagleServer("kestrel-memcache", port, memcachePipelineFactoryCodec) { connection =>
-        new MemcacheHandler(connection, queueCollection, maxOpenTransactions)
+        new MemcacheHandler(connection, queueCollection, maxOpenTransactions, Some(serverStatus))
       }
     }
 
@@ -158,11 +174,13 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
     }
     textService = textListenPort.map { port =>
       startFinagleServer("kestrel-text", port, textPipelineFactory) { connection =>
-        new TextHandler(connection, queueCollection, maxOpenTransactions)
+        new TextHandler(connection, queueCollection, maxOpenTransactions, Some(serverStatus))
       }
     }
 
-    thriftService = thriftListenPort.map { port => startThriftServer("kestrel-thrift", port) }
+    thriftService = thriftListenPort.map { port =>
+      startThriftServer("kestrel-thrift", port, finagleTimer)
+    }
 
     // optionally, start a periodic timer to clean out expired items.
     expirationBackgroundProcess = expirationTimerFrequency.map { period =>
@@ -180,6 +198,21 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
       }
       proc.start()
       proc
+    }
+
+    // Order is important: the main endpoint published in zookeeper is the
+    // first configured protocol in the list: memcache, thrift, text.
+    val endpoints =
+      memcacheService.map { s => "memcache" -> s.localAddress } ++
+      thriftService.map { s => "thrift" -> s.localAddress } ++
+      textService.map { s => "text" -> s.localAddress }
+    if (endpoints.nonEmpty) {
+      val mainEndpoint = endpoints.head._1
+      val inetEndpoints =
+        endpoints.map { case (name, addr) => (name, addr.asInstanceOf[InetSocketAddress]) }
+      serverStatus.addEndpoints(mainEndpoint, inetEndpoints.toMap)
+    } else {
+      log.error("No protocols configured; set a listener port for at least one protocol.")
     }
   }
 

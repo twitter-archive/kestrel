@@ -28,8 +28,9 @@ object Kestrel extends Build {
       "com.twitter" %% "finagle-core" % finagleVersion,
       "com.twitter" %% "finagle-ostrich4" % finagleVersion,
       "com.twitter" %% "finagle-thrift" % finagleVersion, // override scrooge's version
-      "org.jboss.netty" % "netty" % "3.2.6.Final",
+      "commons-codec" % "commons-codec" % "1.6", // override scrooge/util-codec's version
       "com.twitter" %% "scrooge-runtime" % "1.1.3",
+      "com.twitter.common.zookeeper" % "server-set" % "1.0.14",
 
       // for tests only:
       "org.scala-tools.testing" %% "specs" % "1.6.9" % "test",
