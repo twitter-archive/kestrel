@@ -18,14 +18,14 @@ object Kestrel extends Build {
     name := "kestrel_loadtest",
     organization := "net.lag",
     version := "1.0.0-SNAPSHOT",
-    scalaVersion := "2.8.1",
+    scalaVersion := "2.9.2",
 
     libraryDependencies ++= Seq(
-      "com.twitter" % "iago" % "0.4.7",
-      "com.twitter" %% "scrooge-runtime" % "1.1.3"
+      "com.twitter" % "iago" % "0.5.2",
+      "com.twitter" %% "scrooge-runtime" % "3.0.1"
     ),
 
-    CompileThriftScrooge.scroogeVersion := "1.1.7",
+    CompileThriftScrooge.scroogeVersion := "3.0.1",
     PackageDist.packageDistConfigFilesValidationRegex := None,
     publishArtifact in Test := true,
 
