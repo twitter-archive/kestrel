@@ -220,7 +220,7 @@ parser = OptionParser.new do |opts|
   opts.on("-f", "--file=FILENAME", "load kestrel server list from file (use '-' for stdin) (default: #{$options[:config_filename]})") do |filename|
     $options[:config_filename] = filename
   end
-  opts.on("-h", "--host=HOSTNAME", "use a specific server") do |singlehost|
+  opts.on("-H", "--host=HOSTNAME", "use a specific server") do |singlehost|
     $options[:singlehost] = singlehost
   end
   opts.on("-m", "--memcache-port=N", "use memcache port (default: #{$options[:memcache_port]})") do |memcacheport|
