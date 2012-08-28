@@ -46,7 +46,7 @@ end
 def fetch_stats(hostname, port, data)
   verbose "--- Fetching stats from #{hostname}:#{port}"
   begin
-    stats = JSON.parse Net::HTTP.get URI.parse("http://#{hostname}:#{port}/stats.json?period=60")
+    stats = JSON.parse Net::HTTP.get URI.parse("http://#{hostname}:#{port}/stats.json?period=5")
   rescue
     puts "WARNING: Unable to fetch stats for #{hostname}:#{port}"
     return
