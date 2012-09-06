@@ -4,11 +4,7 @@ import org.specs.Specification
 
 class ItemIdListSpec extends Specification {
   "ItemIdList" should {
-    var iil = new ItemIdList()
-
-    doBefore {
-      iil = new ItemIdList()
-    }
+    val iil = new ItemIdList()
 
     "add an Integer to the list" in {
       iil.add(3)
@@ -40,7 +36,7 @@ class ItemIdListSpec extends Specification {
     "pop all items from the list" in {
       val seq = Seq(12, 13, 14)
       iil.add(seq)
-      seq mustEqual iil.popAll()
+      iil.popAll() mustEqual seq
     }
 
     "return empty seq when pop's count is invalid" in {
@@ -50,7 +46,7 @@ class ItemIdListSpec extends Specification {
     "remove a set of items from the list" in {
       iil.add(Seq(19, 7, 20, 22))
       val expected = Set(7, 20, 22)
-      expected mustEqual iil.remove(expected)
+      iil.remove(expected) mustEqual expected
     }
   }
 }
