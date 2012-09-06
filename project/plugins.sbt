@@ -23,4 +23,3 @@ addSbtPlugin("com.twitter" %% "sbt-package-dist" % "1.0.5")
 
 addSbtPlugin("com.twitter" %% "sbt11-scrooge" % "1.0.0")
 
-addSbtPlugin("org.ensime" %% "ensime-sbt-cmd" % "0.0.10")
