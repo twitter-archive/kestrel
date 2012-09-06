@@ -48,5 +48,28 @@ class ItemIdListSpec extends Specification {
       val expected = Set(7, 20, 22)
       iil.remove(expected) mustEqual expected
     }
+
+    "add and pop" in {
+      iil.add(Seq(5, 4))
+      iil.size mustEqual 2
+      iil.pop() mustEqual Some(5)
+      iil.pop() mustEqual Some(4)
+      iil.pop() mustEqual None
+    }
+
+    "remove from the middle" in {
+      iil.add(Seq(7, 6, 5, 4, 3, 2))
+      iil.pop() mustEqual Some(7)
+      iil.remove(Set(5, 4, 2)) mustEqual Set(5, 4, 2)
+      iil.popAll() mustEqual Seq(6, 3)
+    }
+
+    "remove and pop combined" in {
+      iil.add(Seq(7, 6, 5, 4, 3, 2))
+      iil.remove(Set(6)) mustEqual Set(6)
+      iil.pop() mustEqual Some(7)
+      iil.pop() mustEqual Some(5)
+      iil.popAll() mustEqual Seq(4, 3, 2)
+    }
   }
 }
