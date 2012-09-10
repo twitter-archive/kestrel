@@ -23,6 +23,7 @@ import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{Duration, FutureTask, Timer, TimerTask}
 import java.io._
 import java.net.InetSocketAddress
+import java.util.concurrent.atomic.AtomicBoolean
 
 abstract sealed class Status(val strictness: Int) {
   def stricterThan(that: Status) = (this.strictness - that.strictness) > 0
@@ -64,6 +65,7 @@ object Status {
 
 class ForbiddenStatusException extends Exception("Status forbidden.")
 class UnknownStatusException extends Exception("Unknown status.")
+class AlreadyStartedException extends Exception("Already started.")
 
 class ServerStatus(val statusFile: String, val timer: Timer, val defaultStatus: Status = Quiescent,
                    val statusChangeGracePeriod: Duration = 30.seconds) {
@@ -77,7 +79,13 @@ class ServerStatus(val statusFile: String, val timer: Timer, val defaultStatus: 
   private val statusStore = new File(statusFile)
   if (!statusStore.getParentFile.isDirectory) statusStore.getParentFile.mkdirs()
 
-  private[this] val startTask = new FutureTask {
+  private[this] val started = new AtomicBoolean(false)
+
+  def start() {
+    if (!started.compareAndSet(false, true)) {
+      throw new AlreadyStartedException
+    }
+
     loadStatus()
 
     Stats.addGauge("status/readable") {
@@ -87,10 +95,6 @@ class ServerStatus(val statusFile: String, val timer: Timer, val defaultStatus: 
     Stats.addGauge("status/writeable") {
       if (status.blocksWrites) 0.0 else 1.0
     }
-  }
-
-  def start() {
-    startTask.run()
   }
 
   def addEndpoints(mainEndpoint: String, endpoints: Map[String, InetSocketAddress]) { }
