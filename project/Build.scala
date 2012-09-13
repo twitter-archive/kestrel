@@ -30,7 +30,7 @@ object Kestrel extends Build {
       "com.twitter" %% "finagle-thrift" % finagleVersion, // override scrooge's version
       "commons-codec" % "commons-codec" % "1.6", // override scrooge/util-codec's version
       "com.twitter" %% "scrooge-runtime" % "1.1.3",
-      "com.twitter.common.zookeeper" % "server-set" % "1.0.14",
+      "com.twitter.common.zookeeper" % "server-set" % "1.0.15",
 
       // for tests only:
       "org.scala-tools.testing" %% "specs" % "1.6.9" % "test",

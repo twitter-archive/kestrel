@@ -17,7 +17,7 @@
 
 package net.lag.kestrel
 
-import com.twitter.common.zookeeper.{ServerSet, ZooKeeperClient}
+import com.twitter.common.zookeeper.{Group, ServerSet, ZooKeeperClient}
 import com.twitter.common.zookeeper.ServerSet.EndpointStatus
 import com.twitter.conversions.time._
 import com.twitter.logging.TestLogging
@@ -28,14 +28,15 @@ import java.net.{InetAddress, InetSocketAddress}
 import org.specs.Specification
 import org.specs.mock.{ClassMocker, JMocker}
 import scala.collection.JavaConversions
+import scala.collection.mutable.Queue
 import config._
 
 class ZooKeeperServerStatusSpec extends Specification with JMocker with ClassMocker with TempFolder
 with TestLogging {
   val mockZKClient = mock[ZooKeeperClient]
   val mockZKServerSets = Map(
-    "/kestrel/read"  -> mock[ServerSet],
-    "/kestrel/write" -> mock[ServerSet]
+    "/kestrel/read"  -> Queue[ServerSet](),
+    "/kestrel/write" -> Queue[ServerSet]()
   )
   var mockTimer: MockTimer = null
 
@@ -43,6 +44,12 @@ with TestLogging {
   val thriftAddr = new InetSocketAddress("10.1.2.3", 2229)
 
   def statusFile = canonicalFolderName + "/state"
+
+  def nextMockZKServerSet(nodeType: String): ServerSet = {
+    val mockServerSet = mock[ServerSet]
+    mockZKServerSets("/kestrel/" + nodeType).enqueue(mockServerSet)
+    mockServerSet
+  }
 
   def makeZooKeeperServerStatus(): ZooKeeperServerStatus = {
     val zkConfig = new ZooKeeperBuilder {
@@ -55,7 +62,7 @@ with TestLogging {
       override protected val zkClient = mockZKClient
 
       override protected def createServerSet(nodeType: String) = {
-        mockZKServerSets("/kestrel/" + nodeType)
+        mockZKServerSets("/kestrel/" + nodeType).dequeue
       }
     }
     serverStatus.start()
@@ -70,19 +77,41 @@ with TestLogging {
     val readStatus = mock[EndpointStatus]
     val writeStatus = mock[EndpointStatus]
 
-    val sockets = memcache.map { a => "memcache" -> a } ++
-                  thrift.map { a => "thrift" -> a } ++
-                  text.map { a => "text" -> a }
-    val addr = sockets.head._2
-    val endpoints = JavaConversions.asJavaMap(sockets.toMap)
-
     expect {
-      one(mockZKServerSets("/kestrel/read")).join(addr, endpoints, initialStatus) willReturn readStatus
-      one(mockZKServerSets("/kestrel/write")).join(addr, endpoints, initialStatus) willReturn writeStatus
+      initialJoin("read", memcache, thrift, text, initialStatus) willReturn readStatus
+      initialJoin("write", memcache, thrift, text, initialStatus) willReturn writeStatus
     }
+
     (readStatus, writeStatus)
   }
 
+  def endpoints(memcache: Option[InetSocketAddress],
+                thrift: Option[InetSocketAddress],
+                text: Option[InetSocketAddress]) = {
+    val sockets = memcache.map { a => "memcache" -> a } ++
+                    thrift.map { a => "thrift" -> a } ++
+                    text.map { a => "text" -> a }
+    (sockets.head._2, sockets.toMap)
+  }
+
+  def initialJoin(nodeType: String,
+                  memcache: Option[InetSocketAddress],
+                  thrift: Option[InetSocketAddress] = None,
+                  text: Option[InetSocketAddress] = None,
+                  initialStatus: TStatus = TStatus.DEAD) = {
+    val (main, eps) = endpoints(memcache, thrift, text)
+
+    one(nextMockZKServerSet(nodeType)).join(main, JavaConversions.asJavaMap(eps), initialStatus)
+  }
+
+  def rejoin(nodeType: String,
+             memcache: Option[InetSocketAddress],
+             thrift: Option[InetSocketAddress] = None,
+             text: Option[InetSocketAddress] = None) = {
+    val (main, eps) = endpoints(memcache, thrift, text)
+
+    one(nextMockZKServerSet(nodeType)).join(main, JavaConversions.asJavaMap(eps), TStatus.ALIVE)
+  }
 
   def withZooKeeperServerStatus(f: (ZooKeeperServerStatus, TimeControl) => Unit) {
     withTempFolder {
@@ -141,32 +170,32 @@ with TestLogging {
           serverStatus.addEndpoints("memcache", Map("memcache" -> memcacheAddr))
 
           expect {
-            one(readStatus).update(TStatus.ALIVE) willThrow new ServerSet.UpdateException("boom")
+            rejoin("read", Some(memcacheAddr)) willThrow new Group.JoinException("boom", new Exception)
           }
 
-          serverStatus.markUp() must throwA[ServerSet.UpdateException]
+          serverStatus.markUp() must throwA[Group.JoinException]
           storedStatus() mustEqual "Quiescent"
         }
       }
     }
 
     "server set memberships" in {
-      "update all existing endpoints when status changes" in {
+      "rejoin all existing serversets when status changes from dead to alive" in {
         withZooKeeperServerStatus { (serverStatus, _) =>
           val (readStatus, writeStatus) = expectInitialEndpointStatus(Some(memcacheAddr), Some(thriftAddr))
 
           serverStatus.addEndpoints("memcache", Map("memcache" -> memcacheAddr, "thrift" -> thriftAddr))
 
           expect {
-            one(writeStatus).update(TStatus.ALIVE)
-            one(readStatus).update(TStatus.ALIVE)
+            rejoin("write", Some(memcacheAddr), Some(thriftAddr)) willReturn mock[EndpointStatus]
+            rejoin("read", Some(memcacheAddr), Some(thriftAddr)) willReturn mock[EndpointStatus]
           }
 
           serverStatus.markUp()
         }
       }
 
-      "update newly added endpoints to the current status" in {
+      "join serversets with newly added endpoints with the current status" in {
         withZooKeeperServerStatus { (serverStatus, _) =>
           serverStatus.markUp()
 
@@ -176,6 +205,51 @@ with TestLogging {
           serverStatus.addEndpoints("memcache", Map("memcache" -> memcacheAddr, "thrift" -> thriftAddr))
         }
       }
+
+      "update all existing serversets when status changes from alive to dead" in {
+        withZooKeeperServerStatus { (serverStatus, _) =>
+          serverStatus.markUp()
+
+          val (readStatus, writeStatus) =
+            expectInitialEndpointStatus(Some(memcacheAddr), Some(thriftAddr), initialStatus = TStatus.ALIVE)
+
+          serverStatus.addEndpoints("memcache", Map("memcache" -> memcacheAddr, "thrift" -> thriftAddr))
+
+          expect {
+            one(writeStatus).update(TStatus.DEAD)
+            one(readStatus).update(TStatus.DEAD)
+          }
+
+          serverStatus.markQuiescent()
+        }
+      }
+
+      "skip updating with unchanged status" in {
+        withZooKeeperServerStatus { (serverStatus, tc) =>
+          serverStatus.markUp()
+
+          val (readStatus, writeStatus) =
+            expectInitialEndpointStatus(Some(memcacheAddr), Some(thriftAddr), initialStatus = TStatus.ALIVE)
+
+          serverStatus.addEndpoints("memcache", Map("memcache" -> memcacheAddr, "thrift" -> thriftAddr))
+
+          expect {
+            one(writeStatus).update(TStatus.DEAD)
+          }
+
+          serverStatus.markReadOnly()
+
+          tc.advance(31.seconds)
+          mockTimer.tick()
+
+          expect {
+            one(readStatus).update(TStatus.DEAD)
+          }
+
+          serverStatus.markQuiescent()
+        }
+      }
+
     }
 
     "adding endpoints" in {

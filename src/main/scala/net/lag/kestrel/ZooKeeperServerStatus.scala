@@ -77,6 +77,8 @@ object ZooKeeperServerStatus {
     }
 }
 
+class EndpointsAlreadyConfigured extends Exception
+
 class ZooKeeperServerStatus(val zkConfig: ZooKeeperConfig, statusFile: String, timer: Timer,
                             defaultStatus: Status = Quiescent,
                             statusChangeGracePeriod: Duration = 30.seconds)
@@ -89,6 +91,9 @@ extends ServerStatus(statusFile, timer, defaultStatus, statusChangeGracePeriod) 
   protected val zkClient: ZooKeeperClient =
     zkConfig.clientInitializer.getOrElse(ZooKeeperServerStatus.createClient _)(zkConfig)
 
+  private var mainAddress: InetSocketAddress = null
+  private var externalEndpoints: Map[String, InetSocketAddress] = null
+
   private var readEndpointStatus: Option[EndpointStatus] = None
   private var writeEndpointStatus: Option[EndpointStatus] = None
 
@@ -97,14 +102,14 @@ extends ServerStatus(statusFile, timer, defaultStatus, statusChangeGracePeriod) 
       super.shutdown()
 
       try {
-        updateWriteMembership(Down)
+        updateWriteMembership(Down, status)
       } catch { case e =>
         log.error(e, "error updating write server set to Down on shutdown")
       }
       writeEndpointStatus = None
 
       try {
-        updateReadMembership(Down)
+        updateReadMembership(Down, status)
       } catch { case e =>
         log.error(e, "error updating read server set to Down on shutdown")
       }
@@ -120,24 +125,23 @@ extends ServerStatus(statusFile, timer, defaultStatus, statusChangeGracePeriod) 
                                                                                      nodeType)
   }
 
-  private def join(nodeType: String,
-                   mainAddr: InetSocketAddress,
-                   endpoints: Map[String, InetSocketAddress],
-                   status: TStatus): Option[EndpointStatus] = {
+  private def join(nodeType: String, status: TStatus): Option[EndpointStatus] = {
     try {
       val set = createServerSet(nodeType)
-      val endpointStatus = set.join(mainAddr, JavaConversions.asJavaMap(endpoints), status)
+      val endpointStatus = set.join(mainAddress, JavaConversions.asJavaMap(externalEndpoints), status)
       Some(endpointStatus)
     } catch { case e =>
       // join will auto-retry the retryable set of errors -- anything we catch
       // here is not retryable
-      log.error(e, "error joining %s server set for endpoint '%s'".format(nodeType, mainAddr))
+      log.error(e, "error joining %s server set for endpoint '%s'".format(nodeType, mainAddress))
       throw e
     }
   }
 
   override def addEndpoints(mainEndpoint: String, endpoints: Map[String, InetSocketAddress]) {
-    val externalEndpoints = endpoints.map { case (name, givenAddress) =>
+    if (externalEndpoints ne null) throw new EndpointsAlreadyConfigured
+
+    externalEndpoints = endpoints.map { case (name, givenAddress) =>
       val givenInetAddress = givenAddress.getAddress
       val address =
         if (givenInetAddress.isAnyLocalAddress || givenInetAddress.isLoopbackAddress) {
@@ -151,15 +155,13 @@ extends ServerStatus(statusFile, timer, defaultStatus, statusChangeGracePeriod) 
       (name, address)
     }
 
-    val mainAddress = externalEndpoints(mainEndpoint)
+    mainAddress = externalEndpoints(mainEndpoint)
 
     // reader first, then writer in case of some failure
-    val readStatus = statusToReadStatus(status)
-    readEndpointStatus = join("read", mainAddress, externalEndpoints, readStatus)
+    readEndpointStatus = join("read", statusToReadStatus(status))
     log.info("joined read server set with status '%s'".format(status))
 
-    val writeStatus = statusToWriteStatus(status)
-    writeEndpointStatus = join("write", mainAddress, externalEndpoints, writeStatus)
+    writeEndpointStatus = join("write", statusToWriteStatus(status))
     log.info("joined write server set with status '%s'".format(status))
   }
 
@@ -168,8 +170,8 @@ extends ServerStatus(statusFile, timer, defaultStatus, statusChangeGracePeriod) 
 
     if (newStatus stricterThan oldStatus) {
       // e.g. Up -> ReadOnly: update zk first, then allow change
-      updateWriteMembership(newStatus)
-      updateReadMembership(newStatus)
+      updateWriteMembership(newStatus, oldStatus)
+      updateReadMembership(newStatus, oldStatus)
       true
     } else {
       // looser or same strictness; go ahead
@@ -180,32 +182,46 @@ extends ServerStatus(statusFile, timer, defaultStatus, statusChangeGracePeriod) 
   override protected def statusChanged(oldStatus: Status, newStatus: Status, immediate: Boolean) {
     if (oldStatus stricterThan newStatus) {
       // looser or same strictness; update zk now
-      updateReadMembership(newStatus)
-      updateWriteMembership(newStatus)
+      updateReadMembership(newStatus, oldStatus)
+      updateWriteMembership(newStatus, oldStatus)
     }
 
     super.statusChanged(oldStatus, newStatus, immediate)
   }
 
-  private def updateWriteMembership(newStatus: Status) {
-    writeEndpointStatus match {
-      case Some(endpointStatus) =>
-        val writeStatus = statusToWriteStatus(newStatus)
-        endpointStatus.update(writeStatus)
-        log.info("updated write server set with status '%s'", writeStatus)
-      case None =>
-        ()
+  private def updateWriteMembership(newStatus: Status, oldStatus: Status) {
+    val oldWriteStatus = statusToWriteStatus(oldStatus)
+    val writeStatus = statusToWriteStatus(newStatus)
+    if (oldWriteStatus != writeStatus) {
+      writeEndpointStatus match {
+        case Some(endpointStatus) if oldWriteStatus != TStatus.DEAD =>
+          endpointStatus.update(writeStatus)
+          log.info("updated write server set with status '%s'", writeStatus)
+        case Some(endpointStatus) =>
+          // cannot go from dead back to alive; so re-join
+          writeEndpointStatus = join("write", writeStatus)
+          log.info("re-joined write server set with status '%s'".format(status))
+        case None =>
+          ()
+      }
     }
   }
 
-  private def updateReadMembership(newStatus: Status) {
-    readEndpointStatus match {
-      case Some(endpointStatus) =>
-        val readStatus = statusToReadStatus(newStatus)
-        endpointStatus.update(readStatus)
-        log.info("updated read server set with status '%s'".format(readStatus))
-      case None =>
-        ()
+  private def updateReadMembership(newStatus: Status, oldStatus: Status) {
+    val oldReadStatus = statusToReadStatus(oldStatus)
+    val readStatus = statusToReadStatus(newStatus)
+    if (oldReadStatus != readStatus) {
+      readEndpointStatus match {
+        case Some(endpointStatus) if oldReadStatus != TStatus.DEAD =>
+          endpointStatus.update(readStatus)
+          log.info("updated read server set with status '%s'".format(readStatus))
+        case Some(endpointStatus) =>
+          // cannot go from dead back to alive; so re-join
+          readEndpointStatus = join("read", readStatus)
+          log.info("re-joined read server set with status '%s'".format(status))
+        case None =>
+          ()
+      }
     }
   }
 }
