@@ -13,9 +13,11 @@ $colony_port = ENV["COLONY_PORT"] || 9080
 
 $options = {
   :config_filename => ENV['HOME'] + "/.kestrel_cluster",
+  :count => 0,
   :datacenter => 'smf1',
   :server_list => [],
   :port => 2223,
+  :reverse => false,
   :memcache_port => 22133,
   :verbose => false,
 }
@@ -101,7 +103,12 @@ end
 
 def sort_data(data)
   rv = {}
-  data.each { |key, v| rv[key] = v.sort_by { |h| [ h[1], h[0] ] } }
+  data.each { |key, v|
+    rv[key] = v.sort_by { |h| [ h[1], h[0] ] }
+    if($options[:reverse])
+      rv[key].reverse!
+    end
+  }
   rv
 end
 
@@ -110,11 +117,19 @@ def report(data, key)
   format = "%14s %s\n"
   printf(format, key, "queue")
   printf(format, "============", "====================")
+
   stats = data[key] || {}
-  stats.each { |queue, value| printf("%14d %s\n", value, queue) }
+
+  limit = stats.length
+  if ($options[:count] > 0)
+    limit = $options[:count]
+  end
+
+  stats[0..limit].each { |queue, value| printf("%14d %s\n", value, queue) }
 end
 
 def report_all(data, keys)
+
   keys.each { |key| report(data, key) }
   puts ""
 end
@@ -214,6 +229,9 @@ parser = OptionParser.new do |opts|
   opts.banner = "Usage: #{$0} [options] <command>"
   opts.separator "Example: #{$0} -f kestrel max_age"
 
+  opts.on("-c", "--count=N", "show only the top N items for the specified command (e.g. the top 10 queues by item count)") do |count|
+    $options[:count] = count.to_i
+  end
   opts.on("-D", "--datacenter=DC", "use the specified datacenter (default: #{$options[:datacenter]}") do |datacenter|
     $options[:datacenter] = datacenter
   end
@@ -237,6 +255,9 @@ parser = OptionParser.new do |opts|
   end
   opts.on("-F", "--rollup-fanouts", "roll up stats for fanout queues into a single count") do
     $options[:rollup_fanouts] = true
+  end
+  opts.on("-R", "--reverse", "reverse sort order, showing biggest items first") do |reverse|
+    $options[:reverse] = true
   end
   opts.on("-s", "--script-mode", "eliminates the interactive prompt when deleting or flushing queues") do
     $options[:scriptmode] = true
