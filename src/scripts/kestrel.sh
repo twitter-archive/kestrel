@@ -113,8 +113,8 @@ case "$1" in
       tries=$((tries + 1))
       if [ $tries -ge 15 ]; then
         echo "FAILED SOFT SHUTDOWN, TRYING HARDER"
-        if [ -f $pidfile ]; then
-          kill $(cat $pidfile)
+        if [ -f $daemon_pidfile ]; then
+          kill $(cat $daemon_pidfile)
         else
           echo "CAN'T FIND PID, TRY KILL MANUALLY"
           exit 1
@@ -124,7 +124,7 @@ case "$1" in
           hardtries=$((hardtries + 1))
           if [ $hardtries -ge 5 ]; then
             echo "FAILED HARD SHUTDOWN, TRY KILL -9 MANUALLY"
-            kill -9 $(cat $pidfile)
+            kill -9 $(cat $daemon_pidfile)
           fi
           sleep 1
         done
