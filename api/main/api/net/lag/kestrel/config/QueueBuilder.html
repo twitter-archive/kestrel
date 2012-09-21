@@ -24,13 +24,29 @@
       <span class="symbol"> 
         <span class="name">QueueBuilder</span>
         
-        <span class="result"> extends <span name="com.twitter.util.Config" class="extype">Config</span>[<a name="net.lag.kestrel.config.QueueConfig" class="extype" href="QueueConfig.html">QueueConfig</a>]</span>
+        <span class="result"> extends AnyRef</span>
       </span>
       </h4>
       
-          <div class="fullcommenttop" id="comment"><div class="toggleContainer block">
+          <div class="fullcommenttop" id="comment"><div class="comment cmt"><p>QueueBuilder produces QueueConfig objects and can resolve the QueueConfig against
+a parent QueueConfig, inheriting the parent's values wherever the QueueBuilder's
+defaults are left unmodified. The default queue (see KestrelConfig) inherits
+exclusively from the defaults in QueueBuilder. Master queues inherit from the
+default queue. Fanout queues inherit from their master queue.</p><p>When constructing a QueueBuilder, values may be overridden as follows:
+<code>
+  import com.twitter.conversions.time._
+
+  new QueueBuilder() {
+    name = "the_queue_name"
+    maxItems = 100
+    maxAge = 1.day
+  }
+</code></p><p>Objects are implicitly converted into SpecifiedValue instances. In the case of
+<code>maxAge</code> the Duration is also wrapped in an option (e.g.,
+<code>Some(1.day)</code>).
+</p></div><div class="toggleContainer block">
           <span class="toggle">Linear Supertypes</span>
-          <div class="superTypes hiddenContent"><span name="com.twitter.util.Config" class="extype">Config</span>[<a name="net.lag.kestrel.config.QueueConfig" class="extype" href="QueueConfig.html">QueueConfig</a>], () ⇒ <a name="net.lag.kestrel.config.QueueConfig" class="extype" href="QueueConfig.html">QueueConfig</a>, AnyRef, <span name="scala.Any" class="extype">Any</span></div>
+          <div class="superTypes hiddenContent">AnyRef, <span name="scala.Any" class="extype">Any</span></div>
         </div></div>
         
 
@@ -46,7 +62,7 @@
                 <span class="filtertype">Inherited</span>
                 <ol><li class="hideall out"><span>Hide All</span></li>
                 <li class="showall in"><span>Show all</span></li></ol>
-                <ol id="linearization"><li name="net.lag.kestrel.config.QueueBuilder" class="in"><span>QueueBuilder</span></li><li name="com.twitter.util.Config" class="in"><span>Config</span></li><li name="scala.Function0" class="in"><span>Function0</span></li><li name="scala.AnyRef" class="in"><span>AnyRef</span></li><li name="scala.Any" class="in"><span>Any</span></li></ol>
+                <ol id="linearization"><li name="net.lag.kestrel.config.QueueBuilder" class="in"><span>QueueBuilder</span></li><li name="scala.AnyRef" class="in"><span>AnyRef</span></li><li name="scala.Any" class="in"><span>Any</span></li></ol>
               </div>
           <div id="visbl">
               <span class="filtertype">Visibility</span>
@@ -132,6 +148,17 @@
       </h4>
       <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>final </dd><dt>Definition Classes</dt><dd>Any</dd></dl></div>
     </li><li visbl="pub" name="net.lag.kestrel.config.QueueBuilder#apply" data-isabs="false">
+      <a id="apply(Option[QueueConfig]):QueueConfig"></a>
+      <h4 class="signature">
+      <span class="kind">def</span>
+      <span class="symbol"> 
+        <span class="name">apply</span>
+        
+        <span class="params">(<span name="parent">parent: <span name="scala.Option" class="extype">Option</span>[<a name="net.lag.kestrel.config.QueueConfig" class="extype" href="QueueConfig.html">QueueConfig</a>]</span>)</span><span class="result">: <a name="net.lag.kestrel.config.QueueConfig" class="extype" href="QueueConfig.html">QueueConfig</a></span>
+      </span>
+      </h4>
+      
+    </li><li visbl="pub" name="net.lag.kestrel.config.QueueBuilder#apply" data-isabs="false">
       <a id="apply():QueueConfig"></a>
       <h4 class="signature">
       <span class="kind">def</span>
@@ -141,7 +168,7 @@
         <span class="params">()</span><span class="result">: <a name="net.lag.kestrel.config.QueueConfig" class="extype" href="QueueConfig.html">QueueConfig</a></span>
       </span>
       </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd><a name="net.lag.kestrel.config.QueueBuilder" class="extype" href="">QueueBuilder</a> → Function0</dd></dl></div>
+      
     </li><li visbl="pub" name="scala.Any#asInstanceOf" data-isabs="false">
       <a id="asInstanceOf[T0]:T0"></a>
       <h4 class="signature">
@@ -167,36 +194,25 @@
                 <span class="name">@throws</span><span class="args">()</span>
               
         </dd></dl></div>
-    </li><li visbl="pub" name="com.twitter.util.Config#computed" data-isabs="false">
-      <a id="computed[A](⇒ A):Required[A]"></a>
-      <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">computed</span>
-        <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="params">(<span name="f">f: ⇒ A</span>)</span><span class="result">: <span name="com.twitter.util.Config.Required" class="extype">Required</span>[A]</span>
-      </span>
-      </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Config</dd></dl></div>
     </li><li visbl="pub" name="net.lag.kestrel.config.QueueBuilder#defaultJournalSize" data-isabs="false">
-      <a id="defaultJournalSize:StorageUnit"></a>
+      <a id="defaultJournalSize:ConfigValue[StorageUnit]"></a>
       <h4 class="signature">
       <span class="kind">var</span>
       <span class="symbol"> 
         <span class="name">defaultJournalSize</span>
         
-        <span class="result">: <span name="com.twitter.util.StorageUnit" class="extype">StorageUnit</span></span>
+        <span class="result">: <a name="net.lag.kestrel.config.ConfigValue" class="extype" href="ConfigValue.html">ConfigValue</a>[<span name="com.twitter.util.StorageUnit" class="extype">StorageUnit</span>]</span>
       </span>
       </h4>
       <p class="shortcomment cmt">If the queue is empty, truncate the journal when it reaches this size.</p>
     </li><li visbl="pub" name="net.lag.kestrel.config.QueueBuilder#discardOldWhenFull" data-isabs="false">
-      <a id="discardOldWhenFull:Boolean"></a>
+      <a id="discardOldWhenFull:ConfigValue[Boolean]"></a>
       <h4 class="signature">
       <span class="kind">var</span>
       <span class="symbol"> 
         <span class="name">discardOldWhenFull</span>
         
-        <span class="result">: <span name="scala.Boolean" class="extype">Boolean</span></span>
+        <span class="result">: <a name="net.lag.kestrel.config.ConfigValue" class="extype" href="ConfigValue.html">ConfigValue</a>[<span name="scala.Boolean" class="extype">Boolean</span>]</span>
       </span>
       </h4>
       <p class="shortcomment cmt">If this is false, when a queue is full, clients attempting to add another item will get an
@@ -228,13 +244,13 @@ room for the new one. This settting has no effect unless at least one of <code>m
       </h4>
       <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
     </li><li visbl="pub" name="net.lag.kestrel.config.QueueBuilder#expireToQueue" data-isabs="false">
-      <a id="expireToQueue:Option[String]"></a>
+      <a id="expireToQueue:ConfigValue[Option[String]]"></a>
       <h4 class="signature">
       <span class="kind">var</span>
       <span class="symbol"> 
         <span class="name">expireToQueue</span>
         
-        <span class="result">: <span name="scala.Option" class="extype">Option</span>[String]</span>
+        <span class="result">: <a name="net.lag.kestrel.config.ConfigValue" class="extype" href="ConfigValue.html">ConfigValue</a>[<span name="scala.Option" class="extype">Option</span>[String]]</span>
       </span>
       </h4>
       <p class="shortcomment cmt">Name of a queue to add expired items to.</p><div class="fullcomment"><div class="comment cmt"><p>Name of a queue to add expired items to. If set, expired items are added to the requested
@@ -242,13 +258,13 @@ queue as if by a <code>SET</code> command. This can be used to implement special
 items, or to implement a simple &quot;delayed processing&quot; queue.
 </p></div></div>
     </li><li visbl="pub" name="net.lag.kestrel.config.QueueBuilder#fanoutOnly" data-isabs="false">
-      <a id="fanoutOnly:Boolean"></a>
+      <a id="fanoutOnly:ConfigValue[Boolean]"></a>
       <h4 class="signature">
       <span class="kind">var</span>
       <span class="symbol"> 
         <span class="name">fanoutOnly</span>
         
-        <span class="result">: <span name="scala.Boolean" class="extype">Boolean</span></span>
+        <span class="result">: <a name="net.lag.kestrel.config.ConfigValue" class="extype" href="ConfigValue.html">ConfigValue</a>[<span name="scala.Boolean" class="extype">Boolean</span>]</span>
       </span>
       </h4>
       <p class="shortcomment cmt">If true, don't actually store any items in this queue.</p><div class="fullcomment"><div class="comment cmt"><p>If true, don't actually store any items in this queue. Only deliver them to fanout client
@@ -268,28 +284,6 @@ queues.
                 <span class="name">@throws</span><span class="args">()</span>
               
         </dd></dl></div>
-    </li><li visbl="pub" name="com.twitter.util.Config#fromOption" data-isabs="false">
-      <a id="fromOption[A](Option[A]):A"></a>
-      <h4 class="signature">
-      <span class="kind">implicit def</span>
-      <span class="symbol"> 
-        <span class="name">fromOption</span>
-        <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="params">(<span name="item">item: <span name="scala.Option" class="extype">Option</span>[A]</span>)</span><span class="result">: A</span>
-      </span>
-      </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>implicit </dd><dt>Definition Classes</dt><dd>Config</dd></dl></div>
-    </li><li visbl="pub" name="com.twitter.util.Config#fromRequired" data-isabs="false">
-      <a id="fromRequired[A](Required[A]):A"></a>
-      <h4 class="signature">
-      <span class="kind">implicit def</span>
-      <span class="symbol"> 
-        <span class="name">fromRequired</span>
-        <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="params">(<span name="req">req: <span name="com.twitter.util.Config.Required" class="extype">Required</span>[A]</span>)</span><span class="result">: A</span>
-      </span>
-      </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>implicit </dd><dt>Definition Classes</dt><dd>Config</dd></dl></div>
     </li><li visbl="pub" name="scala.AnyRef#getClass" data-isabs="false">
       <a id="getClass():java.lang.Class[_]"></a>
       <h4 class="signature">
@@ -312,28 +306,6 @@ queues.
       </span>
       </h4>
       <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
-    </li><li visbl="pub" name="com.twitter.util.Config#intoList" data-isabs="false">
-      <a id="intoList[A](A):List[A]"></a>
-      <h4 class="signature">
-      <span class="kind">implicit def</span>
-      <span class="symbol"> 
-        <span class="name">intoList</span>
-        <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="params">(<span name="item">item: A</span>)</span><span class="result">: List[A]</span>
-      </span>
-      </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>implicit </dd><dt>Definition Classes</dt><dd>Config</dd></dl></div>
-    </li><li visbl="pub" name="com.twitter.util.Config#intoOption" data-isabs="false">
-      <a id="intoOption[A](A):Option[A]"></a>
-      <h4 class="signature">
-      <span class="kind">implicit def</span>
-      <span class="symbol"> 
-        <span class="name">intoOption</span>
-        <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="params">(<span name="item">item: A</span>)</span><span class="result">: <span name="scala.Option" class="extype">Option</span>[A]</span>
-      </span>
-      </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>implicit </dd><dt>Definition Classes</dt><dd>Config</dd></dl></div>
     </li><li visbl="pub" name="scala.Any#isInstanceOf" data-isabs="false">
       <a id="isInstanceOf[T0]:Boolean"></a>
       <h4 class="signature">
@@ -346,26 +318,26 @@ queues.
       </h4>
       <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>final </dd><dt>Definition Classes</dt><dd>Any</dd></dl></div>
     </li><li visbl="pub" name="net.lag.kestrel.config.QueueBuilder#keepJournal" data-isabs="false">
-      <a id="keepJournal:Boolean"></a>
+      <a id="keepJournal:ConfigValue[Boolean]"></a>
       <h4 class="signature">
       <span class="kind">var</span>
       <span class="symbol"> 
         <span class="name">keepJournal</span>
         
-        <span class="result">: <span name="scala.Boolean" class="extype">Boolean</span></span>
+        <span class="result">: <a name="net.lag.kestrel.config.ConfigValue" class="extype" href="ConfigValue.html">ConfigValue</a>[<span name="scala.Boolean" class="extype">Boolean</span>]</span>
       </span>
       </h4>
       <p class="shortcomment cmt">If false, don't keep a journal file for this queue.</p><div class="fullcomment"><div class="comment cmt"><p>If false, don't keep a journal file for this queue. When kestrel exits, any remaining contents
 in the queue will be lost.
 </p></div></div>
     </li><li visbl="pub" name="net.lag.kestrel.config.QueueBuilder#maxAge" data-isabs="false">
-      <a id="maxAge:Option[Duration]"></a>
+      <a id="maxAge:ConfigValue[Option[Duration]]"></a>
       <h4 class="signature">
       <span class="kind">var</span>
       <span class="symbol"> 
         <span class="name">maxAge</span>
         
-        <span class="result">: <span name="scala.Option" class="extype">Option</span>[<span name="com.twitter.util.Duration" class="extype">Duration</span>]</span>
+        <span class="result">: <a name="net.lag.kestrel.config.ConfigValue" class="extype" href="ConfigValue.html">ConfigValue</a>[<span name="scala.Option" class="extype">Option</span>[<span name="com.twitter.util.Duration" class="extype">Duration</span>]]</span>
       </span>
       </h4>
       <p class="shortcomment cmt">Expiration time for items on this queue.</p><div class="fullcomment"><div class="comment cmt"><p>Expiration time for items on this queue. Any item that has been sitting on the queue longer
@@ -374,62 +346,62 @@ items to a queue, but if the expiration time is longer than <code>maxAge</code>,
 used instead.
 </p></div></div>
     </li><li visbl="pub" name="net.lag.kestrel.config.QueueBuilder#maxExpireSweep" data-isabs="false">
-      <a id="maxExpireSweep:Int"></a>
+      <a id="maxExpireSweep:ConfigValue[Int]"></a>
       <h4 class="signature">
       <span class="kind">var</span>
       <span class="symbol"> 
         <span class="name">maxExpireSweep</span>
         
-        <span class="result">: <span name="scala.Int" class="extype">Int</span></span>
+        <span class="result">: <a name="net.lag.kestrel.config.ConfigValue" class="extype" href="ConfigValue.html">ConfigValue</a>[<span name="scala.Int" class="extype">Int</span>]</span>
       </span>
       </h4>
       <p class="shortcomment cmt">Maximum number of expired items to move into the <code>expireToQueue</code> at once.</p>
     </li><li visbl="pub" name="net.lag.kestrel.config.QueueBuilder#maxItemSize" data-isabs="false">
-      <a id="maxItemSize:StorageUnit"></a>
+      <a id="maxItemSize:ConfigValue[StorageUnit]"></a>
       <h4 class="signature">
       <span class="kind">var</span>
       <span class="symbol"> 
         <span class="name">maxItemSize</span>
         
-        <span class="result">: <span name="com.twitter.util.StorageUnit" class="extype">StorageUnit</span></span>
+        <span class="result">: <a name="net.lag.kestrel.config.ConfigValue" class="extype" href="ConfigValue.html">ConfigValue</a>[<span name="com.twitter.util.StorageUnit" class="extype">StorageUnit</span>]</span>
       </span>
       </h4>
       <p class="shortcomment cmt">Set a hard limit on the number of bytes a single queued item can contain.</p><div class="fullcomment"><div class="comment cmt"><p>Set a hard limit on the number of bytes a single queued item can contain.
 An add request for an item larger than this will be rejected.
 </p></div></div>
     </li><li visbl="pub" name="net.lag.kestrel.config.QueueBuilder#maxItems" data-isabs="false">
-      <a id="maxItems:Int"></a>
+      <a id="maxItems:ConfigValue[Int]"></a>
       <h4 class="signature">
       <span class="kind">var</span>
       <span class="symbol"> 
         <span class="name">maxItems</span>
         
-        <span class="result">: <span name="scala.Int" class="extype">Int</span></span>
+        <span class="result">: <a name="net.lag.kestrel.config.ConfigValue" class="extype" href="ConfigValue.html">ConfigValue</a>[<span name="scala.Int" class="extype">Int</span>]</span>
       </span>
       </h4>
       <p class="shortcomment cmt">Set a hard limit on the number of items this queue can hold.</p><div class="fullcomment"><div class="comment cmt"><p>Set a hard limit on the number of items this queue can hold. When the queue is full,
 <code>discardOldWhenFull</code> dictates the behavior when a client attempts to add another item.
 </p></div></div>
     </li><li visbl="pub" name="net.lag.kestrel.config.QueueBuilder#maxJournalSize" data-isabs="false">
-      <a id="maxJournalSize:StorageUnit"></a>
+      <a id="maxJournalSize:ConfigValue[StorageUnit]"></a>
       <h4 class="signature">
       <span class="kind">var</span>
       <span class="symbol"> 
         <span class="name">maxJournalSize</span>
         
-        <span class="result">: <span name="com.twitter.util.StorageUnit" class="extype">StorageUnit</span></span>
+        <span class="result">: <a name="net.lag.kestrel.config.ConfigValue" class="extype" href="ConfigValue.html">ConfigValue</a>[<span name="com.twitter.util.StorageUnit" class="extype">StorageUnit</span>]</span>
       </span>
       </h4>
       <p class="shortcomment cmt">If the queue fits entirely in memory (see maxMemorySize) and the journal files get larger than
 this, rebuild the journal.</p>
     </li><li visbl="pub" name="net.lag.kestrel.config.QueueBuilder#maxMemorySize" data-isabs="false">
-      <a id="maxMemorySize:StorageUnit"></a>
+      <a id="maxMemorySize:ConfigValue[StorageUnit]"></a>
       <h4 class="signature">
       <span class="kind">var</span>
       <span class="symbol"> 
         <span class="name">maxMemorySize</span>
         
-        <span class="result">: <span name="com.twitter.util.StorageUnit" class="extype">StorageUnit</span></span>
+        <span class="result">: <a name="net.lag.kestrel.config.ConfigValue" class="extype" href="ConfigValue.html">ConfigValue</a>[<span name="com.twitter.util.StorageUnit" class="extype">StorageUnit</span>]</span>
       </span>
       </h4>
       <p class="shortcomment cmt">Keep only this much of the queue in memory.</p><div class="fullcomment"><div class="comment cmt"><p>Keep only this much of the queue in memory. The journal will be used to store backlogged
@@ -437,54 +409,32 @@ items, and they'll be read back into memory as the queue is drained. This settin
 valve to keep a backed-up queue from consuming all memory.
 </p></div></div>
     </li><li visbl="pub" name="net.lag.kestrel.config.QueueBuilder#maxQueueAge" data-isabs="false">
-      <a id="maxQueueAge:Option[Duration]"></a>
+      <a id="maxQueueAge:ConfigValue[Option[Duration]]"></a>
       <h4 class="signature">
       <span class="kind">var</span>
       <span class="symbol"> 
         <span class="name">maxQueueAge</span>
         
-        <span class="result">: <span name="scala.Option" class="extype">Option</span>[<span name="com.twitter.util.Duration" class="extype">Duration</span>]</span>
+        <span class="result">: <a name="net.lag.kestrel.config.ConfigValue" class="extype" href="ConfigValue.html">ConfigValue</a>[<span name="scala.Option" class="extype">Option</span>[<span name="com.twitter.util.Duration" class="extype">Duration</span>]]</span>
       </span>
       </h4>
       <p class="shortcomment cmt">Expiration time for the queue itself.</p><div class="fullcomment"><div class="comment cmt"><p>Expiration time for the queue itself.  If the queue is empty and older
 than this value then we should delete it.
 </p></div></div>
     </li><li visbl="pub" name="net.lag.kestrel.config.QueueBuilder#maxSize" data-isabs="false">
-      <a id="maxSize:StorageUnit"></a>
+      <a id="maxSize:ConfigValue[StorageUnit]"></a>
       <h4 class="signature">
       <span class="kind">var</span>
       <span class="symbol"> 
         <span class="name">maxSize</span>
         
-        <span class="result">: <span name="com.twitter.util.StorageUnit" class="extype">StorageUnit</span></span>
+        <span class="result">: <a name="net.lag.kestrel.config.ConfigValue" class="extype" href="ConfigValue.html">ConfigValue</a>[<span name="com.twitter.util.StorageUnit" class="extype">StorageUnit</span>]</span>
       </span>
       </h4>
       <p class="shortcomment cmt">Set a hard limit on the number of bytes (of data in queued items) this queue can hold.</p><div class="fullcomment"><div class="comment cmt"><p>Set a hard limit on the number of bytes (of data in queued items) this queue can hold.
 When the queue is full, discardOldWhenFull dictates the behavior when a client attempts
 to add another item.
 </p></div></div>
-    </li><li visbl="pub" name="com.twitter.util.Config#memoized" data-isabs="false">
-      <a id="memoized:QueueConfig"></a>
-      <h4 class="signature">
-      <span class="kind">lazy val</span>
-      <span class="symbol"> 
-        <span class="name">memoized</span>
-        
-        <span class="result">: <a name="net.lag.kestrel.config.QueueConfig" class="extype" href="QueueConfig.html">QueueConfig</a></span>
-      </span>
-      </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Config</dd></dl></div>
-    </li><li visbl="pub" name="com.twitter.util.Config#missingValues" data-isabs="false">
-      <a id="missingValues:Seq[String]"></a>
-      <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">missingValues</span>
-        
-        <span class="result">: Seq[String]</span>
-      </span>
-      </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Config</dd></dl></div>
     </li><li visbl="pub" name="net.lag.kestrel.config.QueueBuilder#name" data-isabs="false">
       <a id="name:String"></a>
       <h4 class="signature">
@@ -529,58 +479,14 @@ to add another item.
       </span>
       </h4>
       <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>final </dd><dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
-    </li><li visbl="pub" name="com.twitter.util.Config#optional" data-isabs="false">
-      <a id="optional[A]:Option[A]"></a>
-      <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">optional</span>
-        <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="result">: <span name="scala.Option" class="extype">Option</span>[A]</span>
-      </span>
-      </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Config</dd></dl></div>
-    </li><li visbl="pub" name="com.twitter.util.Config#required" data-isabs="false">
-      <a id="required[A](⇒ A):Required[A]"></a>
-      <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">required</span>
-        <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="params">(<span name="default">default: ⇒ A</span>)</span><span class="result">: <span name="com.twitter.util.Config.Required" class="extype">Required</span>[A]</span>
-      </span>
-      </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Config</dd></dl></div>
-    </li><li visbl="pub" name="com.twitter.util.Config#required" data-isabs="false">
-      <a id="required[A]:Required[A]"></a>
-      <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">required</span>
-        <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="result">: <span name="com.twitter.util.Config.Required" class="extype">Required</span>[A]</span>
-      </span>
-      </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Config</dd></dl></div>
-    </li><li visbl="pub" name="com.twitter.util.Config#specified" data-isabs="false">
-      <a id="specified[A](A):Specified[A]"></a>
-      <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">specified</span>
-        <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="params">(<span name="value">value: A</span>)</span><span class="result">: <span name="com.twitter.util.Config.Specified" class="extype">Specified</span>[A]</span>
-      </span>
-      </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Config</dd></dl></div>
     </li><li visbl="pub" name="net.lag.kestrel.config.QueueBuilder#syncJournal" data-isabs="false">
-      <a id="syncJournal:Duration"></a>
+      <a id="syncJournal:ConfigValue[Duration]"></a>
       <h4 class="signature">
       <span class="kind">var</span>
       <span class="symbol"> 
         <span class="name">syncJournal</span>
         
-        <span class="result">: <span name="com.twitter.util.Duration" class="extype">Duration</span></span>
+        <span class="result">: <a name="net.lag.kestrel.config.ConfigValue" class="extype" href="ConfigValue.html">ConfigValue</a>[<span name="com.twitter.util.Duration" class="extype">Duration</span>]</span>
       </span>
       </h4>
       <p class="shortcomment cmt">How often to sync the journal file.</p><div class="fullcomment"><div class="comment cmt"><p>How often to sync the journal file. To sync after every write, set this to <code>0.milliseconds</code>.
@@ -598,29 +504,7 @@ throughput of the server in exchange for a lower chance of losing data.
       </span>
       </h4>
       <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>final </dd><dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
-    </li><li visbl="pub" name="com.twitter.util.Config#toSpecified" data-isabs="false">
-      <a id="toSpecified[A](⇒ A):Specified[A]"></a>
-      <h4 class="signature">
-      <span class="kind">implicit def</span>
-      <span class="symbol"> 
-        <span class="name">toSpecified</span>
-        <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="params">(<span name="value">value: ⇒ A</span>)</span><span class="result">: <span name="com.twitter.util.Config.Specified" class="extype">Specified</span>[A]</span>
-      </span>
-      </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>implicit </dd><dt>Definition Classes</dt><dd>Config</dd></dl></div>
-    </li><li visbl="pub" name="com.twitter.util.Config#toSpecifiedOption" data-isabs="false">
-      <a id="toSpecifiedOption[A](⇒ A):Specified[Some[A]]"></a>
-      <h4 class="signature">
-      <span class="kind">implicit def</span>
-      <span class="symbol"> 
-        <span class="name">toSpecifiedOption</span>
-        <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="params">(<span name="value">value: ⇒ A</span>)</span><span class="result">: <span name="com.twitter.util.Config.Specified" class="extype">Specified</span>[<span name="scala.Some" class="extype">Some</span>[A]]</span>
-      </span>
-      </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>implicit </dd><dt>Definition Classes</dt><dd>Config</dd></dl></div>
-    </li><li visbl="pub" name="scala.Function0#toString" data-isabs="false">
+    </li><li visbl="pub" name="scala.AnyRef#toString" data-isabs="false">
       <a id="toString():String"></a>
       <h4 class="signature">
       <span class="kind">def</span>
@@ -630,18 +514,7 @@ throughput of the server in exchange for a lower chance of losing data.
         <span class="params">()</span><span class="result">: <span name="java.lang.String" class="extype">String</span></span>
       </span>
       </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Function0 → AnyRef → Any</dd></dl></div>
-    </li><li visbl="pub" name="com.twitter.util.Config#validate" data-isabs="false">
-      <a id="validate():Unit"></a>
-      <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">validate</span>
-        
-        <span class="params">()</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
-      </span>
-      </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Config</dd></dl></div>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
     </li><li visbl="pub" name="scala.AnyRef#wait" data-isabs="false">
       <a id="wait():Unit"></a>
       <h4 class="signature">
@@ -689,11 +562,7 @@ throughput of the server in exchange for a lower chance of losing data.
 
         
 
-        <div name="com.twitter.util.Config" class="parent">
-              <h3>Inherited from <span name="com.twitter.util.Config" class="extype">Config</span>[<a name="net.lag.kestrel.config.QueueConfig" class="extype" href="QueueConfig.html">QueueConfig</a>]</h3>
-            </div><div name="scala.Function0" class="parent">
-              <h3>Inherited from () ⇒ <a name="net.lag.kestrel.config.QueueConfig" class="extype" href="QueueConfig.html">QueueConfig</a></h3>
-            </div><div name="scala.AnyRef" class="parent">
+        <div name="scala.AnyRef" class="parent">
               <h3>Inherited from AnyRef</h3>
             </div><div name="scala.Any" class="parent">
               <h3>Inherited from <span name="scala.Any" class="extype">Any</span></h3>

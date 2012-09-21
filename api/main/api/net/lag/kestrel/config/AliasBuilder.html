@@ -24,13 +24,13 @@
       <span class="symbol"> 
         <span class="name">AliasBuilder</span>
         
-        <span class="result"> extends <span name="com.twitter.util.Config" class="extype">Config</span>[<a name="net.lag.kestrel.config.AliasConfig" class="extype" href="AliasConfig.html">AliasConfig</a>]</span>
+        <span class="result"> extends AnyRef</span>
       </span>
       </h4>
       
           <div class="fullcommenttop" id="comment"><div class="toggleContainer block">
           <span class="toggle">Linear Supertypes</span>
-          <div class="superTypes hiddenContent"><span name="com.twitter.util.Config" class="extype">Config</span>[<a name="net.lag.kestrel.config.AliasConfig" class="extype" href="AliasConfig.html">AliasConfig</a>], () ⇒ <a name="net.lag.kestrel.config.AliasConfig" class="extype" href="AliasConfig.html">AliasConfig</a>, AnyRef, <span name="scala.Any" class="extype">Any</span></div>
+          <div class="superTypes hiddenContent">AnyRef, <span name="scala.Any" class="extype">Any</span></div>
         </div></div>
         
 
@@ -46,7 +46,7 @@
                 <span class="filtertype">Inherited</span>
                 <ol><li class="hideall out"><span>Hide All</span></li>
                 <li class="showall in"><span>Show all</span></li></ol>
-                <ol id="linearization"><li name="net.lag.kestrel.config.AliasBuilder" class="in"><span>AliasBuilder</span></li><li name="com.twitter.util.Config" class="in"><span>Config</span></li><li name="scala.Function0" class="in"><span>Function0</span></li><li name="scala.AnyRef" class="in"><span>AnyRef</span></li><li name="scala.Any" class="in"><span>Any</span></li></ol>
+                <ol id="linearization"><li name="net.lag.kestrel.config.AliasBuilder" class="in"><span>AliasBuilder</span></li><li name="scala.AnyRef" class="in"><span>AnyRef</span></li><li name="scala.Any" class="in"><span>Any</span></li></ol>
               </div>
           <div id="visbl">
               <span class="filtertype">Visibility</span>
@@ -141,7 +141,7 @@
         <span class="params">()</span><span class="result">: <a name="net.lag.kestrel.config.AliasConfig" class="extype" href="AliasConfig.html">AliasConfig</a></span>
       </span>
       </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd><a name="net.lag.kestrel.config.AliasBuilder" class="extype" href="">AliasBuilder</a> → Function0</dd></dl></div>
+      
     </li><li visbl="pub" name="scala.Any#asInstanceOf" data-isabs="false">
       <a id="asInstanceOf[T0]:T0"></a>
       <h4 class="signature">
@@ -167,17 +167,6 @@
                 <span class="name">@throws</span><span class="args">()</span>
               
         </dd></dl></div>
-    </li><li visbl="pub" name="com.twitter.util.Config#computed" data-isabs="false">
-      <a id="computed[A](⇒ A):Required[A]"></a>
-      <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">computed</span>
-        <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="params">(<span name="f">f: ⇒ A</span>)</span><span class="result">: <span name="com.twitter.util.Config.Required" class="extype">Required</span>[A]</span>
-      </span>
-      </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Config</dd></dl></div>
     </li><li visbl="pub" name="net.lag.kestrel.config.AliasBuilder#destinationQueues" data-isabs="false">
       <a id="destinationQueues:List[String]"></a>
       <h4 class="signature">
@@ -225,28 +214,6 @@
                 <span class="name">@throws</span><span class="args">()</span>
               
         </dd></dl></div>
-    </li><li visbl="pub" name="com.twitter.util.Config#fromOption" data-isabs="false">
-      <a id="fromOption[A](Option[A]):A"></a>
-      <h4 class="signature">
-      <span class="kind">implicit def</span>
-      <span class="symbol"> 
-        <span class="name">fromOption</span>
-        <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="params">(<span name="item">item: <span name="scala.Option" class="extype">Option</span>[A]</span>)</span><span class="result">: A</span>
-      </span>
-      </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>implicit </dd><dt>Definition Classes</dt><dd>Config</dd></dl></div>
-    </li><li visbl="pub" name="com.twitter.util.Config#fromRequired" data-isabs="false">
-      <a id="fromRequired[A](Required[A]):A"></a>
-      <h4 class="signature">
-      <span class="kind">implicit def</span>
-      <span class="symbol"> 
-        <span class="name">fromRequired</span>
-        <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="params">(<span name="req">req: <span name="com.twitter.util.Config.Required" class="extype">Required</span>[A]</span>)</span><span class="result">: A</span>
-      </span>
-      </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>implicit </dd><dt>Definition Classes</dt><dd>Config</dd></dl></div>
     </li><li visbl="pub" name="scala.AnyRef#getClass" data-isabs="false">
       <a id="getClass():java.lang.Class[_]"></a>
       <h4 class="signature">
@@ -269,28 +236,6 @@
       </span>
       </h4>
       <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
-    </li><li visbl="pub" name="com.twitter.util.Config#intoList" data-isabs="false">
-      <a id="intoList[A](A):List[A]"></a>
-      <h4 class="signature">
-      <span class="kind">implicit def</span>
-      <span class="symbol"> 
-        <span class="name">intoList</span>
-        <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="params">(<span name="item">item: A</span>)</span><span class="result">: List[A]</span>
-      </span>
-      </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>implicit </dd><dt>Definition Classes</dt><dd>Config</dd></dl></div>
-    </li><li visbl="pub" name="com.twitter.util.Config#intoOption" data-isabs="false">
-      <a id="intoOption[A](A):Option[A]"></a>
-      <h4 class="signature">
-      <span class="kind">implicit def</span>
-      <span class="symbol"> 
-        <span class="name">intoOption</span>
-        <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="params">(<span name="item">item: A</span>)</span><span class="result">: <span name="scala.Option" class="extype">Option</span>[A]</span>
-      </span>
-      </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>implicit </dd><dt>Definition Classes</dt><dd>Config</dd></dl></div>
     </li><li visbl="pub" name="scala.Any#isInstanceOf" data-isabs="false">
       <a id="isInstanceOf[T0]:Boolean"></a>
       <h4 class="signature">
@@ -302,28 +247,6 @@
       </span>
       </h4>
       <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>final </dd><dt>Definition Classes</dt><dd>Any</dd></dl></div>
-    </li><li visbl="pub" name="com.twitter.util.Config#memoized" data-isabs="false">
-      <a id="memoized:AliasConfig"></a>
-      <h4 class="signature">
-      <span class="kind">lazy val</span>
-      <span class="symbol"> 
-        <span class="name">memoized</span>
-        
-        <span class="result">: <a name="net.lag.kestrel.config.AliasConfig" class="extype" href="AliasConfig.html">AliasConfig</a></span>
-      </span>
-      </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Config</dd></dl></div>
-    </li><li visbl="pub" name="com.twitter.util.Config#missingValues" data-isabs="false">
-      <a id="missingValues:Seq[String]"></a>
-      <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">missingValues</span>
-        
-        <span class="result">: Seq[String]</span>
-      </span>
-      </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Config</dd></dl></div>
     </li><li visbl="pub" name="net.lag.kestrel.config.AliasBuilder#name" data-isabs="false">
       <a id="name:String"></a>
       <h4 class="signature">
@@ -368,50 +291,6 @@
       </span>
       </h4>
       <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>final </dd><dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
-    </li><li visbl="pub" name="com.twitter.util.Config#optional" data-isabs="false">
-      <a id="optional[A]:Option[A]"></a>
-      <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">optional</span>
-        <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="result">: <span name="scala.Option" class="extype">Option</span>[A]</span>
-      </span>
-      </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Config</dd></dl></div>
-    </li><li visbl="pub" name="com.twitter.util.Config#required" data-isabs="false">
-      <a id="required[A](⇒ A):Required[A]"></a>
-      <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">required</span>
-        <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="params">(<span name="default">default: ⇒ A</span>)</span><span class="result">: <span name="com.twitter.util.Config.Required" class="extype">Required</span>[A]</span>
-      </span>
-      </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Config</dd></dl></div>
-    </li><li visbl="pub" name="com.twitter.util.Config#required" data-isabs="false">
-      <a id="required[A]:Required[A]"></a>
-      <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">required</span>
-        <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="result">: <span name="com.twitter.util.Config.Required" class="extype">Required</span>[A]</span>
-      </span>
-      </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Config</dd></dl></div>
-    </li><li visbl="pub" name="com.twitter.util.Config#specified" data-isabs="false">
-      <a id="specified[A](A):Specified[A]"></a>
-      <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">specified</span>
-        <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="params">(<span name="value">value: A</span>)</span><span class="result">: <span name="com.twitter.util.Config.Specified" class="extype">Specified</span>[A]</span>
-      </span>
-      </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Config</dd></dl></div>
     </li><li visbl="pub" name="scala.AnyRef#synchronized" data-isabs="false">
       <a id="synchronized[T0](⇒ T0):T0"></a>
       <h4 class="signature">
@@ -423,29 +302,7 @@
       </span>
       </h4>
       <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>final </dd><dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
-    </li><li visbl="pub" name="com.twitter.util.Config#toSpecified" data-isabs="false">
-      <a id="toSpecified[A](⇒ A):Specified[A]"></a>
-      <h4 class="signature">
-      <span class="kind">implicit def</span>
-      <span class="symbol"> 
-        <span class="name">toSpecified</span>
-        <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="params">(<span name="value">value: ⇒ A</span>)</span><span class="result">: <span name="com.twitter.util.Config.Specified" class="extype">Specified</span>[A]</span>
-      </span>
-      </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>implicit </dd><dt>Definition Classes</dt><dd>Config</dd></dl></div>
-    </li><li visbl="pub" name="com.twitter.util.Config#toSpecifiedOption" data-isabs="false">
-      <a id="toSpecifiedOption[A](⇒ A):Specified[Some[A]]"></a>
-      <h4 class="signature">
-      <span class="kind">implicit def</span>
-      <span class="symbol"> 
-        <span class="name">toSpecifiedOption</span>
-        <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="params">(<span name="value">value: ⇒ A</span>)</span><span class="result">: <span name="com.twitter.util.Config.Specified" class="extype">Specified</span>[<span name="scala.Some" class="extype">Some</span>[A]]</span>
-      </span>
-      </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>implicit </dd><dt>Definition Classes</dt><dd>Config</dd></dl></div>
-    </li><li visbl="pub" name="scala.Function0#toString" data-isabs="false">
+    </li><li visbl="pub" name="scala.AnyRef#toString" data-isabs="false">
       <a id="toString():String"></a>
       <h4 class="signature">
       <span class="kind">def</span>
@@ -455,18 +312,7 @@
         <span class="params">()</span><span class="result">: <span name="java.lang.String" class="extype">String</span></span>
       </span>
       </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Function0 → AnyRef → Any</dd></dl></div>
-    </li><li visbl="pub" name="com.twitter.util.Config#validate" data-isabs="false">
-      <a id="validate():Unit"></a>
-      <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">validate</span>
-        
-        <span class="params">()</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
-      </span>
-      </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Config</dd></dl></div>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
     </li><li visbl="pub" name="scala.AnyRef#wait" data-isabs="false">
       <a id="wait():Unit"></a>
       <h4 class="signature">
@@ -514,11 +360,7 @@
 
         
 
-        <div name="com.twitter.util.Config" class="parent">
-              <h3>Inherited from <span name="com.twitter.util.Config" class="extype">Config</span>[<a name="net.lag.kestrel.config.AliasConfig" class="extype" href="AliasConfig.html">AliasConfig</a>]</h3>
-            </div><div name="scala.Function0" class="parent">
-              <h3>Inherited from () ⇒ <a name="net.lag.kestrel.config.AliasConfig" class="extype" href="AliasConfig.html">AliasConfig</a></h3>
-            </div><div name="scala.AnyRef" class="parent">
+        <div name="scala.AnyRef" class="parent">
               <h3>Inherited from AnyRef</h3>
             </div><div name="scala.Any" class="parent">
               <h3>Inherited from <span name="scala.Any" class="extype">Any</span></h3>

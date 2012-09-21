@@ -14,9 +14,9 @@
         </head>
         <body class="type">
       <div id="definition">
-        <img src="../../../lib/class_big.png" />
+        <a title="Go to companion" href="QueueCollection$.html"><img src="../../../lib/class_to_object_big.png" /></a>
         <p id="owner"><a name="net" class="extype" href="../../package.html">net</a>.<a name="net.lag" class="extype" href="../package.html">lag</a>.<a name="net.lag.kestrel" class="extype" href="package.html">kestrel</a></p>
-        <h1>QueueCollection</h1>
+        <h1><a title="Go to companion" href="QueueCollection$.html">QueueCollection</a></h1>
       </div>
 
       <h4 class="signature" id="signature">
@@ -70,7 +70,21 @@
     </li></ol>
             </div>
 
+        <div class="types members" id="types">
+              <h3>Type Members</h3>
+              <ol><li visbl="pub" name="net.lag.kestrel.QueueCollection#ClientDescription" data-isabs="false">
+      <a id="ClientDescription:ClientDescription"></a>
+      <h4 class="signature">
+      <span class="kind">type</span>
+      <span class="symbol"> 
+        <span class="name">ClientDescription</span>
         
+        <span class="result"> = <span name="scala.Option" class="extype">Option</span>[() ⇒ String]</span>
+      </span>
+      </h4>
+      
+    </li></ol>
+            </div>
         
         
 
@@ -154,13 +168,13 @@
       </h4>
       
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#add" data-isabs="false">
-      <a id="add(String,Array[Byte],Option[Time],Time):Boolean"></a>
+      <a id="add(String,Array[Byte],Option[Time],Time,ClientDescription):Boolean"></a>
       <h4 class="signature">
       <span class="kind">def</span>
       <span class="symbol"> 
         <span class="name">add</span>
         
-        <span class="params">(<span name="key">key: String</span>, <span name="item">item: <span name="scala.Array" class="extype">Array</span>[<span name="scala.Byte" class="extype">Byte</span>]</span>, <span name="expiry">expiry: <span name="scala.Option" class="extype">Option</span>[<span name="com.twitter.util.Time" class="extype">Time</span>]</span>, <span name="addTime">addTime: <span name="com.twitter.util.Time" class="extype">Time</span></span>)</span><span class="result">: <span name="scala.Boolean" class="extype">Boolean</span></span>
+        <span class="params">(<span name="key">key: String</span>, <span name="item">item: <span name="scala.Array" class="extype">Array</span>[<span name="scala.Byte" class="extype">Byte</span>]</span>, <span name="expiry">expiry: <span name="scala.Option" class="extype">Option</span>[<span name="com.twitter.util.Time" class="extype">Time</span>]</span>, <span name="addTime">addTime: <span name="com.twitter.util.Time" class="extype">Time</span></span>, <span name="clientDescription">clientDescription: ClientDescription = <span class="symbol"><span class="name"><a href="../../../scala/package.html">None</a></span></span></span>)</span><span class="result">: <span name="scala.Boolean" class="extype">Boolean</span></span>
       </span>
       </h4>
       <p class="shortcomment cmt">Add an item to a named queue.</p><div class="fullcomment"><div class="comment cmt"><p>Add an item to a named queue. Will not return until the item has been synchronously added
@@ -270,13 +284,13 @@ and written to the queue journal file.
       </h4>
       
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#delete" data-isabs="false">
-      <a id="delete(String):Unit"></a>
+      <a id="delete(String,ClientDescription):Unit"></a>
       <h4 class="signature">
       <span class="kind">def</span>
       <span class="symbol"> 
         <span class="name">delete</span>
         
-        <span class="params">(<span name="name">name: String</span>)</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
+        <span class="params">(<span name="name">name: String</span>, <span name="clientDescription">clientDescription: ClientDescription = <span class="symbol"><span class="name"><a href="../../../scala/package.html">None</a></span></span></span>)</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
       </span>
       </h4>
       
@@ -339,35 +353,35 @@ and written to the queue journal file.
               
         </dd></dl></div>
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#flush" data-isabs="false">
-      <a id="flush(String):Unit"></a>
+      <a id="flush(String,ClientDescription):Unit"></a>
       <h4 class="signature">
       <span class="kind">def</span>
       <span class="symbol"> 
         <span class="name">flush</span>
         
-        <span class="params">(<span name="key">key: String</span>)</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
+        <span class="params">(<span name="key">key: String</span>, <span name="clientDescription">clientDescription: ClientDescription = <span class="symbol"><span class="name"><a href="../../../scala/package.html">None</a></span></span></span>)</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
       </span>
       </h4>
       
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#flushAllExpired" data-isabs="false">
-      <a id="flushAllExpired(Boolean):Int"></a>
+      <a id="flushAllExpired(Boolean,ClientDescription):Int"></a>
       <h4 class="signature">
       <span class="kind">def</span>
       <span class="symbol"> 
         <span class="name">flushAllExpired</span>
         
-        <span class="params">(<span name="limit">limit: <span name="scala.Boolean" class="extype">Boolean</span> = <span class="symbol">false</span></span>)</span><span class="result">: <span name="scala.Int" class="extype">Int</span></span>
+        <span class="params">(<span name="limit">limit: <span name="scala.Boolean" class="extype">Boolean</span> = <span class="symbol">false</span></span>, <span name="clientDescription">clientDescription: ClientDescription = <span class="symbol"><span class="name"><a href="../../../scala/package.html">None</a></span></span></span>)</span><span class="result">: <span name="scala.Int" class="extype">Int</span></span>
       </span>
       </h4>
       
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#flushExpired" data-isabs="false">
-      <a id="flushExpired(String,Boolean):Int"></a>
+      <a id="flushExpired(String,Boolean,ClientDescription):Int"></a>
       <h4 class="signature">
       <span class="kind">def</span>
       <span class="symbol"> 
         <span class="name">flushExpired</span>
         
-        <span class="params">(<span name="name">name: String</span>, <span name="limit">limit: <span name="scala.Boolean" class="extype">Boolean</span> = <span class="symbol">false</span></span>)</span><span class="result">: <span name="scala.Int" class="extype">Int</span></span>
+        <span class="params">(<span name="name">name: String</span>, <span name="limit">limit: <span name="scala.Boolean" class="extype">Boolean</span> = <span class="symbol">false</span></span>, <span name="clientDescription">clientDescription: ClientDescription = <span class="symbol"><span class="name"><a href="../../../scala/package.html">None</a></span></span></span>)</span><span class="result">: <span name="scala.Int" class="extype">Int</span></span>
       </span>
       </h4>
       
@@ -449,6 +463,17 @@ and written to the queue journal file.
       </h4>
       <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>final </dd><dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#queue" data-isabs="false">
+      <a id="queue(String,Boolean,ClientDescription):Option[PersistentQueue]"></a>
+      <h4 class="signature">
+      <span class="kind">def</span>
+      <span class="symbol"> 
+        <span class="name">queue</span>
+        
+        <span class="params">(<span name="name">name: String</span>, <span name="create">create: <span name="scala.Boolean" class="extype">Boolean</span></span>, <span name="clientDescription">clientDescription: ClientDescription</span>)</span><span class="result">: <span name="scala.Option" class="extype">Option</span>[<a name="net.lag.kestrel.PersistentQueue" class="extype" href="PersistentQueue.html">PersistentQueue</a>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Get a named queue, with control over whether non-existent queues are created.</p>
+    </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#queue" data-isabs="false">
       <a id="queue(String,Boolean):Option[PersistentQueue]"></a>
       <h4 class="signature">
       <span class="kind">def</span>
@@ -458,15 +483,15 @@ and written to the queue journal file.
         <span class="params">(<span name="name">name: String</span>, <span name="create">create: <span name="scala.Boolean" class="extype">Boolean</span></span>)</span><span class="result">: <span name="scala.Option" class="extype">Option</span>[<a name="net.lag.kestrel.PersistentQueue" class="extype" href="PersistentQueue.html">PersistentQueue</a>]</span>
       </span>
       </h4>
-      <p class="shortcomment cmt">Get a named queue, with control over whether non-existent queues are created.</p>
+      <p class="shortcomment cmt">Get a named queue, optionally creating it if it does not already exist.</p>
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#queue" data-isabs="false">
-      <a id="queue(String):Option[PersistentQueue]"></a>
+      <a id="queue(String,ClientDescription):Option[PersistentQueue]"></a>
       <h4 class="signature">
       <span class="kind">def</span>
       <span class="symbol"> 
         <span class="name">queue</span>
         
-        <span class="params">(<span name="name">name: String</span>)</span><span class="result">: <span name="scala.Option" class="extype">Option</span>[<a name="net.lag.kestrel.PersistentQueue" class="extype" href="PersistentQueue.html">PersistentQueue</a>]</span>
+        <span class="params">(<span name="name">name: String</span>, <span name="clientDescription">clientDescription: ClientDescription = <span class="symbol"><span class="name"><a href="../../../scala/package.html">None</a></span></span></span>)</span><span class="result">: <span name="scala.Option" class="extype">Option</span>[<a name="net.lag.kestrel.PersistentQueue" class="extype" href="PersistentQueue.html">PersistentQueue</a>]</span>
       </span>
       </h4>
       <p class="shortcomment cmt">Get a named queue, creating it if necessary.</p>
@@ -515,13 +540,13 @@ and written to the queue journal file.
       </h4>
       
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#remove" data-isabs="false">
-      <a id="remove(String,Option[Time],Boolean,Boolean):Future[Option[QItem]]"></a>
+      <a id="remove(String,Option[Time],Boolean,Boolean,ClientDescription):Future[Option[QItem]]"></a>
       <h4 class="signature">
       <span class="kind">def</span>
       <span class="symbol"> 
         <span class="name">remove</span>
         
-        <span class="params">(<span name="key">key: String</span>, <span name="deadline">deadline: <span name="scala.Option" class="extype">Option</span>[<span name="com.twitter.util.Time" class="extype">Time</span>] = <span class="symbol"><span class="name"><a href="../../../scala/package.html">None</a></span></span></span>, <span name="transaction">transaction: <span name="scala.Boolean" class="extype">Boolean</span> = <span class="symbol">false</span></span>, <span name="peek">peek: <span name="scala.Boolean" class="extype">Boolean</span> = <span class="symbol">false</span></span>)</span><span class="result">: <span name="com.twitter.util.Future" class="extype">Future</span>[<span name="scala.Option" class="extype">Option</span>[<a name="net.lag.kestrel.QItem" class="extype" href="QItem.html">QItem</a>]]</span>
+        <span class="params">(<span name="key">key: String</span>, <span name="deadline">deadline: <span name="scala.Option" class="extype">Option</span>[<span name="com.twitter.util.Time" class="extype">Time</span>] = <span class="symbol"><span class="name"><a href="../../../scala/package.html">None</a></span></span></span>, <span name="transaction">transaction: <span name="scala.Boolean" class="extype">Boolean</span> = <span class="symbol">false</span></span>, <span name="peek">peek: <span name="scala.Boolean" class="extype">Boolean</span> = <span class="symbol">false</span></span>, <span name="clientDescription">clientDescription: ClientDescription = <span class="symbol"><span class="name"><a href="../../../scala/package.html">None</a></span></span></span>)</span><span class="result">: <span name="com.twitter.util.Future" class="extype">Future</span>[<span name="scala.Option" class="extype">Option</span>[<a name="net.lag.kestrel.QItem" class="extype" href="QItem.html">QItem</a>]]</span>
       </span>
       </h4>
       <p class="shortcomment cmt">Retrieve an item from a queue and pass it to a continuation.</p><div class="fullcomment"><div class="comment cmt"><p>Retrieve an item from a queue and pass it to a continuation. If no item is available within

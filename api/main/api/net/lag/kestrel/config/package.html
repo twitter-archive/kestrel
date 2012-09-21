@@ -54,7 +54,7 @@
       <span class="symbol"> 
         <a href="AliasBuilder.html"><span class="name">AliasBuilder</span></a>
         
-        <span class="result"> extends Config[AliasConfig]</span>
+        <span class="result"> extends AnyRef</span>
       </span>
       </h4>
       
@@ -69,6 +69,29 @@
       </span>
       </h4>
       
+    </li><li visbl="pub" name="net.lag.kestrel.config.ConfigValue" data-isabs="true">
+      <a id="ConfigValue:ConfigValue[A]"></a>
+      <h4 class="signature">
+      <span class="kind">class</span>
+      <span class="symbol"> 
+        <a href="ConfigValue.html"><span class="name">ConfigValue</span></a>
+        <span class="tparams">[<span name="A">A</span>]</span>
+        <span class="result"> extends AnyRef</span>
+      </span>
+      </h4>
+      <p class="comment cmt">ConfigValue represents a value that may either be a default or a
+configuration-specified value.</p>
+    </li><li visbl="pub" name="net.lag.kestrel.config.Default" data-isabs="false">
+      <a id="Default:Default[A]"></a>
+      <h4 class="signature">
+      <span class="kind">case class</span>
+      <span class="symbol"> 
+        <a href="Default.html"><span class="name">Default</span></a>
+        <span class="tparams">[<span name="A">A</span>]</span>
+        <span class="params">(<span name="x">x: A</span>)</span><span class="result"> extends ConfigValue[A] with Product with Serializable</span>
+      </span>
+      </h4>
+      
     </li><li visbl="pub" name="net.lag.kestrel.config.KestrelConfig" data-isabs="true">
       <a id="KestrelConfig:KestrelConfig"></a>
       <h4 class="signature">
@@ -79,7 +102,7 @@
         <span class="result"> extends ServerConfig[Kestrel]</span>
       </span>
       </h4>
-      
+      <p class="comment cmt">KestrelConfig is the main point of configuration for Kestrel.</p>
     </li><li visbl="pub" name="net.lag.kestrel.config.QueueBuilder" data-isabs="false">
       <a id="QueueBuilder:QueueBuilder"></a>
       <h4 class="signature">
@@ -87,10 +110,12 @@
       <span class="symbol"> 
         <a href="QueueBuilder.html"><span class="name">QueueBuilder</span></a>
         
-        <span class="result"> extends Config[QueueConfig]</span>
+        <span class="result"> extends AnyRef</span>
       </span>
       </h4>
-      
+      <p class="comment cmt">QueueBuilder produces QueueConfig objects and can resolve the QueueConfig against
+a parent QueueConfig, inheriting the parent's values wherever the QueueBuilder's
+defaults are left unmodified.</p>
     </li><li visbl="pub" name="net.lag.kestrel.config.QueueConfig" data-isabs="false">
       <a id="QueueConfig:QueueConfig"></a>
       <h4 class="signature">
@@ -102,12 +127,38 @@
       </span>
       </h4>
       
+    </li><li visbl="pub" name="net.lag.kestrel.config.SpecifiedValue" data-isabs="false">
+      <a id="SpecifiedValue:SpecifiedValue[A]"></a>
+      <h4 class="signature">
+      <span class="kind">case class</span>
+      <span class="symbol"> 
+        <a href="SpecifiedValue.html"><span class="name">SpecifiedValue</span></a>
+        <span class="tparams">[<span name="A">A</span>]</span>
+        <span class="params">(<span name="x">x: A</span>)</span><span class="result"> extends ConfigValue[A] with Product with Serializable</span>
+      </span>
+      </h4>
+      
     </li></ol>
             </div>
         
         
 
+        <div class="values members" id="values">
+              <h3>Value Members</h3>
+              <ol><li visbl="pub" name="net.lag.kestrel.config.ConfigValue" data-isabs="false">
+      <a id="ConfigValue:ConfigValue"></a>
+      <h4 class="signature">
+      <span class="kind">object</span>
+      <span class="symbol"> 
+        <a href="ConfigValue$.html"><span class="name">ConfigValue</span></a>
         
+        <span class="result"> extends AnyRef</span>
+      </span>
+      </h4>
+      <p class="comment cmt">The ConfigValue companion object provides implicit methods to convert
+bare objects into SpecifiedValue instances.</p>
+    </li></ol>
+            </div>
 
         
 

@@ -28,7 +28,8 @@
       </span>
       </h4>
       
-          <div class="fullcommenttop" id="comment"><div class="toggleContainer block">
+          <div class="fullcommenttop" id="comment"><div class="comment cmt"><p>KestrelConfig is the main point of configuration for Kestrel.
+</p></div><div class="toggleContainer block">
           <span class="toggle">Linear Supertypes</span>
           <div class="superTypes hiddenContent"><span name="com.twitter.ostrich.admin.config.ServerConfig" class="extype">ServerConfig</span>[<a name="net.lag.kestrel.Kestrel" class="extype" href="../Kestrel.html">Kestrel</a>], <span name="com.twitter.util.Config" class="extype">Config</span>[(<span name="com.twitter.ostrich.admin.RuntimeEnvironment" class="extype">RuntimeEnvironment</span>) ⇒ <a name="net.lag.kestrel.Kestrel" class="extype" href="../Kestrel.html">Kestrel</a>], () ⇒ (<span name="com.twitter.ostrich.admin.RuntimeEnvironment" class="extype">RuntimeEnvironment</span>) ⇒ <a name="net.lag.kestrel.Kestrel" class="extype" href="../Kestrel.html">Kestrel</a>, AnyRef, <span name="scala.Any" class="extype">Any</span></div>
         </div></div>
@@ -232,7 +233,9 @@ period of time will be disconnected.
         <span class="result">: <a name="net.lag.kestrel.config.QueueBuilder" class="extype" href="QueueBuilder.html">QueueBuilder</a></span>
       </span>
       </h4>
-      <p class="shortcomment cmt">Settings for a queue that isn't explicitly listed in <code>queues</code>.</p>
+      <p class="shortcomment cmt">Default queue settings.</p><div class="fullcomment"><div class="comment cmt"><p>Default queue settings. Starting with Kestrel 2.3.4, queue settings are
+inherited. See QueueBuilder for more information.
+</p></div></div>
     </li><li visbl="pub" name="scala.AnyRef#eq" data-isabs="false">
       <a id="eq(AnyRef):Boolean"></a>
       <h4 class="signature">
@@ -506,7 +509,9 @@ for queues that are rarely (or never) polled, but may contain short-lived items.
         <span class="result">: List[<a name="net.lag.kestrel.config.QueueBuilder" class="extype" href="QueueBuilder.html">QueueBuilder</a>]</span>
       </span>
       </h4>
-      <p class="shortcomment cmt">Specific per-queue config.</p>
+      <p class="shortcomment cmt">Specific per-queue config.</p><div class="fullcomment"><div class="comment cmt"><p>Specific per-queue config. Starting with Kestrel 2.3.4, queue settings are
+inherited. See QueueBuilder for more information.
+</p></div></div>
     </li><li visbl="pub" name="net.lag.kestrel.config.KestrelConfig#reload" data-isabs="false">
       <a id="reload(Kestrel):Unit"></a>
       <h4 class="signature">
