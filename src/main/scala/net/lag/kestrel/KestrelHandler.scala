@@ -142,7 +142,7 @@ abstract class KestrelHandler(
   }
 
   def flushAllQueues() {
-    queues.queueNames.foreach { qName => queues.flush(qName) }
+    queues.queueNames.foreach { qName => queues.flush(qName, Some(clientDescription)) }
   }
 
   protected def countPendingReads(key: String): Int
@@ -160,7 +160,7 @@ abstract class KestrelHandler(
         f(None, None)
       } else {
         Stats.incr("cmd_monitor_get")
-        queues.remove(key, timeLimit, opening, false).onSuccess {
+        queues.remove(key, timeLimit, opening, false, Some(clientDescription)).onSuccess {
           case None =>
             f(None, None)
           case x @ Some(item) =>
@@ -188,7 +188,7 @@ abstract class KestrelHandler(
       Stats.incr("cmd_get")
     }
     val startTime = Time.now
-    val future = queues.remove(key, timeout, opening, peeking)
+    val future = queues.remove(key, timeout, opening, peeking, Some(clientDescription))
     waitingFor = Some(future)
     future.map { itemOption =>
       waitingFor = None
@@ -213,7 +213,7 @@ abstract class KestrelHandler(
     log.debug("set -> q=%s flags=%d expiry=%s size=%d", key, flags, expiry, data.length)
     Stats.incr("cmd_set")
     val (rv, nsec) = Duration.inNanoseconds {
-      queues.add(key, data, expiry, Time.now)
+      queues.add(key, data, expiry, Time.now, Some(clientDescription))
     }
     Stats.addMetric("set_latency_usec", nsec.inMicroseconds.toInt)
     Stats.addMetric("q/" + key + "/set_latency_usec", nsec.inMicroseconds.toInt)
@@ -222,17 +222,17 @@ abstract class KestrelHandler(
 
   def flush(key: String) {
     log.debug("flush -> q=%s", key)
-    queues.flush(key)
+    queues.flush(key, Some(clientDescription))
   }
 
   def delete(key: String) {
     log.debug("delete -> q=%s", key)
-    queues.delete(key)
+    queues.delete(key, Some(clientDescription))
   }
 
   def flushExpired(key: String) = {
     log.debug("flush_expired -> q=%s", key)
-    queues.flushExpired(key)
+    queues.flushExpired(key, clientDescription = Some(clientDescription))
   }
 
   def shutdown() {

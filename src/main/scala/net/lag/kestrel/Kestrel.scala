@@ -167,12 +167,11 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
     // optionally, start a periodic timer to clean out expired items.
     expirationBackgroundProcess = expirationTimerFrequency.map { period =>
       log.info("Starting up background expiration task.")
+      val taskDesc = Some(() => "<background expiration task>")
       val proc = new PeriodicBackgroundProcess("background-expiration", period) {
         def periodic() {
-          val expired = Kestrel.this.queueCollection.flushAllExpired(true)
-          if (expired > 0) {
-            log.info("Expired %d item(s) from queues automatically.", expired)
-          }
+          Kestrel.this.queueCollection.flushAllExpired(true, taskDesc)
+
           // Now that we've cleaned out the queue, lets see if any of them are
           // ready to be expired.
           Kestrel.this.queueCollection.deleteExpiredQueues()
