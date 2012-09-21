@@ -11,6 +11,7 @@ release: TBD
 -----
 - modify configuration to allow inheritance by fanouts to masters, masters
   to default.
+- log client description when queues are created, deleted or flushed
 
 2.3.3
 -----
