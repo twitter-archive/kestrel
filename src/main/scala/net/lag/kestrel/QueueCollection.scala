@@ -48,24 +48,34 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
   private val aliases = new mutable.HashMap[String, AliasedQueue]
   @volatile private var shuttingDown = false
 
-  @volatile private var queueConfigMap = Map(queueBuilders.map { builder => (builder.name, builder()) }: _*)
+  @volatile private var queueBuilderMap = Map(queueBuilders.map { builder => (builder.name, builder) }: _*)
   @volatile private var aliasConfigMap = Map(aliasBuilders.map { builder => (builder.name, builder()) }: _*)
 
   private def checkNames {
-    val duplicates = queueConfigMap.keySet & aliasConfigMap.keySet
+    val duplicates = queueBuilderMap.keySet & aliasConfigMap.keySet
     if (!duplicates.isEmpty) {
       log.warning("queue name(s) masked by alias(es): %s".format(duplicates.toList.sorted.mkString(", ")))
     }
   }
 
-  private def buildQueue(name: String, realName: String, path: String) = {
-    if ((realName contains ".") || (realName contains "/") || (realName contains "~")) {
+  private def getQueueConfig(name: String, masterName: Option[String] = None): QueueConfig = {
+    masterName match {
+      case Some(master) =>
+        val masterConfig = getQueueConfig(master)
+        queueBuilderMap.get(name).map { _.apply(Some(masterConfig)) }.getOrElse(masterConfig)
+      case None =>
+        queueBuilderMap.get(name).map { _.apply(Some(defaultQueueConfig)) }.getOrElse(defaultQueueConfig)
+    }
+  }
+
+  private def buildQueue(name: String, masterName: Option[String], path: String) = {
+    if ((name contains ".") || (name contains "/") || (name contains "~")) {
       throw new Exception("Queue name contains illegal characters (one of: ~ . /).")
     }
-    val config = queueConfigMap.getOrElse(name, defaultQueueConfig)
-    log.info("Setting up queue %s: %s", realName, config)
+    val config = getQueueConfig(name, masterName)
+    log.info("Setting up queue %s: %s", name, config)
     Stats.incr("queue_creates")
-    new PersistentQueue(realName, path, config, timer, journalSyncScheduler, Some(this.apply))
+    new PersistentQueue(name, path, config, timer, journalSyncScheduler, Some(this.apply))
   }
 
   // preload any queues
@@ -80,6 +90,7 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
       aliases.get(name) match {
         case Some(alias) =>
           alias.config = config
+          log.info("Reloaded alias config %s: %s", name, config)
         case None =>
           log.info("Setting up alias %s: %s", name, config)
           val alias = new AliasedQueue(name, config, this)
@@ -113,10 +124,12 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
              newAliasBuilders: List[AliasBuilder]) {
     defaultQueueConfig = newDefaultQueueConfig
     queueBuilders = newQueueBuilders
-    queueConfigMap = Map(queueBuilders.map { builder => (builder.name, builder()) }: _*)
+    queueBuilderMap = Map(queueBuilders.map { builder => (builder.name, builder) }: _*)
     queues.foreach { case (name, queue) =>
-      val configName = if (name contains '+') name.split('+')(0) else name
-      queue.config = queueConfigMap.get(configName).getOrElse(defaultQueueConfig)
+      val masterName = if (name contains '+') Some(name.split('+')(0)) else None
+      val config = getQueueConfig(name, masterName)
+      queue.config = config
+      log.info("Reloaded queue config %s: %s", name, config)
     }
     aliasBuilders = newAliasBuilders
     aliasConfigMap = Map(aliasBuilders.map { builder => (builder.name, builder()) }: _*)
@@ -139,12 +152,12 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
         // only happens when creating a queue for the first time.
         val q = if (name contains '+') {
           val master = name.split('+')(0)
-          val fanoutQ = buildQueue(master, name, path.getPath)
+          val fanoutQ = buildQueue(name, Some(master), path.getPath)
           fanout_queues.getOrElseUpdate(master, new mutable.HashSet[String]) += name
           log.info("Fanout queue %s added to %s", name, master)
           fanoutQ
         } else {
-          buildQueue(name, name, path.getPath)
+          buildQueue(name, None, path.getPath)
         }
         q.setup
         queues(name) = q

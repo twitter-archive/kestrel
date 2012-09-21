@@ -263,14 +263,14 @@ class PersistentQueueSpec extends Specification
           maxMemorySize = 123.bytes
         }.apply()
         val q1 = new PersistentQueue("test1", folderName, config1, timer, scheduler)
-        q1.config.maxJournalSize mustEqual new QueueBuilder().maxJournalSize
+        q1.config.maxJournalSize mustEqual new QueueBuilder().apply().maxJournalSize
         q1.config.maxMemorySize mustEqual 123.bytes
         val config2 = new QueueBuilder {
           maxJournalSize = 123.bytes
         }.apply()
         val q2 = new PersistentQueue("test1", folderName, config2, timer, scheduler)
         q2.config.maxJournalSize mustEqual 123.bytes
-        q2.config.maxMemorySize mustEqual new QueueBuilder().maxMemorySize
+        q2.config.maxMemorySize mustEqual new QueueBuilder().apply().maxMemorySize
       }
     }
 
