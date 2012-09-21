@@ -42,12 +42,12 @@ class AliasedQueue(val name: String, @volatile var config: AliasConfig, queueCol
   /**
    * Add a value to the end of the aliased queue(s).
    */
-  def add(value: Array[Byte], expiry: Option[Time], addTime: Time): Boolean = {
+  def add(value: Array[Byte], expiry: Option[Time], addTime: Time, clientDescription: Option[() => String]): Boolean = {
     putItems.getAndIncrement()
     putBytes.getAndAdd(value.length)
 
     config.destinationQueues.foldLeft(true) { case (result, name) =>
-      val thisResult = queueCollection.add(name, value, expiry, addTime)
+      val thisResult = queueCollection.add(name, value, expiry, addTime, clientDescription)
       result && thisResult
     }
   }

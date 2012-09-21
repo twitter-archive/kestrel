@@ -7,6 +7,16 @@ release: TBD
 - Kestrel now ignores directories in its queue path.
 - Fix load test scripts to use correct JAR name [Bryan English]
 
+2.3.4
+-----
+- modify configuration to allow inheritance by fanouts to masters, masters
+  to default.
+
+2.3.3
+-----
+- change kestrel.sh to use old PID file so that daemon-based installs can
+  be halted
+
 2.3.2
 -----
 release: 23 Aug 2012

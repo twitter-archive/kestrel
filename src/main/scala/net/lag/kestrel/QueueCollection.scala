@@ -28,10 +28,17 @@ import config._
 
 class InaccessibleQueuePath extends Exception("Inaccessible queue path: Must be a directory and writable")
 
+object QueueCollection {
+  val unknown = () => "<unknown>"
+}
+
 class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: ScheduledExecutorService,
                       @volatile private var defaultQueueConfig: QueueConfig,
                       @volatile var queueBuilders: List[QueueBuilder],
                       @volatile var aliasBuilders: List[AliasBuilder]) {
+  import QueueCollection.unknown
+  type ClientDescription = Option[() => String]
+
   private val log = Logger.get(getClass.getName)
 
   private val path = new File(queueFolder)
@@ -48,29 +55,41 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
   private val aliases = new mutable.HashMap[String, AliasedQueue]
   @volatile private var shuttingDown = false
 
-  @volatile private var queueConfigMap = Map(queueBuilders.map { builder => (builder.name, builder()) }: _*)
+  @volatile private var queueBuilderMap = Map(queueBuilders.map { builder => (builder.name, builder) }: _*)
   @volatile private var aliasConfigMap = Map(aliasBuilders.map { builder => (builder.name, builder()) }: _*)
 
   private def checkNames {
-    val duplicates = queueConfigMap.keySet & aliasConfigMap.keySet
+    val duplicates = queueBuilderMap.keySet & aliasConfigMap.keySet
     if (!duplicates.isEmpty) {
       log.warning("queue name(s) masked by alias(es): %s".format(duplicates.toList.sorted.mkString(", ")))
     }
   }
 
-  private def buildQueue(name: String, realName: String, path: String) = {
-    if ((realName contains ".") || (realName contains "/") || (realName contains "~")) {
+  private def getQueueConfig(name: String, masterName: Option[String] = None): QueueConfig = {
+    masterName match {
+      case Some(master) =>
+        val masterConfig = getQueueConfig(master)
+        queueBuilderMap.get(name).map { _.apply(Some(masterConfig)) }.getOrElse(masterConfig)
+      case None =>
+        queueBuilderMap.get(name).map { _.apply(Some(defaultQueueConfig)) }.getOrElse(defaultQueueConfig)
+    }
+  }
+
+  private def buildQueue(name: String, masterName: Option[String], path: String,
+                         clientDescription: ClientDescription) = {
+    if ((name contains ".") || (name contains "/") || (name contains "~")) {
       throw new Exception("Queue name contains illegal characters (one of: ~ . /).")
     }
-    val config = queueConfigMap.getOrElse(name, defaultQueueConfig)
-    log.info("Setting up queue %s: %s", realName, config)
+    val config = getQueueConfig(name, masterName)
+    log.info("Setting up queue %s: %s (via %s)", name, config, clientDescription.getOrElse(unknown)())
     Stats.incr("queue_creates")
-    new PersistentQueue(realName, path, config, timer, journalSyncScheduler, Some(this.apply))
+    new PersistentQueue(name, path, config, timer, journalSyncScheduler, Some(this.apply))
   }
 
   // preload any queues
   def loadQueues() {
-    Journal.getQueueNamesFromFolder(path) map { queue(_) }
+    val startupDesc = Some(() => "<startup>")
+    Journal.getQueueNamesFromFolder(path) map { queue(_, startupDesc) }
     createAliases()
   }
 
@@ -80,6 +99,7 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
       aliases.get(name) match {
         case Some(alias) =>
           alias.config = config
+          log.info("Reloaded alias config %s: %s", name, config)
         case None =>
           log.info("Setting up alias %s: %s", name, config)
           val alias = new AliasedQueue(name, config, this)
@@ -113,10 +133,12 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
              newAliasBuilders: List[AliasBuilder]) {
     defaultQueueConfig = newDefaultQueueConfig
     queueBuilders = newQueueBuilders
-    queueConfigMap = Map(queueBuilders.map { builder => (builder.name, builder()) }: _*)
+    queueBuilderMap = Map(queueBuilders.map { builder => (builder.name, builder) }: _*)
     queues.foreach { case (name, queue) =>
-      val configName = if (name contains '+') name.split('+')(0) else name
-      queue.config = queueConfigMap.get(configName).getOrElse(defaultQueueConfig)
+      val masterName = if (name contains '+') Some(name.split('+')(0)) else None
+      val config = getQueueConfig(name, masterName)
+      queue.config = config
+      log.info("Reloaded queue config %s: %s", name, config)
     }
     aliasBuilders = newAliasBuilders
     aliasConfigMap = Map(aliasBuilders.map { builder => (builder.name, builder()) }: _*)
@@ -126,34 +148,42 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
   /**
    * Get a named queue, creating it if necessary.
    */
-  def queue(name: String): Option[PersistentQueue] = queue(name, true)
+  def queue(name: String, clientDescription: ClientDescription = None): Option[PersistentQueue] =
+    queue(name, true, clientDescription)
+
+  /**
+   * Get a named queue, optionally creating it if it does not already exist.
+   */
+  def queue(name: String, create: Boolean): Option[PersistentQueue] =
+    queue(name, create, None)
 
   /**
    * Get a named queue, with control over whether non-existent queues are created.
    */
-  def queue(name: String, create: Boolean): Option[PersistentQueue] = synchronized {
-    if (shuttingDown) {
-      None
-    } else if (create) {
-      queues.get(name) orElse {
-        // only happens when creating a queue for the first time.
-        val q = if (name contains '+') {
-          val master = name.split('+')(0)
-          val fanoutQ = buildQueue(master, name, path.getPath)
-          fanout_queues.getOrElseUpdate(master, new mutable.HashSet[String]) += name
-          log.info("Fanout queue %s added to %s", name, master)
-          fanoutQ
-        } else {
-          buildQueue(name, name, path.getPath)
+  def queue(name: String, create: Boolean, clientDescription: ClientDescription): Option[PersistentQueue] =
+    synchronized {
+      if (shuttingDown) {
+        None
+      } else if (create) {
+        queues.get(name) orElse {
+          // only happens when creating a queue for the first time.
+          val q = if (name contains '+') {
+            val master = name.split('+')(0)
+            val fanoutQ = buildQueue(name, Some(master), path.getPath, clientDescription)
+            fanout_queues.getOrElseUpdate(master, new mutable.HashSet[String]) += name
+            log.info("Fanout queue %s added to %s by %s", name, master, clientDescription.getOrElse(unknown)())
+            fanoutQ
+          } else {
+            buildQueue(name, None, path.getPath, clientDescription)
+          }
+          q.setup
+          queues(name) = q
+          Some(q)
         }
-        q.setup
-        queues(name) = q
-        Some(q)
+      } else {
+        queues.get(name)
       }
-    } else {
-      queues.get(name)
     }
-  }
 
   def apply(name: String) = queue(name)
 
@@ -174,16 +204,17 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
    *
    * @return true if the item was added; false if the server is shutting down
    */
-  def add(key: String, item: Array[Byte], expiry: Option[Time], addTime: Time): Boolean = {
+  def add(key: String, item: Array[Byte], expiry: Option[Time], addTime: Time,
+          clientDescription: ClientDescription = None): Boolean = {
     alias(key) match {
       case Some(alias) =>
-        alias.add(item, expiry, addTime)
+        alias.add(item, expiry, addTime, clientDescription)
       case None =>
         for (fanouts <- fanout_queues.get(key); name <- fanouts) {
-          add(name, item, expiry, addTime)
+          add(name, item, expiry, addTime, clientDescription)
         }
 
-        queue(key) match {
+        queue(key, clientDescription) match {
           case None => false
           case Some(q) =>
             val result = q.add(item, expiry, None, addTime)
@@ -200,13 +231,14 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
    * Retrieve an item from a queue and pass it to a continuation. If no item is available within
    * the requested time, or the server is shutting down, None is passed.
    */
-  def remove(key: String, deadline: Option[Time] = None, transaction: Boolean = false, peek: Boolean = false): Future[Option[QItem]] = {
+  def remove(key: String, deadline: Option[Time] = None, transaction: Boolean = false, peek: Boolean = false,
+           clientDescription: ClientDescription = None): Future[Option[QItem]] = {
     if (alias(key).isDefined) {
       // make remove from alias return "no items"
       return Future.value(None)
     }
 
-    queue(key) match {
+    queue(key, clientDescription) match {
       case None =>
         Future.value(None)
       case Some(q) =>
@@ -235,11 +267,14 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
     queue(key, false) map { q => q.confirmRemove(xid) }
   }
 
-  def flush(key: String) {
-    queue(key, false) map { q => q.flush() }
+  def flush(key: String, clientDescription: ClientDescription = None) {
+    queue(key, false) map { q =>
+      q.flush()
+      log.info("Queue %s flushed by %s", key, clientDescription.getOrElse(unknown)())
+    }
   }
 
-  def delete(name: String): Unit = synchronized {
+  def delete(name: String, clientDescription: ClientDescription = None): Unit = synchronized {
     if (!shuttingDown) {
       queues.get(name) map { q =>
         q.close()
@@ -247,20 +282,28 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
         q.removeStats()
         queues.remove(name)
         Stats.incr("queue_deletes")
+        log.info("Queue %s deleted by %s", name, clientDescription.getOrElse(unknown)())
       }
       if (name contains '+') {
         val master = name.split('+')(0)
         fanout_queues.getOrElseUpdate(master, new mutable.HashSet[String]) -= name
-        log.info("Fanout queue %s dropped from %s", name, master)
+        log.info("Fanout queue %s dropped from %s by %s", name, master, clientDescription.getOrElse(unknown)())
       }
     }
   }
 
-  def flushExpired(name: String, limit: Boolean = false): Int = {
+  def flushExpired(name: String, limit: Boolean = false, clientDescription: ClientDescription = None): Int = {
     if (shuttingDown) {
       0
     } else {
-      queue(name, false) map { q => q.discardExpired(limit) } getOrElse(0)
+      queue(name, false) map { q =>
+        val flushed = q.discardExpired(limit)
+        if (flushed > 0) {
+          log.info("Queue %s flushed of %d expired item(s) by %s",
+                   name, flushed, clientDescription.getOrElse(unknown)())
+        }
+        flushed
+      } getOrElse(0)
     }
   }
 
@@ -276,8 +319,8 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
     }
   }
 
-  def flushAllExpired(limit: Boolean = false): Int = {
-    queueNames(true).foldLeft(0) { (sum, qName) => sum + flushExpired(qName, limit) }
+  def flushAllExpired(limit: Boolean = false, clientDescription: ClientDescription = None): Int = {
+    queueNames(true).foldLeft(0) { (sum, qName) => sum + flushExpired(qName, limit, clientDescription) }
   }
 
   def deleteExpiredQueues(): Unit = {

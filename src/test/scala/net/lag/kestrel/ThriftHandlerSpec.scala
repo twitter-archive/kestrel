@@ -30,6 +30,8 @@ import net.lag.kestrel.thrift.{Status => TStatus}
 class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
   def wrap(s: String) = ChannelBuffers.wrappedBuffer(s.getBytes)
 
+  type ClientDesc = Option[() => String]
+
   "ThriftHandler" should {
     val queueCollection = mock[QueueCollection]
     val connection = mock[ClientConnection]
@@ -82,7 +84,7 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
       "one" in {
         withFrozenThriftHandler { (thriftHandler, mutator) =>
           expect {
-            one(queueCollection).add("test", item1, None, Time.now) willReturn true
+            one(queueCollection).add(equal("test"), equal(item1), equal(None), equal(Time.now), any[ClientDesc]) willReturn true
           }
 
           thriftHandler.put("test", List(ByteBuffer.wrap(item1)), 0)() mustEqual 1
@@ -92,8 +94,8 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
       "two" in {
         withFrozenThriftHandler { (thriftHandler, mutator) =>
           expect {
-            one(queueCollection).add("test", item1, None, Time.now) willReturn true
-            one(queueCollection).add("test", item2, None, Time.now) willReturn true
+            one(queueCollection).add(equal("test"), equal(item1), equal(None), equal(Time.now), any[ClientDesc]) willReturn true
+            one(queueCollection).add(equal("test"), equal(item2), equal(None), equal(Time.now), any[ClientDesc]) willReturn true
           }
 
           thriftHandler.put("test", List(ByteBuffer.wrap(item1), ByteBuffer.wrap(item2)), 0)() mustEqual 2
@@ -103,8 +105,8 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
       "three, with only one accepted" in {
         withFrozenThriftHandler { (thriftHandler, mutator) =>
           expect {
-            one(queueCollection).add("test", item1, None, Time.now) willReturn true
-            one(queueCollection).add("test", item2, None, Time.now) willReturn false
+            one(queueCollection).add(equal("test"), equal(item1), equal(None), equal(Time.now), any[ClientDesc]) willReturn true
+            one(queueCollection).add(equal("test"), equal(item2), equal(None), equal(Time.now), any[ClientDesc]) willReturn false
           }
 
           thriftHandler.put("test", List(
@@ -118,7 +120,7 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
       "with timeout" in {
         withFrozenThriftHandler { (thriftHandler, mutator) =>
           expect {
-            one(queueCollection).add("test", item1, Some(5.seconds.fromNow), Time.now) willReturn true
+            one(queueCollection).add(equal("test"), equal(item1), equal(Some(5.seconds.fromNow)), equal(Time.now), any[ClientDesc]) willReturn true
           }
 
           thriftHandler.put("test", List(ByteBuffer.wrap(item1)), 5000)() mustEqual 1
@@ -132,7 +134,7 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
           val qitem = QItem(Time.now, None, item1, 0)
 
           expect {
-            one(queueCollection).remove("test", None, false, false) willReturn Future(Some(qitem))
+            one(queueCollection).remove(equal("test"), equal(None), equal(false), equal(false), any[ClientDesc]) willReturn Future(Some(qitem))
           }
 
           thriftHandler.get("test", 1, 0, 0)() mustEqual List(thrift.Item(ByteBuffer.wrap(item1), 0L))
@@ -144,7 +146,7 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
           val qitem = QItem(Time.now, None, item1, 0)
 
           expect {
-            one(queueCollection).remove("test", Some(1.second.fromNow), false, false) willReturn Future(Some(qitem))
+            one(queueCollection).remove(equal("test"), equal(Some(1.second.fromNow)), equal(false), equal(false), any[ClientDesc]) willReturn Future(Some(qitem))
           }
 
           thriftHandler.get("test", 1, 1000, 0)() mustEqual List(thrift.Item(ByteBuffer.wrap(item1), 0L))
@@ -156,7 +158,7 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
           val qitem = QItem(Time.now, None, item1, 1)
 
           expect {
-            one(queueCollection).remove("test", None, true, false) willReturn Future(Some(qitem))
+            one(queueCollection).remove(equal("test"), equal(None), equal(true), equal(false), any[ClientDesc]) willReturn Future(Some(qitem))
           }
 
           thriftHandler.get("test", 1, 0, 500)() mustEqual List(thrift.Item(ByteBuffer.wrap(item1), 1L))
@@ -169,9 +171,9 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
           val qitem2 = QItem(Time.now, None, item2, 2)
 
           expect {
-            one(queueCollection).remove("test", None, true, false) willReturn Future(Some(qitem1))
-            one(queueCollection).remove("test", None, true, false) willReturn Future(Some(qitem2))
-            one(queueCollection).remove("test", None, true, false) willReturn Future(None)
+            one(queueCollection).remove(equal("test"), equal(None), equal(true), equal(false), any[ClientDesc]) willReturn Future(Some(qitem1))
+            one(queueCollection).remove(equal("test"), equal(None), equal(true), equal(false), any[ClientDesc]) willReturn Future(Some(qitem2))
+            one(queueCollection).remove(equal("test"), equal(None), equal(true), equal(false), any[ClientDesc]) willReturn Future(None)
           }
 
           thriftHandler.get("test", 5, 0, 500)() mustEqual List(
@@ -187,8 +189,8 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
           val qitem2 = QItem(Time.now, None, item2, 1)
 
           expect {
-            one(queueCollection).remove("test", None, true, false) willReturn Future(Some(qitem1))
-            one(queueCollection).remove("spam", None, true, false) willReturn Future(Some(qitem2))
+            one(queueCollection).remove(equal("test"), equal(None), equal(true), equal(false), any[ClientDesc]) willReturn Future(Some(qitem1))
+            one(queueCollection).remove(equal("spam"), equal(None), equal(true), equal(false), any[ClientDesc]) willReturn Future(Some(qitem2))
           }
 
           thriftHandler.get("test", 1, 0, 500)() mustEqual List(thrift.Item(ByteBuffer.wrap(item1), 1L))
@@ -201,7 +203,7 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
           val qitems = (1 to 10).map { i => QItem(Time.now, None, item1, i) }
           expect {
             qitems.foreach { qitem =>
-              one(queueCollection).remove("test", None, true, false) willReturn Future(Some(qitem))
+              one(queueCollection).remove(equal("test"), equal(None), equal(true), equal(false), any[ClientDesc]) willReturn Future(Some(qitem))
             }
           }
 
@@ -246,7 +248,7 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
           val qitem = QItem(Time.now, None, item1, 1)
 
           expect {
-            one(queueCollection).remove("test", None, true, false) willReturn Future(Some(qitem))
+            one(queueCollection).remove(equal("test"), equal(None), equal(true), equal(false), any[ClientDesc]) willReturn Future(Some(qitem))
             one(queueCollection).unremove("test", 1)
           }
 
@@ -263,9 +265,9 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
           val qitem2 = QItem(Time.now, None, item2, 2)
 
           expect {
-            one(queueCollection).remove("test", None, true, false) willReturn Future(Some(qitem1))
-            one(queueCollection).remove("test", None, true, false) willReturn Future(Some(qitem2))
-            one(queueCollection).remove("test", None, true, false) willReturn Future(None)
+            one(queueCollection).remove(equal("test"), equal(None), equal(true), equal(false), any[ClientDesc]) willReturn Future(Some(qitem1))
+            one(queueCollection).remove(equal("test"), equal(None), equal(true), equal(false), any[ClientDesc]) willReturn Future(Some(qitem2))
+            one(queueCollection).remove(equal("test"), equal(None), equal(true), equal(false), any[ClientDesc]) willReturn Future(None)
             one(queueCollection).unremove("test", 1)
             one(queueCollection).unremove("test", 2)
           }
@@ -283,7 +285,7 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
           val qitem = QItem(Time.now, None, item1, 1)
 
           expect {
-            one(queueCollection).remove("test", None, true, false) willReturn Future(Some(qitem))
+            one(queueCollection).remove(equal("test"), equal(None), equal(true), equal(false), any[ClientDesc]) willReturn Future(Some(qitem))
             one(queueCollection).unremove("test", 1)
           }
 
@@ -299,7 +301,7 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
           val qitem = QItem(Time.now, None, item1, 1)
 
           expect {
-            one(queueCollection).remove("test", None, true, false) willReturn Future(Some(qitem))
+            one(queueCollection).remove(equal("test"), equal(None), equal(true), equal(false), any[ClientDesc]) willReturn Future(Some(qitem))
             one(queueCollection).confirmRemove("test", 1)
           }
 
@@ -317,10 +319,10 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
           val qitem3 = QItem(Time.now, None, item3, 3)
 
           expect {
-            one(queueCollection).remove("test", None, true, false) willReturn Future(Some(qitem1))
-            one(queueCollection).remove("test", None, true, false) willReturn Future(Some(qitem2))
-            one(queueCollection).remove("test", None, true, false) willReturn Future(Some(qitem3))
-            one(queueCollection).remove("test", None, true, false) willReturn Future(None)
+            one(queueCollection).remove(equal("test"), equal(None), equal(true), equal(false), any[ClientDesc]) willReturn Future(Some(qitem1))
+            one(queueCollection).remove(equal("test"), equal(None), equal(true), equal(false), any[ClientDesc]) willReturn Future(Some(qitem2))
+            one(queueCollection).remove(equal("test"), equal(None), equal(true), equal(false), any[ClientDesc]) willReturn Future(Some(qitem3))
+            one(queueCollection).remove(equal("test"), equal(None), equal(true), equal(false), any[ClientDesc]) willReturn Future(None)
             one(queueCollection).confirmRemove("test", 1)
             one(queueCollection).unremove("test", 2)
             one(queueCollection).confirmRemove("test", 3)
@@ -344,7 +346,7 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
         val qitem1 = QItem(Time.now, None, item1, 0)
 
         expect {
-          one(queueCollection).remove("test", None, false, true) willReturn Future(Some(qitem1))
+          one(queueCollection).remove(equal("test"), equal(None), equal(false), equal(true), any[ClientDesc]) willReturn Future(Some(qitem1))
           one(queueCollection).stats("test") willReturn List(
             ("items", "10"),
             ("bytes", "10240"),
@@ -363,7 +365,7 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
     "flush_queue" in {
       withThriftHandler { thriftHandler =>
         expect {
-          one(queueCollection).flush("test")
+          one(queueCollection).flush(equal("test"), any[ClientDesc])
         }
 
         thriftHandler.flushQueue("test")
@@ -373,7 +375,7 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
     "delete_queue" in {
       withThriftHandler { thriftHandler =>
         expect {
-          one(queueCollection).delete("test")
+          one(queueCollection).delete(equal("test"), any[ClientDesc])
         }
 
         thriftHandler.deleteQueue("test")
@@ -392,8 +394,8 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
       withThriftHandler { thriftHandler =>
         expect {
           one(queueCollection).queueNames willReturn List("test", "spam")
-          one(queueCollection).flush("test")
-          one(queueCollection).flush("spam")
+          one(queueCollection).flush(equal("test"), any[ClientDesc])
+          one(queueCollection).flush(equal("spam"), any[ClientDesc])
         }
 
         thriftHandler.flushAllQueues()

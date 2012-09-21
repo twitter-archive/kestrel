@@ -52,7 +52,7 @@ class AliasedQueueSpec extends Specification with TempFolder {
     }
 
     "add a value to the end of an aliased queue" in {
-      aq.add(Array(1, 2, 3, 4), None, Time.now) mustEqual true
+      aq.add(Array(1, 2, 3, 4), None, Time.now, None) mustEqual true
     }
 
     "return an array of empty stats when no value was added to the queue" in {
@@ -63,7 +63,7 @@ class AliasedQueueSpec extends Specification with TempFolder {
     }
 
     "return an array of stats when a value is added to the aliased queue" in {
-      aq.add(Array(1, 2, 3, 4), None, Time.now)
+      aq.add(Array(1, 2, 3, 4), None, Time.now, None)
       val stats = aq.dumpStats().toMap
       stats("put_items") mustEqual "1"
       stats("put_bytes") mustEqual "4"

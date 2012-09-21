@@ -413,5 +413,72 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
         }
       }
     }
+
+    "configuration hierarchy" in {
+      "default queue should inherit from/override built-in default" in {
+        withTempFolder {
+          val builtInDefaultConfig = new QueueBuilder().apply()
+          val defaultQueueConfig = new QueueBuilder() {
+            maxItems = 100
+          }.apply()
+
+          qc = new QueueCollection(folderName, timer, scheduler, defaultQueueConfig, Nil, Nil)
+          val q = qc.queue("foo").get
+          q.config mustEqual builtInDefaultConfig.copy(maxItems = 100)
+        }
+      }
+
+      "queue should override inherit from/override default queue" in {
+        withTempFolder {
+          val builtInDefaultConfig = new QueueBuilder().apply()
+          val defaultQueueConfig = new QueueBuilder() {
+            maxItems = 100
+            maxSize = 100.bytes
+          }.apply()
+          val queueBuilder = new QueueBuilder() {
+            name = "foo"
+            maxItems = 200
+            maxItemSize = 200.bytes
+          }
+
+          qc = new QueueCollection(folderName, timer, scheduler, defaultQueueConfig, List(queueBuilder), Nil)
+          val q = qc.queue("foo").get
+          q.config mustEqual builtInDefaultConfig.copy(maxItems = 200,          // override default queue
+                                                       maxSize = 100.bytes,     // inherit default queue
+                                                       maxItemSize = 200.bytes) // override built-in
+        }
+      }
+
+      "fanout queue should inherit from/override master queue" in {
+        withTempFolder {
+          val builtInDefaultConfig = new QueueBuilder().apply()
+          val defaultQueueConfig = new QueueBuilder() {
+            maxItems = 100
+            maxSize = 100.bytes
+            maxJournalSize = 100.bytes
+          }.apply()
+          val queueBuilders = List(
+            new QueueBuilder() {
+              name = "foo"
+              maxItems = 200
+              maxItemSize = 200.bytes
+            },
+            new QueueBuilder() {
+              name = "foo+fanout"
+              maxItems = 300
+              defaultJournalSize = 300.bytes
+              maxJournalSize = 300.bytes
+            })
+
+          qc = new QueueCollection(folderName, timer, scheduler, defaultQueueConfig, queueBuilders, Nil)
+          val q = qc.queue("foo+fanout").get
+          q.config mustEqual builtInDefaultConfig.copy(maxItems = 300,                 // override master queue
+                                                       maxItemSize = 200.bytes,        // inherit master queue
+                                                       maxJournalSize = 300.bytes,     // override default queue
+                                                       maxSize = 100.bytes,            // inherit default queue
+                                                       defaultJournalSize = 300.bytes) // override built-in
+        }
+      }
+    }
   }
 }

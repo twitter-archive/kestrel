@@ -25,160 +25,9 @@ import com.twitter.logging.Logger
 import com.twitter.logging.config._
 import com.twitter.ostrich.admin.{RuntimeEnvironment, ServiceTracker}
 import com.twitter.ostrich.admin.config._
-import com.twitter.util.{Config, Duration, StorageUnit}
+import com.twitter.util.Duration
 import org.apache.zookeeper.data.ACL
 import scala.collection.JavaConversions
-
-case class QueueConfig(
-  maxItems: Int,
-  maxSize: StorageUnit,
-  maxItemSize: StorageUnit,
-  maxAge: Option[Duration],
-  defaultJournalSize: StorageUnit,
-  maxMemorySize: StorageUnit,
-  maxJournalSize: StorageUnit,
-  discardOldWhenFull: Boolean,
-  keepJournal: Boolean,
-  syncJournal: Duration,
-  expireToQueue: Option[String],
-  maxExpireSweep: Int,
-  fanoutOnly: Boolean,
-  maxQueueAge: Option[Duration]
-) {
-  override def toString() = {
-    ("maxItems=%d maxSize=%s maxItemSize=%s maxAge=%s defaultJournalSize=%s maxMemorySize=%s " +
-     "maxJournalSize=%s discardOldWhenFull=%s keepJournal=%s syncJournal=%s " +
-     "expireToQueue=%s maxExpireSweep=%d fanoutOnly=%s maxQueueAge=%s").format(maxItems, maxSize,
-     maxItemSize, maxAge, defaultJournalSize, maxMemorySize, maxJournalSize, discardOldWhenFull,
-     keepJournal, syncJournal, expireToQueue, maxExpireSweep, fanoutOnly, maxQueueAge)
-  }
-}
-
-class QueueBuilder extends Config[QueueConfig] {
-  /**
-   * Name of the queue being configured.
-   */
-  var name: String = null
-
-  /**
-   * Set a hard limit on the number of items this queue can hold. When the queue is full,
-   * `discardOldWhenFull` dictates the behavior when a client attempts to add another item.
-   */
-  var maxItems: Int = Int.MaxValue
-
-  /**
-   * Set a hard limit on the number of bytes (of data in queued items) this queue can hold.
-   * When the queue is full, discardOldWhenFull dictates the behavior when a client attempts
-   * to add another item.
-   */
-  var maxSize: StorageUnit = Long.MaxValue.bytes
-
-  /**
-   * Set a hard limit on the number of bytes a single queued item can contain.
-   * An add request for an item larger than this will be rejected.
-   */
-  var maxItemSize: StorageUnit = Long.MaxValue.bytes
-
-  /**
-   * Expiration time for items on this queue. Any item that has been sitting on the queue longer
-   * than this duration will be discarded. Clients may also attach an expiration time when adding
-   * items to a queue, in which case the item expires at the earlier of the two expiration times.
-   */
-  var maxAge: Option[Duration] = None
-
-  /**
-   * If the queue is empty, truncate the journal when it reaches this size.
-   */
-  var defaultJournalSize: StorageUnit = 16.megabytes
-
-  /**
-   * Keep only this much of the queue in memory. The journal will be used to store backlogged
-   * items, and they'll be read back into memory as the queue is drained. This setting is a release
-   * valve to keep a backed-up queue from consuming all memory.
-   */
-  var maxMemorySize: StorageUnit = 128.megabytes
-
-  /**
-   * If the queue fits entirely in memory (see maxMemorySize) and the journal files get larger than
-   * this, rebuild the journal.
-   */
-  var maxJournalSize: StorageUnit = 1.gigabyte
-
-  /**
-   * If this is false, when a queue is full, clients attempting to add another item will get an
-   * error. No new items will be accepted. If this is true, old items will be discarded to make
-   * room for the new one. This settting has no effect unless at least one of `maxItems` or
-   * `maxSize` is set.
-   */
-  var discardOldWhenFull: Boolean = false
-
-  /**
-   * If false, don't keep a journal file for this queue. When kestrel exits, any remaining contents
-   * in the queue will be lost.
-   */
-  var keepJournal: Boolean = true
-
-  /**
-   * How often to sync the journal file. To sync after every write, set this to `0.milliseconds`.
-   * To never sync, set it to `Duration.MaxValue`. Syncing the journal will reduce the maximum
-   * throughput of the server in exchange for a lower chance of losing data.
-   */
-  var syncJournal: Duration = Duration.MaxValue
-
-  /**
-   * Name of a queue to add expired items to. If set, expired items are added to the requested
-   * queue as if by a `SET` command. This can be used to implement special processing for expired
-   * items, or to implement a simple "delayed processing" queue.
-   */
-  var expireToQueue: Option[String] = None
-
-  /**
-   * Maximum number of expired items to move into the `expireToQueue` at once.
-   */
-  var maxExpireSweep: Int = Int.MaxValue
-
-  /**
-   * If true, don't actually store any items in this queue. Only deliver them to fanout client
-   * queues.
-   */
-  var fanoutOnly: Boolean = false
-
-  /**
-   * Expiration time for the queue itself.  If the queue is empty and older
-   * than this value then we should delete it.
-   */
-  var maxQueueAge: Option[Duration] = None
-
-  def apply() = {
-    QueueConfig(maxItems, maxSize, maxItemSize, maxAge, defaultJournalSize, maxMemorySize,
-                maxJournalSize, discardOldWhenFull, keepJournal, syncJournal,
-                expireToQueue, maxExpireSweep, fanoutOnly, maxQueueAge)
-  }
-}
-
-case class AliasConfig(
-  destinationQueues: List[String]
-) {
-  override def toString() = {
-    ("destinationQueues=[%s]").format(destinationQueues.mkString(", "))
-  }
-}
-
-class AliasBuilder extends Config[AliasConfig] {
-  /**
-   * Name of the alias being configured.
-   */
-  var name: String = null
-
-  /**
-   * List of queues which receive items added to this alias.
-   */
-  var destinationQueues: List[String] = Nil
-
-  def apply() = {
-    AliasConfig(destinationQueues)
-  }
-}
 
 case class ZooKeeperConfig(
   host: String,
@@ -295,14 +144,19 @@ class ZooKeeperBuilder {
   }
 }
 
+/**
+ * KestrelConfig is the main point of configuration for Kestrel.
+ */
 trait KestrelConfig extends ServerConfig[Kestrel] {
   /**
-   * Settings for a queue that isn't explicitly listed in `queues`.
+   * Default queue settings. Starting with Kestrel 2.3.4, queue settings are
+   * inherited. See QueueBuilder for more information.
    */
   val default: QueueBuilder = new QueueBuilder
 
   /**
-   * Specific per-queue config.
+   * Specific per-queue config. Starting with Kestrel 2.3.4, queue settings are
+   * inherited. See QueueBuilder for more information.
    */
   var queues: List[QueueBuilder] = Nil
 

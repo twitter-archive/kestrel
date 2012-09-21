@@ -136,7 +136,7 @@ Configuration
 
 Queue configuration is described in detail in `docs/guide.md` (an operational
 guide). Scala docs for the config variables are
-[here](http://robey.github.com/kestrel/doc/main/api/net/lag/kestrel/config/KestrelConfig.html).
+[here](http://robey.github.com/kestrel/api/main/api/net/lag/kestrel/config/KestrelConfig.html).
 
 
 Performance

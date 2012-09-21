@@ -42,6 +42,9 @@ deleted with the "delete" command.
 Configuration
 -------------
 
+**NOTE:** Kestrel 2.3.4 introduces inheritance for queue configurations. For more
+information, see below.
+
 The config files for kestrel are scala expressions loaded at runtime, usually
 from `production.scala`, although you can use `development.scala` by passing
 `-Dstage=development` to the java command line.
@@ -50,7 +53,7 @@ The config file evaluates to a `KestrelConfig` object that's used to configure
 the server as a whole, a default queue, and any overrides for specific named
 queues. The fields on `KestrelConfig` are documented here with their default
 values:
-[KestrelConfig.html](http://robey.github.com/kestrel/api/main/api/net/lag/kestrel/config/KestrelConfig.html)
+[KestrelConfig](http://robey.github.com/kestrel/api/main/api/net/lag/kestrel/config/KestrelConfig.html)
 
 To confirm the current configuration of each queue, send "dump_config" to
 a server (which can be done over telnet).
@@ -64,11 +67,61 @@ Logging is configured according to `util-logging`. The logging configuration
 syntax is described here:
 [util-logging](https://github.com/twitter/util/blob/master/util-logging/README.markdown)
 
-Per-queue configuration is documented here:
-[QueueBuilder.html](http://robey.github.com/kestrel/api/main/api/net/lag/kestrel/config/QueueBuilder.html)
+Per-queue configuration options are documented here:
+[QueueBuilder](http://robey.github.com/kestrel/api/main/api/net/lag/kestrel/config/QueueBuilder.html)
 
-Queue alias configuration is documented here:
-[AliasBuilder.html](http://robey.github.com/kestrel/api/main/api/net/lag/kestrel/config/AliasBuilder.html)
+Queue alias configuration options are documented here:
+[AliasBuilder](http://robey.github.com/kestrel/api/main/api/net/lag/kestrel/config/AliasBuilder.html)
+
+Configuration Changes Starting in Kestrel 2.3.4
+-----------------------------------------------
+
+Starting with Kestrel 2.3.4, queue configurations are inherited:
+
+* Any queue with no explict configuration (see `queues` in `KestrelConfig`) uses the default
+  queue configuration (see `default` in `KestrelConfig`). This behavior is unchanged from
+  previous versions.
+* Any master (e.g. not fanout) queue with a queue configuration overrides the default queue
+  configuration. For example, if `default.maxMemorySize` is set, all explicitly configured
+  queues will inherit that setting *unless* explicitly overridden in the queue's configuration.
+  Older versions of Kestrel *did not* apply values from the default queue configuration to any
+  explicitly configured queue.
+* Any fanout queue (e.g., a queue with a `+` in its name), inherits its master queue's
+  configuration, unless explicitly overridden (see `queues` in `KestrelConfig`). Older versions
+  of Kestrel silently ignored explicit fanout queue configurations.
+
+### Example Configuration
+-------------------------
+
+Existing configurations should continue to load, but the resulting configuration may
+differ. As an example, the following configuration file and table illustrate the differences
+between a configuration loaded by Kestrel 2.3.3 and Kestrel 2.3.4 (and later).
+
+    new KestrelConfig {
+       default.maxMemorySize = 8.megabytes
+
+       queues = new QueueBuilder() {
+           name = "q"
+           maxItems = 500
+       } :: new QueueBuilder() {
+           name = "q+fanout"
+           maxAge = 1.minute
+       } :: new QueueBuilder() {
+           name = "x"
+           maxMemorySize = 16.megabytes
+       }
+    }
+
+
+<table>
+  <tr><th>Queue</th>    <th>Setting</th>       <th>Kestrel <= 2.3.3</th> <th>Kestrel >= 2.3.4</th>   </tr>
+  <tr><td>q</td>        <td>maxMemorySize</td> <td>128.megabytes</td>    <td>8.megabytes</td>        </tr>
+  <tr><td>q+fanout</td> <td>maxMemorySize</td> <td>128.megabytes</td>    <td>8.megabytes</td>        </tr>
+  <tr><td>x</td>        <td>maxMemorySize</td> <td>16.megabytes</td>     <td>16.megabytes</td>       </tr>
+  <tr><td>q</td>        <td>maxItems</td>      <td>500</td>              <td>500</td>                </tr>
+  <tr><td>q+fanout</td> <td>maxItems</td>      <td>500</td>              <td>500</td>                </tr>
+  <tr><td>q+fanout</td> <td>maxAge</td>        <td>None</td>             <td>Some(1.minute)</td>     </tr>
+</table>
 
 
 Full queues

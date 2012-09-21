@@ -29,6 +29,8 @@ import org.specs.mock.{ClassMocker, JMocker}
 class TextHandlerSpec extends Specification with JMocker with ClassMocker {
   def wrap(s: String) = ChannelBuffers.wrappedBuffer(s.getBytes)
 
+  type ClientDesc = Option[() => String]
+
   "TextCodec" should {
     "get request" in {
       val (codec, counter) = TestCodec(TextCodec.read, TextCodec.write)
@@ -94,7 +96,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
 
       "closes transactions" in {
         expect {
-          one(queueCollection).remove("test", None, true, false) willReturn Future.value(Some(qitem))
+          one(queueCollection).remove(equal("test"), equal(None), equal(true), equal(false), any[ClientDesc]) willReturn Future.value(Some(qitem))
           one(queueCollection).confirmRemove("test", 100)
         }
 
@@ -108,7 +110,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
         "value ready immediately" in {
           Time.withCurrentTimeFrozen { time =>
             expect {
-              one(queueCollection).remove("test", Some(500.milliseconds.fromNow), true, false) willReturn Future.value(Some(qitem))
+              one(queueCollection).remove(equal("test"), equal(Some(500.milliseconds.fromNow)), equal(true), equal(false), any[ClientDesc]) willReturn Future.value(Some(qitem))
             }
 
             textHandler(TextRequest("get", List("test", "500"), Nil))() mustEqual ItemResponse(Some(qitem.data))
@@ -120,7 +122,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
             val promise = new Promise[Option[QItem]]
 
             expect {
-              one(queueCollection).remove("test", Some(500.milliseconds.fromNow), true, false) willReturn promise
+              one(queueCollection).remove(equal("test"), equal(Some(500.milliseconds.fromNow)), equal(true), equal(false), any[ClientDesc]) willReturn promise
             }
 
             val future = textHandler(TextRequest("get", List("test", "500"), Nil))
@@ -135,7 +137,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
             val promise = new Promise[Option[QItem]]
 
             expect {
-              one(queueCollection).remove("test", Some(500.milliseconds.fromNow), true, false) willReturn promise
+              one(queueCollection).remove(equal("test"), equal(Some(500.milliseconds.fromNow)), equal(true), equal(false), any[ClientDesc]) willReturn promise
             }
 
             val future = textHandler(TextRequest("get", List("test", "500"), Nil))
@@ -148,7 +150,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
 
       "empty queue" in {
         expect {
-          one(queueCollection).remove("test", None, true, false) willReturn Future.value(None)
+          one(queueCollection).remove(equal("test"), equal(None), equal(true), equal(false), any[ClientDesc]) willReturn Future.value(None)
         }
 
         textHandler(TextRequest("get", List("test"), Nil))() mustEqual ItemResponse(None)
@@ -156,7 +158,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
 
       "item ready" in {
         expect {
-          one(queueCollection).remove("test", None, true, false) willReturn Future.value(Some(qitem))
+          one(queueCollection).remove(equal("test"), equal(None), equal(true), equal(false), any[ClientDesc]) willReturn Future.value(Some(qitem))
         }
 
         textHandler(TextRequest("get", List("test"), Nil))() mustEqual ItemResponse(Some(qitem.data))
@@ -167,7 +169,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
       Time.withCurrentTimeFrozen { timeMutator =>
         expect {
           one(connection).remoteAddress willReturn new InetSocketAddress("", 0)
-          one(queueCollection).add("test", "hello".getBytes, None, Time.now) willReturn true
+          one(queueCollection).add(equal("test"), equal("hello".getBytes), equal(None), equal(Time.now), any[ClientDesc]) willReturn true
         }
 
         val textHandler = new TextHandler(connection, queueCollection, 10)
@@ -178,7 +180,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
     "delete request" in {
       expect {
         one(connection).remoteAddress willReturn new InetSocketAddress("", 0)
-        one(queueCollection).delete("test")
+        one(queueCollection).delete(equal("test"), any[ClientDesc])
       }
 
       val textHandler = new TextHandler(connection, queueCollection, 10)
