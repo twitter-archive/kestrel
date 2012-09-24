@@ -112,7 +112,7 @@ between a configuration loaded by Kestrel 2.3.3 and Kestrel 2.3.4 (and later).
 
 
 <table>
-  <tr><th>Queue</th>    <th>Setting</th>       <th>Kestrel <= 2.3.3</th> <th>Kestrel >= 2.3.4</th>   </tr>
+  <tr><th>Queue</th>    <th>Setting</th>       <th>Kestrel &lt;= 2.3.3</th> <th>Kestrel &gt;= 2.3.4</th>   </tr>
   <tr><td>q</td>        <td>maxMemorySize</td> <td>128.megabytes</td>    <td>8.megabytes</td>        </tr>
   <tr><td>q+fanout</td> <td>maxMemorySize</td> <td>128.megabytes</td>    <td>8.megabytes</td>        </tr>
   <tr><td>x</td>        <td>maxMemorySize</td> <td>16.megabytes</td>     <td>16.megabytes</td>       </tr>
