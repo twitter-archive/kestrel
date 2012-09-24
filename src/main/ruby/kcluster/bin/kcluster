@@ -17,6 +17,7 @@ $options = {
   :datacenter => 'smf1',
   :server_list => [],
   :port => 2223,
+  :managed => false,
   :reverse => false,
   :memcache_port => 22133,
   :verbose => false,
@@ -163,6 +164,15 @@ def broadcast(command, queue_name, verb)
   puts "Done."
 end
 
+def get_colony_servers
+
+  if ($options[:managed])
+    Net::HTTP.get URI.parse("http://colony.#{$options[:datacenter]}.twitter.com:#{$colony_port}/query?q=(mo%20audubon.role.#{$options[:role]}%20%26%20mo%20audubon.managed.true)")
+  else
+    Net::HTTP.get URI.parse("http://colony.#{$options[:datacenter]}.twitter.com:#{$colony_port}/query?q=mo+audubon.role.#{$options[:role]}")
+  end
+end
+
 def delete_all(queue_name)
   broadcast("delete", queue_name, "Deleting")
 end
@@ -244,6 +254,9 @@ parser = OptionParser.new do |opts|
   opts.on("-m", "--memcache-port=N", "use memcache port (default: #{$options[:memcache_port]})") do |memcacheport|
     $options[:memcache_port] = memcacheport
   end
+  opts.on("-M", "--managed", "operate only on hosts with managed:true set") do |unmanaged|
+    $options[:managed] = true
+  end
   opts.on("-p", "--port=N", "use port (default: #{$options[:port]})") do |port|
     $options[:port] = port.to_i
   end
@@ -291,8 +304,8 @@ if ARGV.size < 1
 end
 
 if $options[:role]
-  data = Net::HTTP.get URI.parse("http://colony.#{$options[:datacenter]}.twitter.com:#{$colony_port}/query?q=mo+audubon.role.#{$options[:role]}")
-  $options[:server_list] = JSON.parse(data).values.flatten
+    data = get_colony_servers
+    $options[:server_list] = JSON.parse(data).values.flatten
 elsif $options[:singlehost]
   $options[:server_list] = Array[$options[:singlehost]]
 else
