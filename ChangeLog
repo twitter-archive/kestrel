@@ -15,6 +15,7 @@ release: TBD
 
 2.3.3
 -----
+- track queue item add time and compute duration on request
 - change kestrel.sh to use old PID file so that daemon-based installs can
   be halted
 
