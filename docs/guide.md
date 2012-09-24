@@ -79,14 +79,15 @@ Starting with Kestrel 2.3.4, queue configurations are inherited:
 * Any queue with no explict configuration (see `queues` in `KestrelConfig`) uses the default
   queue configuration (see `default` in `KestrelConfig`). This behavior is unchanged from
   previous versions.
-* Any master (e.g. not fanout) queue with a queue configuration overrides the default queue
-  configuration. For example, if `default.maxMemorySize` is set, all explicitly configured
+* Any master (e.g. not fanout) queue with an explicit queue configuration overrides the default
+  queue configuration. For example, if `default.maxMemorySize` is set, all explicitly configured
   queues will inherit that setting *unless* explicitly overridden in the queue's configuration.
   Older versions of Kestrel *did not* apply values from the default queue configuration to any
   explicitly configured queue.
 * Any fanout queue (e.g., a queue with a `+` in its name), inherits its master queue's
   configuration, unless explicitly overridden (see `queues` in `KestrelConfig`). Older versions
-  of Kestrel silently ignored explicit fanout queue configurations.
+  of Kestrel silently ignored explicit fanout queue configurations and used the master queue's
+  configuration.
 
 ### Example Configuration
 -------------------------
