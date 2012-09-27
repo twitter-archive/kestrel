@@ -29,7 +29,7 @@ import org.apache.thrift.protocol.TProtocolFactory
 import scala.collection.mutable
 import scala.collection.Set
 
-class ThriftFinagledService(val handler: ThriftHandler, override val protocolFactory: TProtocolFactory)
+class ThriftFinagledService(val handler: ThriftHandler, val protocolFactory: TProtocolFactory)
   extends thrift.Kestrel.FinagledService(handler, protocolFactory) {
 
   override def release() {
@@ -187,7 +187,7 @@ class ThriftHandler (
         }
         case Some(item) => {
           val externalXid = externalXidOption.getOrElse(0L)
-          rv += new thrift.Item(ByteBuffer.wrap(item.data), externalXid)
+          rv += thrift.Item(ByteBuffer.wrap(item.data), externalXid)
         }
       }
     }
@@ -219,7 +219,7 @@ class ThriftHandler (
     handler.getItem(queueName, None, false, true).map { itemOption =>
       val data = itemOption.map { item => ByteBuffer.wrap(item.data) }
       val stats = queueCollection.stats(queueName).toMap
-      new thrift.QueueInfo(data, stats("items").toLong, stats("bytes").toLong,
+      thrift.QueueInfo(data, stats("items").toLong, stats("bytes").toLong,
         stats("logsize").toLong, stats("age").toLong, stats("waiters").toInt,
         stats("open_transactions").toInt)
     }

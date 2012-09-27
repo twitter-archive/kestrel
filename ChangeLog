@@ -6,6 +6,7 @@ release: TBD
 - Support for service discovery via ZooKeeper
 - Kestrel now ignores directories in its queue path.
 - Fix load test scripts to use correct JAR name [Bryan English]
+- Scala 2.9.2, finagle 5.3.x
 
 2.3.4
 -----

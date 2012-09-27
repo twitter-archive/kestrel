@@ -96,30 +96,40 @@ trait LoadTesting {
 
   val failedConnects = new AtomicInteger(0)
 
+  @tailrec
   final def tryHard[A](f: => A): A = {
-    try {
-      f
+    val result = try {
+      Right(f)
     } catch {
       case e: java.io.IOException =>
-        failedConnects.incrementAndGet()
-        tryHard(f)
+        val failures = failedConnects.incrementAndGet()
+        if (failures % 1000 == 0) println("Failed to connect after %d attempts".format(failures))
+        Left(e)
+    }
+    result match {
+      case Right(a) => a
+      case Left(_) => tryHard(f)
     }
   }
 
   def monitorQueue(hostname: String, queueName: String) {
+    val client = new TestClient(hostname, 22133)
+    client.connect()
+    val stats = client.stats()
+    val baseTotalItems = stats.getOrElse("queue_" + queueName + "_total_items", "0").toInt
+
     val t = new Thread("monitor-queue") {
       override def run() {
-        val client = new TestClient(hostname, 22133)
-        client.connect()
         while (true) {
           val stats = client.stats()
           val items = stats.getOrElse("queue_" + queueName + "_items", "0").toInt
+          val totalItems = stats.getOrElse("queue_" + queueName + "_total_items", "0").toInt
           val bytes = stats.getOrElse("queue_" + queueName + "_bytes", "0").toInt
           val memItems = stats.getOrElse("queue_" + queueName + "_mem_items", "0").toInt
           val memBytes = stats.getOrElse("queue_" + queueName + "_mem_bytes", "0").toInt
           val journalBytes = stats.getOrElse("queue_" + queueName + "_logsize", "0").toInt
-          println("%s: items=%d bytes=%d mem_items=%d mem_bytes=%d journal_bytes=%d".format(
-            queueName, items, bytes, memItems, memBytes, journalBytes
+          println("%s: items=%d total_items=%d (%d) bytes=%d mem_items=%d mem_bytes=%d journal_bytes=%d".format(
+            queueName, items, totalItems, totalItems - baseTotalItems, bytes, memItems, memBytes, journalBytes
           ))
           Thread.sleep(1000)
         }

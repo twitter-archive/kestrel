@@ -23,6 +23,7 @@ import com.twitter.naggati.codec.{MemcacheRequest, MemcacheResponse}
 import com.twitter.ostrich.admin.RuntimeEnvironment
 import com.twitter.util.{Future, Promise, Time}
 import java.net.InetSocketAddress
+import java.nio.ByteBuffer
 import org.specs.Specification
 import org.specs.mock.{ClassMocker, JMocker}
 import scala.collection.mutable
@@ -36,14 +37,17 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
     val address = new InetSocketAddress("", 0)
     val qitem = QItem(Time.now, None, "state shirt".getBytes, 23)
 
-    def toReq(command: String, data: Option[Array[Byte]] = None): MemcacheRequest = {
+    def toReq(command: String, payload: Option[String] = None): MemcacheRequest = {
       val parts = command.split(" ").toList
-      val dataLength = data map { _.length + 2 } orElse { Some(0) }
+      val data = payload map { s =>
+        ByteBuffer.wrap(s.getBytes)
+      }
+      val dataLength = data map { _.remaining + 2 } orElse { Some(0) }
       MemcacheRequest(parts, data, command.length + 2 + dataLength.get)
     }
 
     def toResp(queue: String, qItem: QItem): MemcacheResponse = {
-      MemcacheResponse("VALUE %s 0 %d".format(queue, qItem.data.length), Some(qItem.data))
+      MemcacheResponse("VALUE %s 0 %d".format(queue, qItem.data.length), Some(ByteBuffer.wrap(qItem.data)))
     }
 
     val endResponse = MemcacheResponse("END", None)
@@ -372,7 +376,7 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
         }
 
         val memcacheHandler = new MemcacheHandler(connection, queueCollection, 10)
-        memcacheHandler(toReq("set test 0 0 5", Some("hello".getBytes)))() mustEqual MemcacheResponse("STORED", None)
+        memcacheHandler(toReq("set test 0 0 5", Some("hello")))() mustEqual MemcacheResponse("STORED", None)
       }
     }
 

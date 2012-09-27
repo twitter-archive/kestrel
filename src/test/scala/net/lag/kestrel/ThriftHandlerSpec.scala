@@ -357,7 +357,7 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
           ).toArray
         }
 
-        val qinfo = new thrift.QueueInfo(Some(ByteBuffer.wrap(item1)), 10, 10240, 29999, 500, 2, 1)
+        val qinfo = thrift.QueueInfo(Some(ByteBuffer.wrap(item1)), 10, 10240, 29999, 500, 2, 1)
         thriftHandler.peek("test")() mustEqual qinfo
       }
     }

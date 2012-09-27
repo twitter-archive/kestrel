@@ -145,28 +145,28 @@ object ThriftClient extends Client {
     withProtocol { p =>
       p.writeMessageBegin(new TMessage("put", TMessageType.CALL, 0))
       val item = data.map { item => ByteBuffer.wrap(item.getBytes) }
-      (new thrift.Kestrel.put_args(queueName, item, 0)).write(p)
+      (thrift.Kestrel.put_args(queueName, item, 0)).write(p)
     }
   }
 
   def putNSuccess(count: Int) = {
     withProtocol { p =>
       p.writeMessageBegin(new TMessage("put", TMessageType.REPLY, 0))
-      (new thrift.Kestrel.put_result(success = Some(count))).write(p)
+      (thrift.Kestrel.put_result(success = Some(count))).write(p)
     }
   }
 
   def flush(queueName: String) = {
     withProtocol { p =>
       p.writeMessageBegin(new TMessage("flush_queue", TMessageType.CALL, 0))
-      (new thrift.Kestrel.flushQueue_args(queueName)).write(p)
+      (thrift.Kestrel.flushQueue_args(queueName)).write(p)
     }
   }
 
   def flushSuccess() = {
     withProtocol { p =>
       p.writeMessageBegin(new TMessage("flush_queue", TMessageType.REPLY, 0))
-      (new thrift.Kestrel.flushQueue_result()).write(p)
+      (thrift.Kestrel.flushQueue_result()).write(p)
     }
   }
 
@@ -186,15 +186,15 @@ object ThriftClient extends Client {
   def monitor(queueName: String, timeoutMsec: Int, maxItems: Int) = {
     withProtocol { p =>
       p.writeMessageBegin(new TMessage("get", TMessageType.CALL, 0))
-      (new thrift.Kestrel.get_args(queueName, maxItems, timeoutMsec, 0)).write(p)
+      (thrift.Kestrel.get_args(queueName, maxItems, timeoutMsec, 0)).write(p)
     }
   }
 
   def monitorSuccess(queueName: String, data: Seq[String]) = {
     withProtocol { p =>
       p.writeMessageBegin(new TMessage("get", TMessageType.REPLY, 0))
-      val items = data.map { item => new thrift.Item(ByteBuffer.wrap(item.getBytes), 0) }
-      (new thrift.Kestrel.get_result(success = Some(items))).write(p)
+      val items = data.map { item => thrift.Item(ByteBuffer.wrap(item.getBytes), 0) }
+      (thrift.Kestrel.get_result(success = Some(items))).write(p)
     }
   }
 

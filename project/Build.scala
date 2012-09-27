@@ -3,7 +3,7 @@ import Keys._
 import com.twitter.sbt._
 
 object Kestrel extends Build {
-  val finagleVersion = "1.11.1"
+  val finagleVersion = "5.3.17"
 
   lazy val root = Project(
     id = "kestrel",
@@ -16,21 +16,20 @@ object Kestrel extends Build {
     name := "kestrel",
     organization := "net.lag",
     version := "2.4.0-SNAPSHOT",
-    scalaVersion := "2.9.1",
+    scalaVersion := "2.9.2",
 
     // time-based tests cannot be run in parallel
     logBuffered in Test := false,
     parallelExecution in Test := false,
 
     libraryDependencies ++= Seq(
-      "com.twitter" %% "ostrich" % "4.10.6",
-      "com.twitter" %% "naggati" % "2.2.3" intransitive(), // allow custom netty
-      "com.twitter" %% "finagle-core" % finagleVersion,
-      "com.twitter" %% "finagle-ostrich4" % finagleVersion,
-      "com.twitter" %% "finagle-thrift" % finagleVersion, // override scrooge's version
-      "commons-codec" % "commons-codec" % "1.6", // override scrooge/util-codec's version
-      "com.twitter" %% "scrooge-runtime" % "1.1.3",
-      "com.twitter.common.zookeeper" % "server-set" % "1.0.15",
+      "com.twitter" % "ostrich" % "8.2.6",
+      "com.twitter" %% "naggati" % "4.1.0",
+      "com.twitter" % "finagle-core" % finagleVersion,
+      "com.twitter" % "finagle-ostrich4" % finagleVersion,
+      "com.twitter" % "finagle-thrift" % finagleVersion, // override scrooge's version
+      "com.twitter" %% "scrooge-runtime" % "3.0.1",
+      "com.twitter.common.zookeeper" % "server-set" % "1.0.16",
 
       // for tests only:
       "org.scala-tools.testing" %% "specs" % "1.6.9" % "test",
@@ -43,7 +42,7 @@ object Kestrel extends Build {
 
     mainClass in Compile := Some("net.lag.kestrel.Kestrel"),
 
-    CompileThriftScrooge.scroogeVersion := "1.1.7",
+    CompileThriftScrooge.scroogeVersion := "3.0.1",
     PackageDist.packageDistConfigFilesValidationRegex := Some(".*"),
     SubversionPublisher.subversionRepository := Some("https://svn.twitter.biz/maven-public"),
     publishArtifact in Test := true

@@ -369,7 +369,7 @@ The kestrel implementation of the memcache protocol commands is described below.
   per-item, so many clients may monitor a queue at once. After the given
   timeout, a separate `END` response will signal the end of the monitor
   period. Any fetched items are open transactions (see "Reliable Reads"
-   below), and should be closed with `CONFIRM`.
+  below), and should be closed with `CONFIRM`.
 
 - `CONFIRM <queue-name> <count>`
 

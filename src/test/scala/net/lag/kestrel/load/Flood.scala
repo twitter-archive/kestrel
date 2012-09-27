@@ -221,8 +221,32 @@ object Flood extends LoadTesting {
       put(socket, queueName, prefillItems, data)
     }
 
-    println("flood: producers=%d consumers=%d each sending %d items of %dkB through %s".format(
-      producerThreadCount, consumerThreadCount, totalItems, kilobytes, queueName))
+    // round up itemsPerProducer (we may over-produce), but not itemsPerConsumer (we will not over-consume)
+    // (consuming more than producing will result in the test hanging)
+    val itemsPerProducer = {
+      val base = ((totalItems + producerThreadCount - 1) / producerThreadCount) max 1
+      if (rollup > 1 && base % rollup > 0) {
+        // bump up to the next multiple of rollup
+        rollup - (base % rollup) + base
+      } else {
+        base
+      }
+    }
+
+    val itemsPerConsumer = {
+      val base = (totalItems / consumerThreadCount) max 1
+      if (rollup > 1 && base % rollup > 0) {
+        // bump up to the next multiple of rollup
+        rollup - (base % rollup) + base
+      } else {
+        base
+      }
+    }
+
+    println("flood: producers=%d each sending %d items (in chunks of %d) of %dkB to %s".format(
+      producerThreadCount, itemsPerProducer, rollup, kilobytes, queueName))
+    println("flood: consumers=%d each reading %d items (in chunks of %d) from %s".format(
+      consumerThreadCount, itemsPerConsumer, rollup, queueName))
 
     var threadList: List[Thread] = Nil
     val misses = new AtomicInteger
@@ -231,7 +255,7 @@ object Flood extends LoadTesting {
       val producerThread = new Thread {
         override def run = {
           val socket = tryHard { SocketChannel.open(new InetSocketAddress(hostname, port)) }
-          put(socket, queueName, totalItems, data)
+          put(socket, queueName, itemsPerProducer, data)
         }
       }
       threadList = producerThread :: threadList
@@ -241,7 +265,7 @@ object Flood extends LoadTesting {
       val consumerThread = new Thread {
         override def run = {
           val socket = tryHard { SocketChannel.open(new InetSocketAddress(hostname, port)) }
-          val n = get(socket, queueName, totalItems, data)
+          val n = get(socket, queueName, itemsPerConsumer, data)
           socket.close()
           misses.addAndGet(n)
         }

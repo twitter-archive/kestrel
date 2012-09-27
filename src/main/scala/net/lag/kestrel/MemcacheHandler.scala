@@ -18,8 +18,8 @@
 package net.lag.kestrel
 
 import java.net.InetSocketAddress
+import java.nio.ByteBuffer
 import scala.collection.mutable
-import com.twitter.concurrent.ChannelSource
 import com.twitter.conversions.time._
 import com.twitter.finagle.{ClientConnection, Service}
 import com.twitter.logging.Logger
@@ -90,8 +90,11 @@ class MemcacheHandler(
         } else {
           Some(Time.epoch + expiry.seconds)
         }
+        val buffer = request.data.get
+        val data = new Array[Byte](buffer.remaining())
+        buffer.get(data)
         try {
-          if (handler.setItem(request.line(1), request.line(2).toInt, normalizedExpiry, request.data.get)) {
+          if (handler.setItem(request.line(1), request.line(2).toInt, normalizedExpiry, data)) {
             Future(new MemcacheResponse("STORED"))
           } else {
             Future(new MemcacheResponse("NOT_STORED"))
@@ -191,7 +194,7 @@ class MemcacheHandler(
               case None =>
                 new MemcacheResponse("END")
               case Some(item) =>
-                new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), Some(item.data))
+                new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), Some(ByteBuffer.wrap(item.data)))
             }
           }
         } catch {
@@ -211,7 +214,7 @@ class MemcacheHandler(
         case None =>
           channel.send(new MemcacheResponse("END") then Codec.EndStream)
         case Some(item) =>
-          channel.send(new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), Some(item.data)))
+          channel.send(new MemcacheResponse("VALUE %s 0 %d".format(key, item.data.length), Some(ByteBuffer.wrap(item.data))))
       }
     }
     new MemcacheResponse("") then Codec.Stream(channel)

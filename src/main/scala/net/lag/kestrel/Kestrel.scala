@@ -23,13 +23,13 @@ import com.twitter.finagle.{ClientConnection, Codec => FinagleCodec, Service => 
 import com.twitter.finagle.builder.{Server, ServerBuilder}
 import com.twitter.finagle.stats.OstrichStatsReceiver
 import com.twitter.finagle.thrift._
-import com.twitter.finagle.util.{Timer => FinagleTimer}
+import com.twitter.finagle.util.TimerFromNettyTimer
 import com.twitter.logging.Logger
 import com.twitter.naggati.Codec
 import com.twitter.naggati.codec.{MemcacheResponse, MemcacheRequest, MemcacheCodec}
 import com.twitter.ostrich.admin.{PeriodicBackgroundProcess, RuntimeEnvironment, Service, ServiceTracker}
 import com.twitter.ostrich.stats.Stats
-import com.twitter.util.{Duration, Eval, Future, Time}
+import com.twitter.util.{Duration, Eval, Future, Time, Timer}
 import java.net.InetSocketAddress
 import java.util.Collections._
 import java.util.concurrent._
@@ -87,7 +87,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
   def startThriftServer(
     name: String,
     port: Int,
-    fTimer: FinagleTimer
+    fTimer: Timer
   ): Server = {
     val address = new InetSocketAddress(listenAddress, port)
     var builder = ServerBuilder()
@@ -135,7 +135,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
           }
         })
 
-    val finagleTimer = new FinagleTimer(timer)
+    val finagleTimer = new TimerFromNettyTimer(timer)
     try {
       queueCollection = new QueueCollection(queuePath, finagleTimer, journalSyncScheduler,
         defaultQueueConfig, builders, aliases)

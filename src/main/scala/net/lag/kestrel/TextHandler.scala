@@ -18,7 +18,6 @@
 package net.lag.kestrel
 
 import scala.collection.mutable
-import com.twitter.concurrent.ChannelSource
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.naggati._
