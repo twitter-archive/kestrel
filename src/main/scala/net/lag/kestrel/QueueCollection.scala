@@ -342,6 +342,21 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
   }
 
   /**
+   * Force any requests in a waiting opertion (e.g., remove) to react as
+   * if canceled. This method is useful for forcing connections to drain
+   * as part of shutting down.
+   */
+  def evictWaiters(): Unit = synchronized {
+    if (shuttingDown) {
+      return
+    }
+
+    for ((name, q) <- queues) {
+      q.evictWaiters()
+    }
+  }
+
+  /**
    * Shutdown this queue collection. Any future queue requests will fail.
    */
   def shutdown(): Unit = synchronized {

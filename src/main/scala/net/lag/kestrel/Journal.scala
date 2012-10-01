@@ -32,6 +32,7 @@ import com.twitter.util.{Future, Duration, Time}
 case class BrokenItemException(lastValidPosition: Long, cause: Throwable) extends IOException(cause)
 
 case class Checkpoint(filename: String, reservedItems: Seq[QItem])
+
 case class PackRequest(journal: Journal, checkpoint: Checkpoint, openItems: Iterable[QItem],
                        pentUpDeletes: Int, queueState: Iterable[QItem])
 
@@ -184,7 +185,7 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
     val negs = removesSinceReadBehind - newlyClosedItems.size // newly closed are already accounted for.
 
     outstandingPackRequests.incrementAndGet()
-    packerQueue.add(PackRequest(this, checkpoint, newlyOpenItems, negs, queueState))
+    packer.add(PackRequest(this, checkpoint, newlyOpenItems, negs, queueState))
   }
 
   def close() {
@@ -479,7 +480,7 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
     }
   }
 
-  private def pack(state: PackRequest) {
+  private[kestrel] def pack(state: PackRequest) {
     val oldFilenames =
       Journal.journalsBefore(queuePath, queueName, state.checkpoint.filename) ++
       List(state.checkpoint.filename)
@@ -498,6 +499,65 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
     log.info("Packing '%s' done: %s", queueName, Journal.journalsForQueue(queuePath, queueName).mkString(", "))
 
     checkpoint = None
+  }
+}
+
+class JournalPackerTask {
+  val logger = Logger.get(getClass)
+  val queue = new LinkedBlockingQueue[Option[PackRequest]]()
+
+  var thread: Thread = null
+
+  def start() {
+    synchronized {
+      if (thread == null) {
+        thread = new Thread("journal-packer") {
+          override def run() {
+            var running = true
+            while (running) {
+              val requestOpt = queue.take()
+              requestOpt match {
+                case Some(request) => pack(request)
+                case None =>          running = false
+              }
+            }
+            logger.info("journal-packer exited.")
+          }
+        }
+        thread.setDaemon(true)
+        thread.setName("journal-packer")
+        thread.start()
+      } else {
+         logger.error("journal-packer already started.")
+      }
+    }
+  }
+
+  def shutdown() {
+    synchronized {
+      if (thread != null) {
+        logger.info("journal-packer exiting.")
+        queue.add(None)
+        thread.join(5000L)
+        thread = null
+      } else {
+        logger.error("journal-packer not running.")
+      }
+    }
+  }
+
+  def add(request: PackRequest) {
+    queue.add(Some(request))
+  }
+
+  private def pack(request: PackRequest) {
+    try {
+      request.journal.pack(request)
+      request.journal.outstandingPackRequests.decrementAndGet()
+    } catch {
+      case e: Throwable =>
+        logger.error(e, "Uncaught exception in journal-packer: %s", e)
+    }
   }
 }
 
@@ -579,17 +639,5 @@ object Journal {
     journalsForQueue(path, queueName).dropWhile { _ != filename }.drop(1).headOption
   }
 
-  val packerQueue = new LinkedBlockingQueue[PackRequest]()
-  val packer = BackgroundProcess.spawnDaemon("journal-packer") {
-    while (true) {
-      val request = packerQueue.take()
-      try {
-        request.journal.pack(request)
-        request.journal.outstandingPackRequests.decrementAndGet()
-      } catch {
-        case e: Throwable =>
-          Logger.get(getClass).error(e, "Uncaught exception in packer: %s", e)
-      }
-    }
-  }
+  val packer = new JournalPackerTask
 }

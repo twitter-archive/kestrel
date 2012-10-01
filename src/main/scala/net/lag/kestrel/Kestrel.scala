@@ -50,7 +50,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
   private val log = Logger.get(getClass.getName)
 
   var queueCollection: QueueCollection = null
-  var timer: NettyTimer = null
+  var timer: Timer = null
   var journalSyncScheduler: ScheduledExecutorService = null
   var memcacheService: Option[Server] = None
   var textService: Option[Server] = None
@@ -81,13 +81,14 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
     connectionBacklog.foreach { backlog => builder = builder.backlog(backlog) }
     clientTimeout.foreach { timeout => builder = builder.readTimeout(timeout) }
     // calling build() is equivalent to calling start() in finagle.
-    builder.build(factory)
+    val server = builder.build(factory)
+    log.info("%s server started on %s", name, address)
+    server
   }
 
   def startThriftServer(
     name: String,
-    port: Int,
-    fTimer: Timer
+    port: Int
   ): Server = {
     val address = new InetSocketAddress(listenAddress, port)
     var builder = ServerBuilder()
@@ -98,10 +99,12 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
     connectionBacklog.foreach { backlog => builder = builder.backlog(backlog) }
     clientTimeout.foreach { timeout => builder = builder.readTimeout(timeout) }
     // calling build() is equivalent to calling start() in finagle.
-    builder.build(connection => {
-      val handler = new ThriftHandler(connection, queueCollection, maxOpenTransactions, fTimer, Some(serverStatus))
+    val server = builder.build(connection => {
+      val handler = new ThriftHandler(connection, queueCollection, maxOpenTransactions, timer, Some(serverStatus))
       new ThriftFinagledService(handler, new TBinaryProtocol.Factory())
     })
+    log.info("%s server started on %s", name, address)
+    server
   }
 
   private def bytesRead(n: Int) {
@@ -123,7 +126,8 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
     Stats.setLabel("version", Kestrel.runtime.jarVersion)
 
     // this means no timeout will be at better granularity than 100 ms.
-    timer = new HashedWheelTimer(100, TimeUnit.MILLISECONDS)
+    val nettyTimer = new HashedWheelTimer(100, TimeUnit.MILLISECONDS)
+    timer = new TimerFromNettyTimer(nettyTimer)
 
     journalSyncScheduler =
       new ScheduledThreadPoolExecutor(
@@ -134,10 +138,10 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
             log.warning("Rejected journal fsync")
           }
         })
+    Journal.packer.start()
 
-    val finagleTimer = new TimerFromNettyTimer(timer)
     try {
-      queueCollection = new QueueCollection(queuePath, finagleTimer, journalSyncScheduler,
+      queueCollection = new QueueCollection(queuePath, timer, journalSyncScheduler,
         defaultQueueConfig, builders, aliases)
       queueCollection.loadQueues()
     } catch {
@@ -152,10 +156,10 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
 
     serverStatus =
       zkConfig.map { cfg =>
-        new ZooKeeperServerStatus(cfg, statusFile, finagleTimer, defaultStatus,
+        new ZooKeeperServerStatus(cfg, statusFile, timer, defaultStatus,
                                   statusChangeGracePeriod)
       } getOrElse {
-        new ServerStatus(statusFile, finagleTimer, defaultStatus, statusChangeGracePeriod)
+        new ServerStatus(statusFile, timer, defaultStatus, statusChangeGracePeriod)
       }
     serverStatus.start()
 
@@ -179,7 +183,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
     }
 
     thriftService = thriftListenPort.map { port =>
-      startThriftServer("kestrel-thrift", port, finagleTimer)
+      startThriftServer("kestrel-thrift", port)
     }
 
     // optionally, start a periodic timer to clean out expired items.
@@ -218,21 +222,46 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
   def shutdown() {
     log.info("Shutting down!")
 
-    // finagle 1.11.1 has a bug where close() may never complete.
-    memcacheService.foreach { _.close(1.second) }
-    textService.foreach { _.close(1.second) }
-    thriftService.foreach { _.close(1.second) }
+    // finagle cannot drain connections if they have long wait operations
+    // pending, so start a thread to periodically evict any waiters. Once
+    // close is invoked on the endpoint, finagle will close their connections
+    // at the completion of the evicted wait request.
+    val kicker = new PeriodicBackgroundProcess("evict-waiters", 1.second) {
+      def periodic() {
+        queueCollection.evictWaiters()
+      }
+    }
+    kicker.start()
 
-    expirationBackgroundProcess.foreach { _.shutdown() }
-
-    if (queueCollection ne null) {
-      queueCollection.shutdown()
-      queueCollection = null
+    try {
+      memcacheService.foreach { svc =>
+        svc.close(30.seconds)
+        log.info("kestrel-memcache server stopped")
+      }
+      textService.foreach { svc =>
+        svc.close(30.seconds)
+        log.info("kestrel-text server stopped")
+      }
+      thriftService.foreach { svc =>
+        svc.close(30.seconds)
+        log.info("kestrel-thrift server stopped")
+      }
+    } finally {
+      kicker.shutdown()
     }
 
     if (timer ne null) {
       timer.stop()
       timer = null
+    }
+
+    expirationBackgroundProcess.foreach { _.shutdown() }
+
+    Journal.packer.shutdown()
+
+    if (queueCollection ne null) {
+      queueCollection.shutdown()
+      queueCollection = null
     }
 
     if (journalSyncScheduler ne null) {

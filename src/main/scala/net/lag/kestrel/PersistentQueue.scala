@@ -378,6 +378,12 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     }
   }
 
+  def evictWaiters() {
+    synchronized {
+      waiters.evictAll()
+    }
+  }
+
   /**
    * Return a transactionally-removed item to the queue. This is a rolled-
    * back transaction.

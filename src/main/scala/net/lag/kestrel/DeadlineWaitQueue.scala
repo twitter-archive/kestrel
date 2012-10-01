@@ -28,13 +28,13 @@ import com.twitter.util.{Time, Timer, TimerTask}
  * exactly one of the functions will be called, never both.
  */
 final class DeadlineWaitQueue(timer: Timer) {
-  case class Waiter(var timerTask: TimerTask, awaken: () => Unit)
+  case class Waiter(var timerTask: TimerTask, awaken: () => Unit, timeout: () => Unit)
   private val queue = JavaConversions.asScalaSet(new LinkedHashSet[Waiter])
 
-  def add(deadline: Time, awaken: () => Unit, onTimeout: () => Unit) = {
-    val waiter = Waiter(null, awaken)
+  def add(deadline: Time, awaken: () => Unit, timeout: () => Unit) = {
+    val waiter = Waiter(null, awaken, timeout)
     val timerTask = timer.schedule(deadline) {
-      if (synchronized { queue.remove(waiter) }) onTimeout()
+      if (synchronized { queue.remove(waiter) }) waiter.timeout()
     }
     waiter.timerTask = timerTask
     synchronized { queue.add(waiter) }
@@ -66,6 +66,17 @@ final class DeadlineWaitQueue(timer: Timer) {
     }.foreach { waiter =>
       waiter.timerTask.cancel()
       waiter.awaken()
+    }
+  }
+
+  def evictAll() {
+    synchronized {
+      val rv = queue.toArray
+      queue.clear()
+      rv
+    }.foreach { waiter =>
+      waiter.timerTask.cancel()
+      waiter.timeout()
     }
   }
 

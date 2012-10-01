@@ -28,8 +28,15 @@ import org.specs.Specification
 import config._
 
 class ReadBehindSpec extends Specification with TempFolder with TestLogging with QueueMatchers {
-
   "PersistentQueue read-behind" should {
+    doBefore {
+      Journal.packer.start()
+    }
+
+    doAfter {
+      Journal.packer.shutdown()
+    }
+
     val timer = new FakeTimer()
     val scheduler = new ScheduledThreadPoolExecutor(1)
 
