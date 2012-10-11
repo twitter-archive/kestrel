@@ -36,7 +36,6 @@ daemon_pidfile="/var/run/$APP_NAME/$APP_NAME-daemon.pid"
 
 
 running() {
-  #curl -m 5 -s "http://localhost:$ADMIN_PORT/ping.txt" > /dev/null 2> /dev/null
   kill -0 `cat $pidfile`
 }
 
