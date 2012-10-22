@@ -24,7 +24,7 @@ import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.thrift.{Status => TStatus}
 import com.twitter.util.{Duration, Timer}
-import java.net.{InetAddress, InetSocketAddress}
+import java.net.{NetworkInterface, InetAddress, InetSocketAddress, UnknownHostException}
 import scala.collection.JavaConversions
 import config.ZooKeeperConfig
 
@@ -141,18 +141,10 @@ extends ServerStatus(statusFile, timer, defaultStatus, statusChangeGracePeriod) 
   override def addEndpoints(mainEndpoint: String, endpoints: Map[String, InetSocketAddress]) {
     if (externalEndpoints ne null) throw new EndpointsAlreadyConfigured
 
-    externalEndpoints = endpoints.map { case (name, givenAddress) =>
-      val givenInetAddress = givenAddress.getAddress
-      val address =
-        if (givenInetAddress.isAnyLocalAddress || givenInetAddress.isLoopbackAddress) {
-          // wildcard (e.g., 0.0.0.0) loopback (e.g., 127.0.0.1) address: replace it
-          // with one external address for this machine
-          val external = InetAddress.getLocalHost.getHostAddress
-          new InetSocketAddress(external, givenAddress.getPort)
-        } else {
-          givenAddress
-        }
-      (name, address)
+    externalEndpoints = endpoints.map { case (name, givenSocketAddress) =>
+      val address = ZooKeeperIP.toExternalAddress(givenSocketAddress.getAddress)
+      val socketAddress = new InetSocketAddress(address, givenSocketAddress.getPort)
+      (name, socketAddress)
     }
 
     mainAddress = externalEndpoints(mainEndpoint)
@@ -222,6 +214,53 @@ extends ServerStatus(statusFile, timer, defaultStatus, statusChangeGracePeriod) 
         case None =>
           ()
       }
+    }
+  }
+}
+
+object ZooKeeperIP {
+  import JavaConversions._
+
+  /**
+   * Converts the given IP address into an external IP address to be advertised
+   * by ZooKeeper. If the given IP address is not a wildcard address (e.g.,
+   * "0.0.0.0" or "::") it is returned unmodified.
+   *
+   * Exceptions are thrown if:
+   * <ul>
+   * <li>the given IP address is a loopback address (e.g., "127.0.0.1" or "::1").
+   *     Such an address should not be advertised via ZooKeeper.</li>
+   * <li>there are no configured interfaces</li>
+   * <li>all configured interfaces have only loopback or non-point-to-point link
+   *     local addresses</li>
+   * </ul>
+   *
+   * Otherwise this method returns an external IP address for this host.
+   */
+  def toExternalAddress(givenAddress: InetAddress): InetAddress = {
+    if (givenAddress.isLoopbackAddress) {
+      throw new UnknownHostException("cannot advertise loopback host via zookeeper")
+    }
+
+    if (!givenAddress.isAnyLocalAddress) {
+      // N.B. this address might not be this host
+      return givenAddress
+    }
+
+    val interfaces = NetworkInterface.getNetworkInterfaces()
+    if (interfaces eq null) {
+      throw new UnknownHostException("no network interfaces configured")
+    }
+
+    val candidates = interfaces.flatMap { iface =>
+      iface.getInetAddresses().map { addr => (iface, addr) }
+    }.filter { case (iface, addr) =>
+      !addr.isLoopbackAddress && (iface.isPointToPoint || !addr.isLinkLocalAddress)
+    }.map { case (iface, addr) => addr }.take(1).toList
+
+    candidates.headOption match {
+      case Some(candidate) => candidate
+      case None => throw new UnknownHostException("no acceptable network interfaces found")
     }
   }
 }

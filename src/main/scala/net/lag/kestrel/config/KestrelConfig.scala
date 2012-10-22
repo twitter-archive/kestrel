@@ -130,8 +130,9 @@ class ZooKeeperBuilder {
 
   /**
    * Overrides ServerSet intialization. The default implementation uses a ZooKeeperClient, the
-   * configured pathPrefix and "read" or "write" to produce a ServerSet. The default implementation
-   * is ZooKeeperServerStatus.createServerSet.
+   * configured pathPrefix and the node type (the third argument to this function; always "read" or
+   * "write") to produce a ServerSet.  The default implementation is
+   * ZooKeeperServerStatus.createServerSet.
    *
    * It is strongly recommended that you reference an object method provided in an external JAR
    * rather than placing arbitary code in this configuration file.

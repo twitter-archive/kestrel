@@ -24,7 +24,7 @@ import com.twitter.logging.TestLogging
 import com.twitter.thrift.{Status => TStatus}
 import com.twitter.util.{MockTimer, TempFolder, Time, TimeControl}
 import java.io._
-import java.net.{InetAddress, InetSocketAddress}
+import java.net.{InetAddress, InetSocketAddress, UnknownHostException}
 import org.specs.Specification
 import org.specs.mock.{ClassMocker, JMocker}
 import scala.collection.JavaConversions
@@ -253,8 +253,8 @@ with TestLogging {
     }
 
     "adding endpoints" in {
-      val expectedAddr = new InetSocketAddress(InetAddress.getLocalHost.getHostAddress, 22133)
-      expectedAddr.getAddress.isLoopbackAddress mustEqual false
+      val hostAddr = ZooKeeperIP.toExternalAddress(InetAddress.getByAddress(Array[Byte](0, 0, 0, 0)))
+      val expectedAddr = new InetSocketAddress(hostAddr, 22133)
 
       "should convert wildcard addresses to a proper local address" in {
         withZooKeeperServerStatus { (serverStatus, _) =>
@@ -265,12 +265,11 @@ with TestLogging {
         }
       }
 
-      "should convert the loopback address to a proper local address" in {
+      "should explode if given the loopback address" in {
         withZooKeeperServerStatus { (serverStatus, _) =>
           val localhostAddr = new InetSocketAddress("localhost", 22133)
-          val (readStatus, writeStatus) = expectInitialEndpointStatus(Some(expectedAddr))
 
-          serverStatus.addEndpoints("memcache", Map("memcache" -> localhostAddr))
+          serverStatus.addEndpoints("memcache", Map("memcache" -> localhostAddr)) must throwA[UnknownHostException]
         }
       }
 

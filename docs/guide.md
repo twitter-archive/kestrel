@@ -474,7 +474,7 @@ beginning to encounter errors.
 ### ZooKeeper Server Sets
 -------------------------
 
-Kestrel uses Twitter's ServerSet library to support discovery of kestrel
+Kestrel uses Twitter's ServerSet library to support client discovery of kestrel
 servers allowing a given operation. The ServerSet class is documented here:
 [ServerSet](http://twitter.github.com/commons/apidocs/index.html#com.twitter.common.zookeeper.ServerSet)
 
@@ -492,15 +492,26 @@ server set for changes and adjust their connections accordingly. The
 time to detect and react to the status change before they begin receiving
 errors from kestrel.
 
-The ZooKeeper path used to register the server set
-is based on the `pathPrefix` option. Kestrel automatically appends `/write` and
-`/read` to distinguish the write and read sets.
+The ZooKeeper path used to register the server set is based on the `pathPrefix`
+option. Kestrel automatically appends `/write` and `/read` to distinguish the
+write and read sets.
 
 Kestrel advertises all of its endpoints in each server set that it joins.
 The default endpoint is memcache, if configured. The default endpoint falls
 back to the thrift endpoint and then the text protocol endpoint. All three
 endpoints are advertised as additional endpoints under the names `memcache`,
 `thrift` and `text`.
+
+Kestrel advertises only a single IP address per endpoint. This IP address is
+based on Kestrel's `listenAddress`. If the listener address is the wildcard
+address (e.g., `0.0.0.0` or `::`), Kestrel will advertise the first IP address
+it finds by traversing the host's configured network interfaces (via
+`java.net.NetworkInterface`). If your host has multiple, valid external IP
+addresses you can choose the advertised address by setting the listener address
+to that IP. Finally, If the listener address is a loopback address (e.g.,
+`127.0.0.1` or `::1`), Kestrel will not start, since advertising a loopback
+address on ZooKeeper will not work and no external host could connect to
+Kestrel in any event.
 
 Consider setting the  `defaultStatus` option to `Quiescent` to prevent kestrel
 from prematurely advertising its status via ZooKeeper.
