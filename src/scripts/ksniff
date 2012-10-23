@@ -332,19 +332,19 @@ parser = OptionParser.new do |opts|
     $options[:hosts] += host.split(/[,\s]+/)
   end
 
-  opts.on("--ssh",
+  opts.on("--[no-]ssh",
           "Execute tcpdump on the remote host.",
           "Requires SSH access to the remote host,",
-          "and that tcpdump is installed there.") do
-    $options[:ssh] = true
+          "and that tcpdump is installed there.") do |ssh|
+    $options[:ssh] = ssh
   end
 
-  opts.on("-S", "--use-sudo",
+  opts.on("-S", "--[no-]sudo",
           "Invoke tcpdump with sudo. Causes ksniff to",
           "request your password via the tty. If ssh",
           "and multiple hosts are specified, the password",
-          "is re-used for all hosts.") do
-    $options[:use_sudo] = true
+          "is re-used for all hosts.") do |sudo|
+    $options[:use_sudo] = sudo
   end
 
   opts.on("-i" , "--iface=INTERFACE",
@@ -414,28 +414,29 @@ parser = OptionParser.new do |opts|
     $options[:tcpdump][:path] = path
   end
 
-  opts.on("-d", "--reverse-dns",
+  opts.on("-d", "--[no-]reverse-dns",
           "Attempt to perform a reverse DNS lookup on",
           "the IP addresses of captured packets that",
-          "match the command filter.") do
-    $options[:reverse_dns] = true
+          "match the command filter.") do |rdns|
+    $options[:reverse_dns] = rdns
   end
 
-  opts.on("--skip-summary", "Skip reporting summary statistics.") do
-    $options[:include_summary_stats] = false
+  opts.on("--[no-]skip-summary", "Skip reporting summary statistics.") do |s|
+    $options[:include_summary_stats] = s
   end
 
-  opts.on("--skip-host-stats", "Skip reporting per-host statistics.") do
-    $options[:include_host_stats] = false
+  opts.on("--[no-]skip-host-stats", "Skip reporting per-host statistics.") do |s|
+    $options[:include_host_stats] = s
   end
 
-  opts.on("--skip-queue-stats", "Skip reporting per-queue statistics.") do
-    $options[:include_queue_stats] = false
+  opts.on("--[no]-skip-queue-stats", "Skip reporting per-queue statistics.") do |s|
+    $options[:include_queue_stats] = s
   end
 
   opts.on("-v", "--verbose",
           "Enable verbose mode. May be repeated for",
           "more verbosity.") do
+    $options[:quiet] = false
     $options[:verbose] += 1
   end
 
@@ -454,11 +455,15 @@ parser = OptionParser.new do |opts|
     $options[:dry_run] = true
   end
 
-  opts.on_tail("-h", "--help", "Shows this message.") do
+  opts.on("-h", "--help", "Shows this message.") do
     puts opts
     exit
   end
+
+  opts.separator ""
+  opts.separator "Arguments can be placed, one per line, in '$HOME/.ksniffrc'"
 end
+parser.load(File.expand_path(File.join(ENV['HOME'], '.ksniffrc')))
 parser.parse!(ARGV)
 
 if $options[:hosts].empty?
