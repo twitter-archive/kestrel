@@ -20,13 +20,15 @@ FD_LIMIT="262144"
 HEAP_OPTS="-Xmx16G -XX:NewSize=2G"
 GC_OPTS="-XX:+UseParallelOldGC -XX:+UseAdaptiveSizePolicy -XX:MaxGCPauseMillis=1000 -XX:GCTimeRatio=99 -XX:NewSize=2G"
 GC_TRACE="-verbosegc -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCDateStamps"
-GC_LOG="-Xloggc:gc.log"
+GC_LOG="-Xloggc:logs/gc.log"
 DEBUG_OPTS="-XX:ErrorFile=java_error%p.log"
 
 # allow a separate file to override settings.
 test -f /etc/sysconfig/kestrel && . /etc/sysconfig/kestrel
 
 JAVA_OPTS="-server $GC_OPTS $GC_TRACE $GC_LOG $HEAP_OPTS $DEBUG_OPTS"
+
+pidfile="$APP_NAME.pid"
 
 find_java() {
   if [ ! -z "$JAVA_HOME" ]; then
@@ -41,6 +43,8 @@ find_java() {
 }
 
 find_java
+
+mkdir logs
 
 echo "Starting $APP_NAME... "
 
@@ -59,11 +63,12 @@ TIMESTAMP=$(date +%Y%m%d%H%M%S);
 # Move the existing gc log to a timestamped file in case we want to examine it.
 # We must do this here because we have no option to append this via the JVM's
 # command line args.
-if [ -f gc.log ]; then
-  mv gc.log gc_$TIMESTAMP.log;
+if [ -f logs/gc.log ]; then
+  mv logs/gc.log logs/gc_$TIMESTAMP.log;
 fi
 
 ulimit -n $FD_LIMIT || echo " (no ulimit)"
 ulimit -c unlimited || echo " (no coredump)"
 
-${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar ${APP_HOME}/${JAR_NAME} "$@" >> stdout 2>> error
+echo "'$$'" > $pidfile
+exec ${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar ${APP_HOME}/${JAR_NAME} "$@" >> stdout 2>> error
