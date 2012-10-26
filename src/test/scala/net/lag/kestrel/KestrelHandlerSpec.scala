@@ -300,5 +300,33 @@ class KestrelHandlerSpec extends Specification with JMocker with ClassMocker wit
         }
       }
     }
+
+    "respect server status" in {
+      "by blocking get when reads are blocked" in  {
+        withTempFolder {
+          queues = new QueueCollection(folderName, timer, scheduler, config, Nil, Nil)
+          val serverStatus = mock[ServerStatus]
+          val handler = new FakeKestrelHandler(queues, 10, Some(serverStatus))
+          expect {
+            one(serverStatus).blockReads willReturn true
+          }
+
+          handler.getItem("q", None, false, false) must throwAn[AvailabilityException]
+        }
+      }
+
+      "by blocking set when writes are blocked" in  {
+        withTempFolder {
+          queues = new QueueCollection(folderName, timer, scheduler, config, Nil, Nil)
+          val serverStatus = mock[ServerStatus]
+          val handler = new FakeKestrelHandler(queues, 10, Some(serverStatus))
+          expect {
+            one(serverStatus).blockWrites willReturn true
+          }
+
+          handler.setItem("q", 0, None, Array[Byte](1,2,3,4)) must throwAn[AvailabilityException]
+        }
+      }
+    }
   }
 }

@@ -465,6 +465,18 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
       }
     }
 
+    "availability exception returns SERVER_ERROR" in {
+      val serverStatus = mock[ServerStatus]
+      expect {
+        one(connection).remoteAddress willReturn address
+        one(serverStatus).blockReads willReturn true
+      }
+
+      val memcacheHandler = new MemcacheHandler(connection, queueCollection, 10, Some(serverStatus))
+
+      memcacheHandler(toReq("get q"))() mustEqual MemcacheResponse("SERVER_ERROR", None)
+    }
+
     "unknown command" in {
       expect {
         one(connection).remoteAddress willReturn address

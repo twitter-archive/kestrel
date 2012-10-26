@@ -63,7 +63,9 @@ class MemcacheHandler(
       handle(request)
     } catch {
       case e: AvailabilityException =>
-        Future(new MemcacheResponse("ERROR") then Codec.Disconnect)
+        // kestrel-client ruby gem will retry (if configured) on SERVER_ERROR, but
+        // not on ERROR or CLIENT_ERROR
+        Future(new MemcacheResponse("SERVER_ERROR") then Codec.Disconnect)
     }
   }
 
