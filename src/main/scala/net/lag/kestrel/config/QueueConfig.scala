@@ -104,20 +104,21 @@ class QueueBuilder {
   var maxAge: ConfigValue[Option[Duration]] = Default(None)
 
   /**
-   * If the queue is empty, truncate the journal when it reaches this size.
+   * If the queue is empty, compact the journal when it reaches this size.
    */
   var defaultJournalSize: ConfigValue[StorageUnit] = Default(16.megabytes)
 
   /**
    * Keep only this much of the queue in memory. The journal will be used to store backlogged
    * items, and they'll be read back into memory as the queue is drained. This setting is a release
-   * valve to keep a backed-up queue from consuming all memory.
+   * valve to keep a backed-up queue from consuming all memory. Also, when the current journal file
+   * reaches this size, it is rotated.
    */
   var maxMemorySize: ConfigValue[StorageUnit] = Default(128.megabytes)
 
   /**
-   * If the queue fits entirely in memory (see maxMemorySize) and the journal files get larger than
-   * this, rebuild the journal.
+   * When the journal gets larger than this, set a checkpoint so that the journal may be compacted
+   * during read-behind (when the queue size in bytes exceeds `maxMemorySize`).
    */
   var maxJournalSize: ConfigValue[StorageUnit] = Default(1.gigabyte)
 

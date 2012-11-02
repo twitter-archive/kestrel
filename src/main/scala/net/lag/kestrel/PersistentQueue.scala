@@ -197,15 +197,11 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   private def checkRotateJournal() {
     /*
      * if the queue is empty, and the journal is larger than defaultJournalSize, rebuild it.
-     * if the queue is smaller than maxMemorySize, and the combined journals are larger than
-     *   maxJournalSize, rebuild them. (we are not in read-behind.)
      * if the current journal is larger than maxMemorySize, rotate to a new file. if the combined
      *   journals are larger than maxJournalSize, checkpoint in preparation for rebuilding the
      *   older files in the background.
      */
-    if ((journal.size >= config.defaultJournalSize.inBytes && queueLength == 0) ||
-        (journal.size + journal.archivedSize > config.maxJournalSize.inBytes &&
-         queueSize < config.maxMemorySize.inBytes)) {
+    if ((journal.size >= config.defaultJournalSize.inBytes && queueLength == 0)) {
       log.info("Rewriting journal file for '%s' (qsize=%d)", name, queueSize)
       journal.rewrite(openTransactionIds.map { openTransactions(_) }, queue)
     } else if (journal.size > config.maxMemorySize.inBytes) {
