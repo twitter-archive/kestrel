@@ -91,8 +91,7 @@ Starting with Kestrel 2.3.4, queue configurations are inherited:
   of Kestrel silently ignored explicit fanout queue configurations and used the master queue's
   configuration.
 
-### Example Configuration
--------------------------
+### Example Configuration ###
 
 Existing configurations should continue to load, but the resulting configuration may
 differ. As an example, the following configuration file and table illustrate the differences
@@ -263,8 +262,7 @@ Kestrel supports three protocols: memcache, thrift and text. The
 [Finagle project](http://twitter.github.com/finagle/) can be used to connect clients
 to a Kestrel server via the memcache or thrift protocols.
 
-### Thrift
-----------
+### Thrift ###
 
 The thrift protocol is documented in the thrift IDL:
 [kestrel.thrift](https://github.com/robey/kestrel/blob/master/src/main/thrift/kestrel.thrift)
@@ -273,8 +271,7 @@ Reliable reads via the thrift protocol are specified by indicating how long the 
 should wait before aborting the unacknowledged read.
 
 
-### Memcache
-------------
+### Memcache ###
 
 The official memcache protocol is described here:
 [protocol.txt](https://github.com/memcached/memcached/blob/master/doc/protocol.txt)
@@ -391,8 +388,7 @@ Switches the kestrel server's current status to the given status (see section
 on Server Status, below).
 
 
-#### Reliable reads
--------------------
+#### Reliable reads ####
 
 Note: this section is specific to the memcache protocol.
 
@@ -434,8 +430,7 @@ Example:
     ...etc...
 
 
-### Text protocol
------------------
+### Text protocol ###
 
 Kestrel supports a limited, text-only protocol. You are encouraged to use the
 memcache protocol instead.
@@ -473,8 +468,7 @@ them. This allows clients that are aware of the kestrel server's status a
 grace period to learn the new status and cease the forbidden operations before
 beginning to encounter errors.
 
-### ZooKeeper Server Sets
--------------------------
+### ZooKeeper Server Sets ###
 
 Kestrel uses Twitter's ServerSet library to support client discovery of kestrel
 servers allowing a given operation. The ServerSet class is documented here:
