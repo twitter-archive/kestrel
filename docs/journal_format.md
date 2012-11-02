@@ -134,13 +134,8 @@ To keep from using an infinite amount of disk space, kestrel has a few
 strategies for erasing or compressing old journal files.
 
 - If the queue is empty, then after `defaultJournalSize` (usually 16MB) of
-  journal is written, the file is erased and a new file is started. (This is
-  the normal "steady-state" operation mode.)
-
-- If the queue is not in read-behind (that is, all of the queue's contents
-  are in memory), and the journal files total more than `maxJournalSize`
-  (usually 1GB), then the journal is rewritten from scratch. We know that
-  will be no more than `maxMemorySize` (usually 128MB).
+  journal is written, the file is erased and a new file is started with only
+  open transactions. (This is the normal "steady-state" operation mode.)
 
 - If the queue *is* in read-behind, a new journal file is started after each
   `maxMemorySize` (usually 128MB). At the beginning of each new file, a
@@ -161,3 +156,15 @@ The cons to this strategy are:
 - If a kestrel has N live connections, up to N open transactions will be
   written out during each checkpoint. For 50k connections, each holding a 1KB
   transaction, that could be 50MB.
+
+Kestrel versions prior to 2.4.1 will also attempt to compact the journal if
+the queue is not in read-behind (that is, all of the queue's contents are in
+memory) and the journal files total more than `maxJournalSize` (usually
+1GB). In this case, the journal is rewritten from scratch. We know that
+there will be no more than `maxMemorySize` (usually 128MB) worth of data to
+write. This feature was removed because in the absence of remove operations,
+it was possible to cause Kestrel to perform this rewrite on every add
+operation, rendering it unusable. The work around for this behavior is to
+increase `maxJournalSize` such that the ratio of `maxJournalSize` to
+`maxMemorySize` is greater than the ratio of the `minimum item size + 21` to
+the `minimum item size`.

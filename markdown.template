@@ -71,6 +71,16 @@ code {
 pre code {
   font-weight: normal;
 }
+
+table {
+  border-collapse: collapse;
+}
+
+table, th, td {
+  border: 1px solid black;
+  text-align: left;
+  padding: 0.5em;
+}
 </style>
 </head>
 

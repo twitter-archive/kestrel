@@ -71,6 +71,16 @@ code {
 pre code {
   font-weight: normal;
 }
+
+table {
+  border-collapse: collapse;
+}
+
+table, th, td {
+  border: 1px solid black;
+  text-align: left;
+  padding: 0.5em;
+}
 </style>
 </head>
 
@@ -78,8 +88,8 @@ pre code {
 
 <h1>A working guide to kestrel</h1>
 
-<p>Kestrel is a very simple message queue that runs on the JVM. It supports multiple
-protocols:</p>
+<p>Kestrel is a very simple message queue that runs on the JVM. It supports
+multiple protocols:</p>
 
 <ul>
 <li>memcache: the memcache protocol, with some extensions</li>
@@ -105,9 +115,10 @@ case-sensitive.</p>
 
 <p>A cluster of kestrel servers is like a memcache cluster: the servers don't
 know about each other, and don't do any cross-communication, so you can add as
-many as you like. Clients have a list of all servers in the cluster, and pick
-one at random for each operation. In this way, each queue appears to be spread
-out across every server, with items in a loose ordering.</p>
+many as you like. The simplest clients have a list of all servers in the
+cluster, and pick one at random for each operation. In this way, each queue
+appears to be spread out across every server, with items in a loose ordering.
+More advanced clients can find kestrel servers via ZooKeeper.</p>
 
 <p>When kestrel starts up, it scans the journal folder and creates queues based
 on any journal files it finds there, to restore state to the way it was when
@@ -135,8 +146,8 @@ a server (which can be done over telnet).</p>
 
 <p>To reload the config file on a running server, send "reload" the same way.
 You should immediately see the changes in "dump_config", to confirm. Reloading
-will only affect queue configuration, not global server configuration. To
-change the server configuration, restart the server.</p>
+will only affect queue and alias configuration, not global server configuration.
+To change the server configuration, restart the server.</p>
 
 <p>Logging is configured according to <code>util-logging</code>. The logging configuration
 syntax is described here:
@@ -153,17 +164,18 @@ syntax is described here:
 <p>Starting with Kestrel 2.3.4, queue configurations are inherited:</p>
 
 <ul>
-<li>Any queue with no explict configuration (see `queues` in `KestrelConfig`) uses the default
-   queue configuration (see `default` in `KestrelConfig`). This behavior is unchanged from
-   previous versions.</li>
-<li>Any master (e.g. not fanout) queue with a queue configuration overrides the default queue
-   configuration. For example, if `default.maxMemorySize` is set, all explicitly configured
-   queues will inherit that setting *unless* explicitly overridden in the queue's configuration.
-   Older versions of Kestrel *did not* apply values from the default queue configuration to any
-   explicitly configured queue.</li>
-<li>Any fanout queue (e.g., a queue with a `+` in its name), inherits its master queue's
-  configuration, unless explicitly overridden (see `queues` in `KestrelConfig`). Older versions
-  of Kestrel silently ignored explicit fanout queue configurations.</li>
+<li>Any queue with no explict configuration (see <code>queues</code> in <code>KestrelConfig</code>) uses the default
+queue configuration (see <code>default</code> in <code>KestrelConfig</code>). This behavior is unchanged from
+previous versions.</li>
+<li>Any master (e.g. not fanout) queue with an explicit queue configuration overrides the default
+queue configuration. For example, if <code>default.maxMemorySize</code> is set, all explicitly configured
+queues will inherit that setting <em>unless</em> explicitly overridden in the queue's configuration.
+Older versions of Kestrel <em>did not</em> apply values from the default queue configuration to any
+explicitly configured queue.</li>
+<li>Any fanout queue (e.g., a queue with a <code>+</code> in its name), inherits its master queue's
+configuration, unless explicitly overridden (see <code>queues</code> in <code>KestrelConfig</code>). Older versions
+of Kestrel silently ignored explicit fanout queue configurations and used the master queue's
+configuration.</li>
 </ul>
 
 <h3>Example Configuration</h3>
@@ -172,25 +184,24 @@ syntax is described here:
 differ. As an example, the following configuration file and table illustrate the differences
 between a configuration loaded by Kestrel 2.3.3 and Kestrel 2.3.4 (and later).</p>
 
-<pre><code>
-    new KestrelConfig {
-       default.maxMemorySize = 8.megabytes
+<pre><code>new KestrelConfig {
+   default.maxMemorySize = 8.megabytes
 
-       queues = new QueueBuilder() {
-           name = "q"
-           maxItems = 500
-       } :: new QueueBuilder() {
-           name = "q+fanout"
-           maxAge = 1.minute
-       } :: new QueueBuilder() {
-           name = "x"
-           maxMemorySize = 16.megabytes
-       }
-    }
+   queues = new QueueBuilder() {
+       name = "q"
+       maxItems = 500
+   } :: new QueueBuilder() {
+       name = "q+fanout"
+       maxAge = 1.minute
+   } :: new QueueBuilder() {
+       name = "x"
+       maxMemorySize = 16.megabytes
+   }
+}
 </code></pre>
 
 <table>
-  <tr><th>Queue</th>    <th>Setting</th>       <th>Kestrel <= 2.3.3</th> <th>Kestrel >= 2.3.4</th>   </tr>
+  <tr><th>Queue</th>    <th>Setting</th>       <th>Kestrel &lt;= 2.3.3</th> <th>Kestrel &gt;= 2.3.4</th>   </tr>
   <tr><td>q</td>        <td>maxMemorySize</td> <td>128.megabytes</td>    <td>8.megabytes</td>        </tr>
   <tr><td>q+fanout</td> <td>maxMemorySize</td> <td>128.megabytes</td>    <td>8.megabytes</td>        </tr>
   <tr><td>x</td>        <td>maxMemorySize</td> <td>16.megabytes</td>     <td>16.megabytes</td>       </tr>
@@ -198,7 +209,6 @@ between a configuration loaded by Kestrel 2.3.3 and Kestrel 2.3.4 (and later).</
   <tr><td>q+fanout</td> <td>maxItems</td>      <td>500</td>              <td>500</td>                </tr>
   <tr><td>q+fanout</td> <td>maxAge</td>        <td>None</td>             <td>Some(1.minute)</td>     </tr>
 </table>
-
 
 <h2>Full queues</h2>
 
@@ -225,17 +235,18 @@ just a sequential record of each add or remove operation that's happened on
 that queue. When kestrel starts up, it replays each queue's journal to build
 up the in-memory queue that it uses for client queries.</p>
 
-<p>The journal file is rotated in one of two conditions:</p>
+<p>The journal file is compacted if the queue is empty and the journal is larger
+than <code>defaultJournalSize</code>.</p>
 
-<ol>
-<li><p>the queue is empty and the journal is larger than <code>defaultJournalSize</code></p></li>
-<li><p>the journal is larger than <code>maxJournalSize</code></p></li>
-</ol>
+<p>The current journal file is archived (or rotated) when the journal is larger
+than <code>maxMemorySize</code>. In addition, if the complete journal exceeds
+<code>maxJournalSize</code>, a checkpoint is set. The journal may then be compacted during
+read-behind (when the size of the queue exceeds <code>maxMemorySize</code>) via the
+journal packer thread.</p>
 
 <p>For example, if <code>defaultJournalSize</code> is 16MB (the default), then if the queue
-is empty and the journal is larger than 16MB, it will be truncated into a new
-(empty) file. If the journal is larger than <code>maxJournalSize</code> (1GB by default),
-the journal will be rewritten periodically to contain just the live items.</p>
+is empty and the journal is larger than 16MB, it will be compacted into a new
+(empty, if there are no open transactions) file.</p>
 
 <p>You can turn the journal off for a queue (<code>keepJournal</code> = false) and the queue
 will exist only in memory. If the server restarts, all enqueued items are
@@ -311,7 +322,7 @@ from receiving new items.</p>
 <p><code>fanoutOnly</code> may be set to true if the queue in question will only serve write
 point for fanout queues.  No journal file will be kept for the parent, only
 for the child queues.  This saves the overhead of writing to the parent and
-removes the need to empty it.  Note that setting `fanoutOnly` to true and
+removes the need to empty it.  Note that setting <code>fanoutOnly</code> to true and
 having no fanouts for the queue effectively makes it a black hole.</p>
 
 <h2>Queue Aliases</h2>
@@ -325,26 +336,23 @@ are also ignored.</p>
 <h2>Protocols</h2>
 
 <p>Kestrel supports three protocols: memcache, thrift and text. The
-<a href="http://twitter.github.com/finagle/">Finagle project</a> can
-be used to connect clients to a Kestrel server via the memcache or
-thrift protocols.</p>
+<a href="http://twitter.github.com/finagle/">Finagle project</a> can be used to connect clients
+to a Kestrel server via the memcache or thrift protocols.</p>
 
-<h3>Thrift protocol</h3>
+<h3>Thrift</h3>
 
-<p>The thrift RPC protocol is documented in the thrift IDL:
-<a href="https://github.com/robey/kestrel/blob/master/src/main/thrift/kestrel.thrift">kestrel.thrift</a>
+<p>The thrift protocol is documented in the thrift IDL:
+<a href="https://github.com/robey/kestrel/blob/master/src/main/thrift/kestrel.thrift">kestrel.thrift</a></p>
 
-<p>Reliable reads via the thrift protocol are specified by indicating
-how long the server should wait before aborting the unacknowledged
-read.</p>
-
+<p>Reliable reads via the thrift protocol are specified by indicating how long the server
+should wait before aborting the unacknowledged read.</p>
 
 <h3>Memcache</h3>
 
 <p>The official memcache protocol is described here:
-<a href="https://github.com/memcached/memcached/blob/master/doc/protocol.txt">protocol.txt</a>
+<a href="https://github.com/memcached/memcached/blob/master/doc/protocol.txt">protocol.txt</a></p>
 
-The kestrel implementation of the memcache protocol commands is described below.
+<p>The kestrel implementation of the memcache protocol commands is described below.</p>
 
 <ul>
 <li><p><code>SET &lt;queue-name&gt; &lt;flags (ignored)&gt; &lt;expiration&gt; &lt;# bytes&gt;</code></p>
@@ -421,27 +429,33 @@ noticable effect on the server's responsiveness.</p></li>
 described below.</p></li>
 <li><p><code>MONITOR &lt;queue-name&gt; &lt;seconds&gt; [max-items]</code></p>
 
-<p>Monitor a queue for a time, fetching any new items that arrive,up
-to an optional maximum number of items. Clients are queued in a fair
-fashion, per-item, so many clients may monitor a queue at once. After
-the given timeout, a separate <code>END</code> response will signal
-the end of the monitor period. Any fetched items are open transactions
-(see "Reliable Reads" below), and should be closed with
-<code>CONFIRM</code>.</p></li>
+<p>Monitor a queue for a time, fetching any new items that arrive, up to an
+optional maximum number of items. Clients are queued in a fair fashion,
+per-item, so many clients may monitor a queue at once. After the given
+timeout, a separate <code>END</code> response will signal the end of the monitor
+period. Any fetched items are open transactions (see "Reliable Reads"
+below), and should be closed with <code>CONFIRM</code>.</p></li>
 <li><p><code>CONFIRM &lt;queue-name&gt; &lt;count&gt;</code></p>
 
 <p>Confirm receipt of <code>count</code> items from a queue. Usually this is the response
 to a <code>MONITOR</code> command, to confirm the items that arrived during the monitor
 period.</p></li>
+<li><p><code>STATUS</code></p></li>
 </ul>
+
+<p>Displays the kestrel server's current status (see section on Server Status,
+below).</p>
+
+<ul>
+<li><code>STATUS &lt;new-status&gt;</code></li>
+</ul>
+
+<p>Switches the kestrel server's current status to the given status (see section
+on Server Status, below).</p>
 
 <h4>Reliable reads</h4>
 
 <p>Note: this section is specific to the memcache protocol.</p>
-
-<p>This section describes the implementation of reliable reads for the memcache
-protocol. See the thrift protocol documentation for details on using reliable
-reads with that protocol.</p>
 
 <p>Normally when a client removes an item from the queue, kestrel immediately
 discards the item and assumes the client has taken ownership. This isn't
@@ -483,11 +497,93 @@ GET dirty_jobs/close/open
 
 <h3>Text protocol</h3>
 
-<p>Kestrel supports a limited, text-only protocol. You are encouraged
-to use the memcache protocol instead.</p>
+<p>Kestrel supports a limited, text-only protocol. You are encouraged to use the
+memcache protocol instead.</p>
 
 <p>The text protocol does not support reliable reads.</p>
 
+<h2>Server Status</h2>
+
+<p>Each kestrel server maintains its current status. Normal statuses are</p>
+
+<ul>
+<li><code>Up</code>: the server is available for all operations</li>
+<li><code>ReadOnly</code>: the server is available for non-modifying operations only;
+          commands that modify queues (set, delete, flush) are rejected as
+      errors.</li>
+<li><code>Quiescent</code>: the server rejects as an error operations on any queue. One
+           notable exception is transactions begun before the server entered
+       the quiesecent state may still be confirmed.</li>
+</ul>
+
+<p>One additional status is <code>Down</code>, which is only used transiently when kestrel is
+in the process of shutting down.</p>
+
+<p>The server's current status is persisted (specified in
+<a href="http://robey.github.com/kestrel/api/main/api/net/lag/kestrel/config/KestrelConfig.html">KestrelConfig</a>).
+When kestrel is restarted it automatically returns to it's previous status,
+based on the value in the status file. If the status file does not exist or
+cannot be read, kestrel uses a default status, also configured in KestrelConfig.</p>
+
+<p>When changing from a less restrictive status to a more restrictive status
+(e.g., from <code>Up</code> to <code>ReadOnly</code> or from <code>ReadOnly</code> to <code>Quiescent</code>), the
+config option <code>statusChangeGracePeriod</code> determines how long kestrel will
+continue to allow restricted operations to continue before it begins rejecting
+them. This allows clients that are aware of the kestrel server's status a
+grace period to learn the new status and cease the forbidden operations before
+beginning to encounter errors.</p>
+
+<h3>ZooKeeper Server Sets</h3>
+
+<p>Kestrel uses Twitter's ServerSet library to support client discovery of kestrel
+servers allowing a given operation. The ServerSet class is documented here:
+<a href="http://twitter.github.com/commons/apidocs/index.html#com.twitter.common.zookeeper.ServerSet">ServerSet</a></p>
+
+<p>If the optional <code>zookeeper</code> field of <code>KestrelConfig</code> is specified, kestrel will
+attempt to use the given configuration to join a logical set of kestrel servers.
+The ZooKeeper host, port and other connection options are documented here:
+<a href="http://robey.github.com/kestrel/api/main/api/net/lag/kestrel/config/ZooKeeperBuilder.html">ZooKeeperBuilder</a></p>
+
+<p>Kestrel servers will join 0, 1, or 2 server sets depending on their current
+status. When <code>Up</code>, the server joins two server sets: one for writes and one for
+reads. When <code>ReadOnly</code>, the server joins only the read set. When <code>Quiescent</code>,
+the server joins no sets. ZooKeeper-aware kestrel clients can watch the
+server set for changes and adjust their connections accordingly. The
+<code>statusChangeGracePeriod</code> configuration option may be used to allow clients
+time to detect and react to the status change before they begin receiving
+errors from kestrel.</p>
+
+<p>The ZooKeeper path used to register the server set is based on the <code>pathPrefix</code>
+option. Kestrel automatically appends <code>/write</code> and <code>/read</code> to distinguish the
+write and read sets.</p>
+
+<p>Kestrel advertises all of its endpoints in each server set that it joins.
+The default endpoint is memcache, if configured. The default endpoint falls
+back to the thrift endpoint and then the text protocol endpoint. All three
+endpoints are advertised as additional endpoints under the names <code>memcache</code>,
+<code>thrift</code> and <code>text</code>.</p>
+
+<p>Kestrel advertises only a single IP address per endpoint. This IP address is
+based on Kestrel's <code>listenAddress</code>. If the listener address is the wildcard
+address (e.g., <code>0.0.0.0</code> or <code>::</code>), Kestrel will advertise the first IP address
+it finds by traversing the host's configured network interfaces (via
+<code>java.net.NetworkInterface</code>). If your host has multiple, valid external IP
+addresses you can choose the advertised address by setting the listener address
+to that IP. Finally, If the listener address is a loopback address (e.g.,
+<code>127.0.0.1</code> or <code>::1</code>), Kestrel will not start, since advertising a loopback
+address on ZooKeeper will not work and no external host could connect to
+Kestrel in any event.</p>
+
+<p>Consider setting the  <code>defaultStatus</code> option to <code>Quiescent</code> to prevent kestrel
+from prematurely advertising its status via ZooKeeper.</p>
+
+<p>Installations that require additional customization of ZooKeeper credentials,
+or other site-specific ZooKeeper initialization can override the
+<code>clientInitializer</code> and <code>serverSetInitializer</code> options to invoke the
+necessary site-specific code. The recommended implementation is to place
+the site-specific code in its own JAR file, take the necessary steps to
+include the JAR in kestrel's class path, and place as little logic as possible
+in the kestrel configuration file.</p>
 
 <h2>Server stats</h2>
 
@@ -511,7 +607,7 @@ server's lifetime</li>
 <li><code>get_misses</code> - total <code>GET</code> requests on an empty queue</li>
 <li><code>bytes_read</code> - total bytes read from clients</li>
 <li><code>bytes_written</code> - total bytes written to clients</li>
-<li><code>queue_creates_written</code> - total number of queues created</li>
+<li><code>queue_creates</code> - total number of queues created</li>
 <li><code>queue_deletes</code> - total number of queues deleted (includes expires)</li>
 <li><code>queue_expires</code> - total number of queues expires</li>
 </ul>
@@ -537,20 +633,20 @@ queue is empty, this will always be zero</li>
 <li><code>waiters</code> - number of clients waiting for an item from this queue (using
 <code>GET/t</code>)</li>
 <li><code>open_transactions</code> - items read with <code>/open</code> but not yet confirmed</li>
-<li><code>transactions<code> - number of transactional get requests (irrespective of whether an item was read or not)</li>
-<li><code>canceled_transactions</code> - number of transactional get requests canceled (for any reason)</li>
+<li><code>transactions</code> - number of transactional get requests (irrespective of whether an
+item was read or not)</li>
+<li><code>canceled_transactions</code> - number of transactional get requests canceled (for any
+reason)</li>
 <li><code>total_flushes</code> - total number of times this queue has been flushed</li>
-<li><code>age_msec</code> - age of the last item read from the queue/li>
-<li><code>create_time</code> - the time that the queue was created (in milliseconds since epoch)/li>
-
+<li><code>age_msec</code> - age of the last item read from the queue</li>
+<li><code>create_time</code> - the time that the queue was created (in milliseconds since epoch)</li>
 </ul>
 
 <p>Statistics may be retrieved by accessing the
 <a href="https://github.com/twitter/ostrich">Ostrich admin HTTP service</a> on the admin HTTP port.
-For example: <code>http://kestrel.host:2223/stats.json?period=60`</code>.</p>
+For example: <code>http://kestrel.host:2223/stats.json?period=60</code>.</p>
 
 <p>Statistics are also available via the memcache protocol using the <code>STATS</code> command.</p>
-
 
 <h2>Kestrel as a library</h2>
 

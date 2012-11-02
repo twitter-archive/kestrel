@@ -71,6 +71,16 @@ code {
 pre code {
   font-weight: normal;
 }
+
+table {
+  border-collapse: collapse;
+}
+
+table, th, td {
+  border: 1px solid black;
+  text-align: left;
+  padding: 0.5em;
+}
 </style>
 </head>
 
@@ -211,12 +221,8 @@ strategies for erasing or compressing old journal files.</p>
 
 <ul>
 <li><p>If the queue is empty, then after <code>defaultJournalSize</code> (usually 16MB) of
-journal is written, the file is erased and a new file is started. (This is
-the normal "steady-state" operation mode.)</p></li>
-<li><p>If the queue is not in read-behind (that is, all of the queue's contents
-are in memory), and the journal files total more than <code>maxJournalSize</code>
-(usually 1GB), then the journal is rewritten from scratch. We know that
-will be no more than <code>maxMemorySize</code> (usually 128MB).</p></li>
+journal is written, the file is erased and a new file is started with only
+open transactions. (This is the normal "steady-state" operation mode.)</p></li>
 <li><p>If the queue <em>is</em> in read-behind, a new journal file is started after each
 <code>maxMemorySize</code> (usually 128MB). At the beginning of each new file, a
 checkpoint is saved in memory with the current list of open transactions.</p>
@@ -239,6 +245,18 @@ checkpoint.</li>
 written out during each checkpoint. For 50k connections, each holding a 1KB
 transaction, that could be 50MB.</li>
 </ul>
+
+<p>Kestrel versions prior to 2.4.1 will also attempt to compact the journal if
+the queue is not in read-behind (that is, all of the queue's contents are in
+memory) and the journal files total more than <code>maxJournalSize</code> (usually
+1GB). In this case, the journal is rewritten from scratch. We know that
+there will be no more than <code>maxMemorySize</code> (usually 128MB) worth of data to
+write. This feature was removed because in the absence of remove operations,
+it was possible to cause Kestrel to perform this rewrite on every add
+operation, rendering it unusable. The work around for this behavior is to
+increase <code>maxJournalSize</code> such that the ratio of <code>maxJournalSize</code> to
+<code>maxMemorySize</code> is greater than the ratio of the <code>minimum item size + 21</code> to
+the <code>minimum item size</code>.</p>
 
 
 </body>

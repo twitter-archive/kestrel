@@ -12,7 +12,7 @@
       <script type="text/javascript" src="../../../lib/tools.tooltip.js"></script>
     
         </head>
-        <body class="type">
+        <body onload="sh_highlightDocument('../lib/', '.min.js');" class="type">
       <div id="definition">
         <a title="Go to companion" href="QueueCollection$.html"><img src="../../../lib/class_to_object_big.png" /></a>
         <p id="owner"><a name="net" class="extype" href="../../package.html">net</a>.<a name="net.lag" class="extype" href="../package.html">lag</a>.<a name="net.lag.kestrel" class="extype" href="package.html">kestrel</a></p>
@@ -20,50 +20,52 @@
       </div>
 
       <h4 class="signature" id="signature">
-      <span class="kind">class</span>
-      <span class="symbol"> 
-        <span class="name">QueueCollection</span>
-        
-        <span class="result"> extends AnyRef</span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <span class="name">QueueCollection</span><span class="result"> extends AnyRef</span>
       </span>
       </h4>
       
-          <div class="fullcommenttop" id="comment"><div class="toggleContainer block">
+      <div class="fullcommenttop" id="comment"><div class="toggleContainer block">
           <span class="toggle">Linear Supertypes</span>
           <div class="superTypes hiddenContent">AnyRef, <span name="scala.Any" class="extype">Any</span></div>
         </div></div>
-        
+    
+
+      <div id="mbrsel">
+        <div id="textfilter"><span class="pre"></span><span class="input"><input accesskey="/" type="text" /></span><span class="post"></span></div>
+        <div id="order">
+              <span class="filtertype">Ordering</span>
+              <ol><li class="alpha in"><span>Alphabetic</span></li><li class="inherit out"><span>By inheritance</span></li></ol>
+            </div>
+        <div id="ancestors">
+              <span class="filtertype">Inherited</span>
+              <ol><li class="hideall out"><span>Hide All</span></li>
+              <li class="showall in"><span>Show all</span></li></ol>
+              <ol id="linearization"><li name="net.lag.kestrel.QueueCollection" class="in"><span>QueueCollection</span></li><li name="scala.AnyRef" class="in"><span>AnyRef</span></li><li name="scala.Any" class="in"><span>Any</span></li></ol>
+            </div>
+        <div id="visbl">
+            <span class="filtertype">Visibility</span>
+            <ol><li class="public in"><span>Public</span></li><li class="all out"><span>All</span></li></ol>
+          </div>
+      </div>
 
       <div id="template">
-
-        <div id="mbrsel">
-          <div id="textfilter"><span class="pre"></span><span class="input"><input accesskey="/" type="text" /></span><span class="post"></span></div>
-          <div id="order">
-                <span class="filtertype">Ordering</span>
-                <ol><li class="alpha in"><span>Alphabetic</span></li><li class="inherit out"><span>By inheritance</span></li></ol>
-              </div>
-          <div id="ancestors">
-                <span class="filtertype">Inherited</span>
-                <ol><li class="hideall out"><span>Hide All</span></li>
-                <li class="showall in"><span>Show all</span></li></ol>
-                <ol id="linearization"><li name="net.lag.kestrel.QueueCollection" class="in"><span>QueueCollection</span></li><li name="scala.AnyRef" class="in"><span>AnyRef</span></li><li name="scala.Any" class="in"><span>Any</span></li></ol>
-              </div>
-          <div id="visbl">
-              <span class="filtertype">Visibility</span>
-              <ol><li class="public in"><span>Public</span></li><li class="all out"><span>All</span></li></ol>
-            </div>
-        </div>
-
+        <div id="allMembers">
         <div class="members" id="constructors">
               <h3>Instance Constructors</h3>
               <ol><li visbl="pub" name="net.lag.kestrel.QueueCollection#this" data-isabs="false">
       <a id="this:QueueCollection"></a>
       <h4 class="signature">
-      <span class="kind">new</span>
-      <span class="symbol"> 
-        <span class="name">QueueCollection</span>
-        
-        <span class="params">(<span name="queueFolder">queueFolder: String</span>, <span name="timer">timer: <span name="com.twitter.util.Timer" class="extype">Timer</span></span>, <span name="journalSyncScheduler">journalSyncScheduler: <span name="java.util.concurrent.ScheduledExecutorService" class="extype">ScheduledExecutorService</span></span>, <span name="defaultQueueConfig">defaultQueueConfig: <a name="net.lag.kestrel.config.QueueConfig" class="extype" href="config/QueueConfig.html">QueueConfig</a></span>, <span name="queueBuilders">queueBuilders: List[<a name="net.lag.kestrel.config.QueueBuilder" class="extype" href="config/QueueBuilder.html">QueueBuilder</a>]</span>, <span name="aliasBuilders">aliasBuilders: List[<a name="net.lag.kestrel.config.AliasBuilder" class="extype" href="config/AliasBuilder.html">AliasBuilder</a>]</span>)</span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">new</span>
+      </span>
+      <span class="symbol">
+        <span class="name">QueueCollection</span><span class="params">(<span name="queueFolder">queueFolder: String</span>, <span name="timer">timer: <span name="com.twitter.util.Timer" class="extype">Timer</span></span>, <span name="journalSyncScheduler">journalSyncScheduler: <span name="java.util.concurrent.ScheduledExecutorService" class="extype">ScheduledExecutorService</span></span>, <span name="defaultQueueConfig">defaultQueueConfig: <a name="net.lag.kestrel.config.QueueConfig" class="extype" href="config/QueueConfig.html">QueueConfig</a></span>, <span name="queueBuilders">queueBuilders: List[<a name="net.lag.kestrel.config.QueueBuilder" class="extype" href="config/QueueBuilder.html">QueueBuilder</a>]</span>, <span name="aliasBuilders">aliasBuilders: List[<a name="net.lag.kestrel.config.AliasBuilder" class="extype" href="config/AliasBuilder.html">AliasBuilder</a>]</span>)</span>
       </span>
       </h4>
       
@@ -75,17 +77,18 @@
               <ol><li visbl="pub" name="net.lag.kestrel.QueueCollection#ClientDescription" data-isabs="false">
       <a id="ClientDescription:ClientDescription"></a>
       <h4 class="signature">
-      <span class="kind">type</span>
-      <span class="symbol"> 
-        <span class="name">ClientDescription</span>
-        
-        <span class="result"> = <span name="scala.Option" class="extype">Option</span>[() ⇒ String]</span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">type</span>
+      </span>
+      <span class="symbol">
+        <span class="name">ClientDescription</span><span class="result"> = <span name="scala.Option" class="extype">Option</span>[() ⇒ String]</span>
       </span>
       </h4>
       
     </li></ol>
             </div>
-        
+
         
 
         <div class="values members" id="values">
@@ -93,88 +96,96 @@
               <ol><li visbl="pub" name="scala.AnyRef#!=" data-isabs="false">
       <a id="!=(AnyRef):Boolean"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">!=</span>
-        
-        <span class="params">(<span name="arg0">arg0: AnyRef</span>)</span><span class="result">: <span name="scala.Boolean" class="extype">Boolean</span></span>
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name" title="gt4s: $bang$eq">!=</span><span class="params">(<span name="arg0">arg0: AnyRef</span>)</span><span class="result">: <span name="scala.Boolean" class="extype">Boolean</span></span>
       </span>
       </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>final </dd><dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
     </li><li visbl="pub" name="scala.Any#!=" data-isabs="false">
       <a id="!=(Any):Boolean"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">!=</span>
-        
-        <span class="params">(<span name="arg0">arg0: <span name="scala.Any" class="extype">Any</span></span>)</span><span class="result">: <span name="scala.Boolean" class="extype">Boolean</span></span>
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name" title="gt4s: $bang$eq">!=</span><span class="params">(<span name="arg0">arg0: <span name="scala.Any" class="extype">Any</span></span>)</span><span class="result">: <span name="scala.Boolean" class="extype">Boolean</span></span>
       </span>
       </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>final </dd><dt>Definition Classes</dt><dd>Any</dd></dl></div>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Any</dd></dl></div>
     </li><li visbl="pub" name="scala.AnyRef###" data-isabs="false">
       <a id="##():Int"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">##</span>
-        
-        <span class="params">()</span><span class="result">: <span name="scala.Int" class="extype">Int</span></span>
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name" title="gt4s: $hash$hash">##</span><span class="params">()</span><span class="result">: <span name="scala.Int" class="extype">Int</span></span>
       </span>
       </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>final </dd><dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
     </li><li visbl="pub" name="scala.AnyRef#==" data-isabs="false">
       <a id="==(AnyRef):Boolean"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">==</span>
-        
-        <span class="params">(<span name="arg0">arg0: AnyRef</span>)</span><span class="result">: <span name="scala.Boolean" class="extype">Boolean</span></span>
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name" title="gt4s: $eq$eq">==</span><span class="params">(<span name="arg0">arg0: AnyRef</span>)</span><span class="result">: <span name="scala.Boolean" class="extype">Boolean</span></span>
       </span>
       </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>final </dd><dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
     </li><li visbl="pub" name="scala.Any#==" data-isabs="false">
       <a id="==(Any):Boolean"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">==</span>
-        
-        <span class="params">(<span name="arg0">arg0: <span name="scala.Any" class="extype">Any</span></span>)</span><span class="result">: <span name="scala.Boolean" class="extype">Boolean</span></span>
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name" title="gt4s: $eq$eq">==</span><span class="params">(<span name="arg0">arg0: <span name="scala.Any" class="extype">Any</span></span>)</span><span class="result">: <span name="scala.Boolean" class="extype">Boolean</span></span>
       </span>
       </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>final </dd><dt>Definition Classes</dt><dd>Any</dd></dl></div>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Any</dd></dl></div>
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#add" data-isabs="false">
       <a id="add(String,Array[Byte],Option[Time]):Boolean"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">add</span>
-        
-        <span class="params">(<span name="key">key: String</span>, <span name="item">item: <span name="scala.Array" class="extype">Array</span>[<span name="scala.Byte" class="extype">Byte</span>]</span>, <span name="expiry">expiry: <span name="scala.Option" class="extype">Option</span>[<span name="com.twitter.util.Time" class="extype">Time</span>]</span>)</span><span class="result">: <span name="scala.Boolean" class="extype">Boolean</span></span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">add</span><span class="params">(<span name="key">key: String</span>, <span name="item">item: <span name="scala.Array" class="extype">Array</span>[<span name="scala.Byte" class="extype">Byte</span>]</span>, <span name="expiry">expiry: <span name="scala.Option" class="extype">Option</span>[<span name="com.twitter.util.Time" class="extype">Time</span>]</span>)</span><span class="result">: <span name="scala.Boolean" class="extype">Boolean</span></span>
       </span>
       </h4>
       
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#add" data-isabs="false">
       <a id="add(String,Array[Byte]):Boolean"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">add</span>
-        
-        <span class="params">(<span name="key">key: String</span>, <span name="item">item: <span name="scala.Array" class="extype">Array</span>[<span name="scala.Byte" class="extype">Byte</span>]</span>)</span><span class="result">: <span name="scala.Boolean" class="extype">Boolean</span></span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">add</span><span class="params">(<span name="key">key: String</span>, <span name="item">item: <span name="scala.Array" class="extype">Array</span>[<span name="scala.Byte" class="extype">Byte</span>]</span>)</span><span class="result">: <span name="scala.Boolean" class="extype">Boolean</span></span>
       </span>
       </h4>
       
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#add" data-isabs="false">
       <a id="add(String,Array[Byte],Option[Time],Time,ClientDescription):Boolean"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">add</span>
-        
-        <span class="params">(<span name="key">key: String</span>, <span name="item">item: <span name="scala.Array" class="extype">Array</span>[<span name="scala.Byte" class="extype">Byte</span>]</span>, <span name="expiry">expiry: <span name="scala.Option" class="extype">Option</span>[<span name="com.twitter.util.Time" class="extype">Time</span>]</span>, <span name="addTime">addTime: <span name="com.twitter.util.Time" class="extype">Time</span></span>, <span name="clientDescription">clientDescription: ClientDescription = <span class="symbol"><span class="name"><a href="../../../scala/package.html">None</a></span></span></span>)</span><span class="result">: <span name="scala.Boolean" class="extype">Boolean</span></span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">add</span><span class="params">(<span name="key">key: String</span>, <span name="item">item: <span name="scala.Array" class="extype">Array</span>[<span name="scala.Byte" class="extype">Byte</span>]</span>, <span name="expiry">expiry: <span name="scala.Option" class="extype">Option</span>[<span name="com.twitter.util.Time" class="extype">Time</span>]</span>, <span name="addTime">addTime: <span name="com.twitter.util.Time" class="extype">Time</span></span>, <span name="clientDescription">clientDescription: ClientDescription = <span class="symbol"><span class="name"><a href="../../../scala/package.html">None</a></span></span></span>)</span><span class="result">: <span name="scala.Boolean" class="extype">Boolean</span></span>
       </span>
       </h4>
       <p class="shortcomment cmt">Add an item to a named queue.</p><div class="fullcomment"><div class="comment cmt"><p>Add an item to a named queue. Will not return until the item has been synchronously added
@@ -184,55 +195,60 @@ and written to the queue journal file.
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#alias" data-isabs="false">
       <a id="alias(String):Option[AliasedQueue]"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">alias</span>
-        
-        <span class="params">(<span name="name">name: String</span>)</span><span class="result">: <span name="scala.Option" class="extype">Option</span>[<a name="net.lag.kestrel.AliasedQueue" class="extype" href="AliasedQueue.html">AliasedQueue</a>]</span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">alias</span><span class="params">(<span name="name">name: String</span>)</span><span class="result">: <span name="scala.Option" class="extype">Option</span>[<a name="net.lag.kestrel.AliasedQueue" class="extype" href="AliasedQueue.html">AliasedQueue</a>]</span>
       </span>
       </h4>
       <p class="shortcomment cmt">Get an alias, creating it if necessary.</p>
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#aliasBuilders" data-isabs="false">
       <a id="aliasBuilders:List[AliasBuilder]"></a>
       <h4 class="signature">
-      <span class="kind">var</span>
-      <span class="symbol"> 
-        <span class="name">aliasBuilders</span>
-        
-        <span class="result">: List[<a name="net.lag.kestrel.config.AliasBuilder" class="extype" href="config/AliasBuilder.html">AliasBuilder</a>]</span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">var</span>
+      </span>
+      <span class="symbol">
+        <span class="name">aliasBuilders</span><span class="result">: List[<a name="net.lag.kestrel.config.AliasBuilder" class="extype" href="config/AliasBuilder.html">AliasBuilder</a>]</span>
       </span>
       </h4>
       
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#apply" data-isabs="false">
       <a id="apply(String):Option[PersistentQueue]"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">apply</span>
-        
-        <span class="params">(<span name="name">name: String</span>)</span><span class="result">: <span name="scala.Option" class="extype">Option</span>[<a name="net.lag.kestrel.PersistentQueue" class="extype" href="PersistentQueue.html">PersistentQueue</a>]</span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">apply</span><span class="params">(<span name="name">name: String</span>)</span><span class="result">: <span name="scala.Option" class="extype">Option</span>[<a name="net.lag.kestrel.PersistentQueue" class="extype" href="PersistentQueue.html">PersistentQueue</a>]</span>
       </span>
       </h4>
       
     </li><li visbl="pub" name="scala.Any#asInstanceOf" data-isabs="false">
       <a id="asInstanceOf[T0]:T0"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">asInstanceOf</span>
-        <span class="tparams">[<span name="T0">T0</span>]</span>
-        <span class="result">: T0</span>
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">asInstanceOf</span><span class="tparams">[<span name="T0">T0</span>]</span><span class="result">: T0</span>
       </span>
       </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>final </dd><dt>Definition Classes</dt><dd>Any</dd></dl></div>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Any</dd></dl></div>
     </li><li visbl="prt" name="scala.AnyRef#clone" data-isabs="false">
       <a id="clone():AnyRef"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">clone</span>
-        
-        <span class="params">()</span><span class="result">: AnyRef</span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">clone</span><span class="params">()</span><span class="result">: AnyRef</span>
       </span>
       </h4>
       <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>protected[<a name="java.lang" class="extype" href="../../../java/lang/package.html">lang</a>] </dd><dt>Definition Classes</dt><dd>AnyRef</dd><dt>Annotations</dt><dd>
@@ -242,110 +258,135 @@ and written to the queue journal file.
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#confirmRemove" data-isabs="false">
       <a id="confirmRemove(String,Int):Unit"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">confirmRemove</span>
-        
-        <span class="params">(<span name="key">key: String</span>, <span name="xid">xid: <span name="scala.Int" class="extype">Int</span></span>)</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">confirmRemove</span><span class="params">(<span name="key">key: String</span>, <span name="xid">xid: <span name="scala.Int" class="extype">Int</span></span>)</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
       </span>
       </h4>
       
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#createAliases" data-isabs="false">
       <a id="createAliases():Unit"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">createAliases</span>
-        
-        <span class="params">()</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">createAliases</span><span class="params">()</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
       </span>
       </h4>
       
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#currentBytes" data-isabs="false">
       <a id="currentBytes:Long"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">currentBytes</span>
-        
-        <span class="result">: <span name="scala.Long" class="extype">Long</span></span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">currentBytes</span><span class="result">: <span name="scala.Long" class="extype">Long</span></span>
       </span>
       </h4>
       
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#currentItems" data-isabs="false">
       <a id="currentItems:Long"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">currentItems</span>
-        
-        <span class="result">: <span name="scala.Long" class="extype">Long</span></span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">currentItems</span><span class="result">: <span name="scala.Long" class="extype">Long</span></span>
       </span>
       </h4>
       
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#delete" data-isabs="false">
       <a id="delete(String,ClientDescription):Unit"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">delete</span>
-        
-        <span class="params">(<span name="name">name: String</span>, <span name="clientDescription">clientDescription: ClientDescription = <span class="symbol"><span class="name"><a href="../../../scala/package.html">None</a></span></span></span>)</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">delete</span><span class="params">(<span name="name">name: String</span>, <span name="clientDescription">clientDescription: ClientDescription = <span class="symbol"><span class="name"><a href="../../../scala/package.html">None</a></span></span></span>)</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
       </span>
       </h4>
       
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#deleteExpiredQueues" data-isabs="false">
       <a id="deleteExpiredQueues():Unit"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">deleteExpiredQueues</span>
-        
-        <span class="params">()</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">deleteExpiredQueues</span><span class="params">()</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
       </span>
       </h4>
       
     </li><li visbl="pub" name="scala.AnyRef#eq" data-isabs="false">
       <a id="eq(AnyRef):Boolean"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">eq</span>
-        
-        <span class="params">(<span name="arg0">arg0: AnyRef</span>)</span><span class="result">: <span name="scala.Boolean" class="extype">Boolean</span></span>
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">eq</span><span class="params">(<span name="arg0">arg0: AnyRef</span>)</span><span class="result">: <span name="scala.Boolean" class="extype">Boolean</span></span>
       </span>
       </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>final </dd><dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
     </li><li visbl="pub" name="scala.AnyRef#equals" data-isabs="false">
       <a id="equals(Any):Boolean"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">equals</span>
-        
-        <span class="params">(<span name="arg0">arg0: <span name="scala.Any" class="extype">Any</span></span>)</span><span class="result">: <span name="scala.Boolean" class="extype">Boolean</span></span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">equals</span><span class="params">(<span name="arg0">arg0: <span name="scala.Any" class="extype">Any</span></span>)</span><span class="result">: <span name="scala.Boolean" class="extype">Boolean</span></span>
       </span>
       </h4>
       <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
+    </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#evictWaiters" data-isabs="false">
+      <a id="evictWaiters():Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">evictWaiters</span><span class="params">()</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Force any requests in a waiting opertion (e.</p><div class="fullcomment"><div class="comment cmt"><p>Force any requests in a waiting opertion (e.g., remove) to react as
+if canceled. This method is useful for forcing connections to drain
+as part of shutting down.
+</p></div></div>
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#expireQueue" data-isabs="false">
       <a id="expireQueue(String):Unit"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">expireQueue</span>
-        
-        <span class="params">(<span name="name">name: String</span>)</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">expireQueue</span><span class="params">(<span name="name">name: String</span>)</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
       </span>
       </h4>
       
     </li><li visbl="prt" name="scala.AnyRef#finalize" data-isabs="false">
       <a id="finalize():Unit"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">finalize</span>
-        
-        <span class="params">()</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">finalize</span><span class="params">()</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
       </span>
       </h4>
       <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>protected[<a name="java.lang" class="extype" href="../../../java/lang/package.html">lang</a>] </dd><dt>Definition Classes</dt><dd>AnyRef</dd><dt>Annotations</dt><dd>
@@ -355,198 +396,216 @@ and written to the queue journal file.
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#flush" data-isabs="false">
       <a id="flush(String,ClientDescription):Unit"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">flush</span>
-        
-        <span class="params">(<span name="key">key: String</span>, <span name="clientDescription">clientDescription: ClientDescription = <span class="symbol"><span class="name"><a href="../../../scala/package.html">None</a></span></span></span>)</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">flush</span><span class="params">(<span name="key">key: String</span>, <span name="clientDescription">clientDescription: ClientDescription = <span class="symbol"><span class="name"><a href="../../../scala/package.html">None</a></span></span></span>)</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
       </span>
       </h4>
       
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#flushAllExpired" data-isabs="false">
       <a id="flushAllExpired(Boolean,ClientDescription):Int"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">flushAllExpired</span>
-        
-        <span class="params">(<span name="limit">limit: <span name="scala.Boolean" class="extype">Boolean</span> = <span class="symbol">false</span></span>, <span name="clientDescription">clientDescription: ClientDescription = <span class="symbol"><span class="name"><a href="../../../scala/package.html">None</a></span></span></span>)</span><span class="result">: <span name="scala.Int" class="extype">Int</span></span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">flushAllExpired</span><span class="params">(<span name="limit">limit: <span name="scala.Boolean" class="extype">Boolean</span> = <span class="symbol">false</span></span>, <span name="clientDescription">clientDescription: ClientDescription = <span class="symbol"><span class="name"><a href="../../../scala/package.html">None</a></span></span></span>)</span><span class="result">: <span name="scala.Int" class="extype">Int</span></span>
       </span>
       </h4>
       
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#flushExpired" data-isabs="false">
       <a id="flushExpired(String,Boolean,ClientDescription):Int"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">flushExpired</span>
-        
-        <span class="params">(<span name="name">name: String</span>, <span name="limit">limit: <span name="scala.Boolean" class="extype">Boolean</span> = <span class="symbol">false</span></span>, <span name="clientDescription">clientDescription: ClientDescription = <span class="symbol"><span class="name"><a href="../../../scala/package.html">None</a></span></span></span>)</span><span class="result">: <span name="scala.Int" class="extype">Int</span></span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">flushExpired</span><span class="params">(<span name="name">name: String</span>, <span name="limit">limit: <span name="scala.Boolean" class="extype">Boolean</span> = <span class="symbol">false</span></span>, <span name="clientDescription">clientDescription: ClientDescription = <span class="symbol"><span class="name"><a href="../../../scala/package.html">None</a></span></span></span>)</span><span class="result">: <span name="scala.Int" class="extype">Int</span></span>
       </span>
       </h4>
       
     </li><li visbl="pub" name="scala.AnyRef#getClass" data-isabs="false">
       <a id="getClass():java.lang.Class[_]"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">getClass</span>
-        
-        <span class="params">()</span><span class="result">: java.lang.Class[_]</span>
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">getClass</span><span class="params">()</span><span class="result">: java.lang.Class[_]</span>
       </span>
       </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>final </dd><dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
     </li><li visbl="pub" name="scala.AnyRef#hashCode" data-isabs="false">
       <a id="hashCode():Int"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">hashCode</span>
-        
-        <span class="params">()</span><span class="result">: <span name="scala.Int" class="extype">Int</span></span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">hashCode</span><span class="params">()</span><span class="result">: <span name="scala.Int" class="extype">Int</span></span>
       </span>
       </h4>
       <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
     </li><li visbl="pub" name="scala.Any#isInstanceOf" data-isabs="false">
       <a id="isInstanceOf[T0]:Boolean"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">isInstanceOf</span>
-        <span class="tparams">[<span name="T0">T0</span>]</span>
-        <span class="result">: <span name="scala.Boolean" class="extype">Boolean</span></span>
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">isInstanceOf</span><span class="tparams">[<span name="T0">T0</span>]</span><span class="result">: <span name="scala.Boolean" class="extype">Boolean</span></span>
       </span>
       </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>final </dd><dt>Definition Classes</dt><dd>Any</dd></dl></div>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Any</dd></dl></div>
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#loadQueues" data-isabs="false">
       <a id="loadQueues():Unit"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">loadQueues</span>
-        
-        <span class="params">()</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">loadQueues</span><span class="params">()</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
       </span>
       </h4>
       
     </li><li visbl="pub" name="scala.AnyRef#ne" data-isabs="false">
       <a id="ne(AnyRef):Boolean"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">ne</span>
-        
-        <span class="params">(<span name="arg0">arg0: AnyRef</span>)</span><span class="result">: <span name="scala.Boolean" class="extype">Boolean</span></span>
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">ne</span><span class="params">(<span name="arg0">arg0: AnyRef</span>)</span><span class="result">: <span name="scala.Boolean" class="extype">Boolean</span></span>
       </span>
       </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>final </dd><dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
     </li><li visbl="pub" name="scala.AnyRef#notify" data-isabs="false">
       <a id="notify():Unit"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">notify</span>
-        
-        <span class="params">()</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">notify</span><span class="params">()</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
       </span>
       </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>final </dd><dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
     </li><li visbl="pub" name="scala.AnyRef#notifyAll" data-isabs="false">
       <a id="notifyAll():Unit"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">notifyAll</span>
-        
-        <span class="params">()</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">notifyAll</span><span class="params">()</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
       </span>
       </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>final </dd><dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#queue" data-isabs="false">
       <a id="queue(String,Boolean,ClientDescription):Option[PersistentQueue]"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">queue</span>
-        
-        <span class="params">(<span name="name">name: String</span>, <span name="create">create: <span name="scala.Boolean" class="extype">Boolean</span></span>, <span name="clientDescription">clientDescription: ClientDescription</span>)</span><span class="result">: <span name="scala.Option" class="extype">Option</span>[<a name="net.lag.kestrel.PersistentQueue" class="extype" href="PersistentQueue.html">PersistentQueue</a>]</span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">queue</span><span class="params">(<span name="name">name: String</span>, <span name="create">create: <span name="scala.Boolean" class="extype">Boolean</span></span>, <span name="clientDescription">clientDescription: ClientDescription</span>)</span><span class="result">: <span name="scala.Option" class="extype">Option</span>[<a name="net.lag.kestrel.PersistentQueue" class="extype" href="PersistentQueue.html">PersistentQueue</a>]</span>
       </span>
       </h4>
       <p class="shortcomment cmt">Get a named queue, with control over whether non-existent queues are created.</p>
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#queue" data-isabs="false">
       <a id="queue(String,Boolean):Option[PersistentQueue]"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">queue</span>
-        
-        <span class="params">(<span name="name">name: String</span>, <span name="create">create: <span name="scala.Boolean" class="extype">Boolean</span></span>)</span><span class="result">: <span name="scala.Option" class="extype">Option</span>[<a name="net.lag.kestrel.PersistentQueue" class="extype" href="PersistentQueue.html">PersistentQueue</a>]</span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">queue</span><span class="params">(<span name="name">name: String</span>, <span name="create">create: <span name="scala.Boolean" class="extype">Boolean</span></span>)</span><span class="result">: <span name="scala.Option" class="extype">Option</span>[<a name="net.lag.kestrel.PersistentQueue" class="extype" href="PersistentQueue.html">PersistentQueue</a>]</span>
       </span>
       </h4>
       <p class="shortcomment cmt">Get a named queue, optionally creating it if it does not already exist.</p>
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#queue" data-isabs="false">
       <a id="queue(String,ClientDescription):Option[PersistentQueue]"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">queue</span>
-        
-        <span class="params">(<span name="name">name: String</span>, <span name="clientDescription">clientDescription: ClientDescription = <span class="symbol"><span class="name"><a href="../../../scala/package.html">None</a></span></span></span>)</span><span class="result">: <span name="scala.Option" class="extype">Option</span>[<a name="net.lag.kestrel.PersistentQueue" class="extype" href="PersistentQueue.html">PersistentQueue</a>]</span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">queue</span><span class="params">(<span name="name">name: String</span>, <span name="clientDescription">clientDescription: ClientDescription = <span class="symbol"><span class="name"><a href="../../../scala/package.html">None</a></span></span></span>)</span><span class="result">: <span name="scala.Option" class="extype">Option</span>[<a name="net.lag.kestrel.PersistentQueue" class="extype" href="PersistentQueue.html">PersistentQueue</a>]</span>
       </span>
       </h4>
       <p class="shortcomment cmt">Get a named queue, creating it if necessary.</p>
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#queueBuilders" data-isabs="false">
       <a id="queueBuilders:List[QueueBuilder]"></a>
       <h4 class="signature">
-      <span class="kind">var</span>
-      <span class="symbol"> 
-        <span class="name">queueBuilders</span>
-        
-        <span class="result">: List[<a name="net.lag.kestrel.config.QueueBuilder" class="extype" href="config/QueueBuilder.html">QueueBuilder</a>]</span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">var</span>
+      </span>
+      <span class="symbol">
+        <span class="name">queueBuilders</span><span class="result">: List[<a name="net.lag.kestrel.config.QueueBuilder" class="extype" href="config/QueueBuilder.html">QueueBuilder</a>]</span>
       </span>
       </h4>
       
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#queueNames" data-isabs="false">
       <a id="queueNames:List[String]"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">queueNames</span>
-        
-        <span class="result">: List[String]</span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">queueNames</span><span class="result">: List[String]</span>
       </span>
       </h4>
       
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#queueNames" data-isabs="false">
       <a id="queueNames(Boolean):List[String]"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">queueNames</span>
-        
-        <span class="params">(<span name="excludeAliases">excludeAliases: <span name="scala.Boolean" class="extype">Boolean</span></span>)</span><span class="result">: List[String]</span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">queueNames</span><span class="params">(<span name="excludeAliases">excludeAliases: <span name="scala.Boolean" class="extype">Boolean</span></span>)</span><span class="result">: List[String]</span>
       </span>
       </h4>
       
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#reload" data-isabs="false">
       <a id="reload(QueueConfig,List[QueueBuilder],List[AliasBuilder]):Unit"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">reload</span>
-        
-        <span class="params">(<span name="newDefaultQueueConfig">newDefaultQueueConfig: <a name="net.lag.kestrel.config.QueueConfig" class="extype" href="config/QueueConfig.html">QueueConfig</a></span>, <span name="newQueueBuilders">newQueueBuilders: List[<a name="net.lag.kestrel.config.QueueBuilder" class="extype" href="config/QueueBuilder.html">QueueBuilder</a>]</span>, <span name="newAliasBuilders">newAliasBuilders: List[<a name="net.lag.kestrel.config.AliasBuilder" class="extype" href="config/AliasBuilder.html">AliasBuilder</a>]</span>)</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">reload</span><span class="params">(<span name="newDefaultQueueConfig">newDefaultQueueConfig: <a name="net.lag.kestrel.config.QueueConfig" class="extype" href="config/QueueConfig.html">QueueConfig</a></span>, <span name="newQueueBuilders">newQueueBuilders: List[<a name="net.lag.kestrel.config.QueueBuilder" class="extype" href="config/QueueBuilder.html">QueueBuilder</a>]</span>, <span name="newAliasBuilders">newAliasBuilders: List[<a name="net.lag.kestrel.config.AliasBuilder" class="extype" href="config/AliasBuilder.html">AliasBuilder</a>]</span>)</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
       </span>
       </h4>
       
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#remove" data-isabs="false">
       <a id="remove(String,Option[Time],Boolean,Boolean,ClientDescription):Future[Option[QItem]]"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">remove</span>
-        
-        <span class="params">(<span name="key">key: String</span>, <span name="deadline">deadline: <span name="scala.Option" class="extype">Option</span>[<span name="com.twitter.util.Time" class="extype">Time</span>] = <span class="symbol"><span class="name"><a href="../../../scala/package.html">None</a></span></span></span>, <span name="transaction">transaction: <span name="scala.Boolean" class="extype">Boolean</span> = <span class="symbol">false</span></span>, <span name="peek">peek: <span name="scala.Boolean" class="extype">Boolean</span> = <span class="symbol">false</span></span>, <span name="clientDescription">clientDescription: ClientDescription = <span class="symbol"><span class="name"><a href="../../../scala/package.html">None</a></span></span></span>)</span><span class="result">: <span name="com.twitter.util.Future" class="extype">Future</span>[<span name="scala.Option" class="extype">Option</span>[<a name="net.lag.kestrel.QItem" class="extype" href="QItem.html">QItem</a>]]</span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">remove</span><span class="params">(<span name="key">key: String</span>, <span name="deadline">deadline: <span name="scala.Option" class="extype">Option</span>[<span name="com.twitter.util.Time" class="extype">Time</span>] = <span class="symbol"><span class="name"><a href="../../../scala/package.html">None</a></span></span></span>, <span name="transaction">transaction: <span name="scala.Boolean" class="extype">Boolean</span> = <span class="symbol">false</span></span>, <span name="peek">peek: <span name="scala.Boolean" class="extype">Boolean</span> = <span class="symbol">false</span></span>, <span name="clientDescription">clientDescription: ClientDescription = <span class="symbol"><span class="name"><a href="../../../scala/package.html">None</a></span></span></span>)</span><span class="result">: <span name="com.twitter.util.Future" class="extype">Future</span>[<span name="scala.Option" class="extype">Option</span>[<a name="net.lag.kestrel.QItem" class="extype" href="QItem.html">QItem</a>]]</span>
       </span>
       </h4>
       <p class="shortcomment cmt">Retrieve an item from a queue and pass it to a continuation.</p><div class="fullcomment"><div class="comment cmt"><p>Retrieve an item from a queue and pass it to a continuation. If no item is available within
@@ -555,22 +614,24 @@ the requested time, or the server is shutting down, None is passed.
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#reservedMemoryRatio" data-isabs="false">
       <a id="reservedMemoryRatio:Double"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">reservedMemoryRatio</span>
-        
-        <span class="result">: <span name="scala.Double" class="extype">Double</span></span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">reservedMemoryRatio</span><span class="result">: <span name="scala.Double" class="extype">Double</span></span>
       </span>
       </h4>
       
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#shutdown" data-isabs="false">
       <a id="shutdown():Unit"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">shutdown</span>
-        
-        <span class="params">()</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">shutdown</span><span class="params">()</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
       </span>
       </h4>
       <p class="shortcomment cmt">Shutdown this queue collection.</p><div class="fullcomment"><div class="comment cmt"><p>Shutdown this queue collection. Any future queue requests will fail.
@@ -578,97 +639,105 @@ the requested time, or the server is shutting down, None is passed.
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#stats" data-isabs="false">
       <a id="stats(String):Array[(String, String)]"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">stats</span>
-        
-        <span class="params">(<span name="key">key: String</span>)</span><span class="result">: <span name="scala.Array" class="extype">Array</span>[(String, String)]</span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">stats</span><span class="params">(<span name="key">key: String</span>)</span><span class="result">: <span name="scala.Array" class="extype">Array</span>[(String, String)]</span>
       </span>
       </h4>
       
     </li><li visbl="pub" name="scala.AnyRef#synchronized" data-isabs="false">
       <a id="synchronized[T0](⇒ T0):T0"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">synchronized</span>
-        <span class="tparams">[<span name="T0">T0</span>]</span>
-        <span class="params">(<span name="arg0">arg0: ⇒ T0</span>)</span><span class="result">: T0</span>
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">synchronized</span><span class="tparams">[<span name="T0">T0</span>]</span><span class="params">(<span name="arg0">arg0: ⇒ T0</span>)</span><span class="result">: T0</span>
       </span>
       </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>final </dd><dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#systemMaxHeapBytes" data-isabs="false">
       <a id="systemMaxHeapBytes:Long"></a>
       <h4 class="signature">
-      <span class="kind">lazy val</span>
-      <span class="symbol"> 
-        <span class="name">systemMaxHeapBytes</span>
-        
-        <span class="result">: <span name="scala.Long" class="extype">Long</span></span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">lazy val</span>
+      </span>
+      <span class="symbol">
+        <span class="name">systemMaxHeapBytes</span><span class="result">: <span name="scala.Long" class="extype">Long</span></span>
       </span>
       </h4>
       
     </li><li visbl="pub" name="scala.AnyRef#toString" data-isabs="false">
       <a id="toString():String"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">toString</span>
-        
-        <span class="params">()</span><span class="result">: <span name="java.lang.String" class="extype">String</span></span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">toString</span><span class="params">()</span><span class="result">: <span name="java.lang.String" class="extype">String</span></span>
       </span>
       </h4>
       <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
     </li><li visbl="pub" name="net.lag.kestrel.QueueCollection#unremove" data-isabs="false">
       <a id="unremove(String,Int):Unit"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">unremove</span>
-        
-        <span class="params">(<span name="key">key: String</span>, <span name="xid">xid: <span name="scala.Int" class="extype">Int</span></span>)</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">unremove</span><span class="params">(<span name="key">key: String</span>, <span name="xid">xid: <span name="scala.Int" class="extype">Int</span></span>)</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
       </span>
       </h4>
       
     </li><li visbl="pub" name="scala.AnyRef#wait" data-isabs="false">
       <a id="wait():Unit"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">wait</span>
-        
-        <span class="params">()</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">wait</span><span class="params">()</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
       </span>
       </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>final </dd><dt>Definition Classes</dt><dd>AnyRef</dd><dt>Annotations</dt><dd>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd><dt>Annotations</dt><dd>
                 <span class="name">@throws</span><span class="args">()</span>
               
         </dd></dl></div>
     </li><li visbl="pub" name="scala.AnyRef#wait" data-isabs="false">
       <a id="wait(Long,Int):Unit"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">wait</span>
-        
-        <span class="params">(<span name="arg0">arg0: <span name="scala.Long" class="extype">Long</span></span>, <span name="arg1">arg1: <span name="scala.Int" class="extype">Int</span></span>)</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">wait</span><span class="params">(<span name="arg0">arg0: <span name="scala.Long" class="extype">Long</span></span>, <span name="arg1">arg1: <span name="scala.Int" class="extype">Int</span></span>)</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
       </span>
       </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>final </dd><dt>Definition Classes</dt><dd>AnyRef</dd><dt>Annotations</dt><dd>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd><dt>Annotations</dt><dd>
                 <span class="name">@throws</span><span class="args">()</span>
               
         </dd></dl></div>
     </li><li visbl="pub" name="scala.AnyRef#wait" data-isabs="false">
       <a id="wait(Long):Unit"></a>
       <h4 class="signature">
-      <span class="kind">def</span>
-      <span class="symbol"> 
-        <span class="name">wait</span>
-        
-        <span class="params">(<span name="arg0">arg0: <span name="scala.Long" class="extype">Long</span></span>)</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">wait</span><span class="params">(<span name="arg0">arg0: <span name="scala.Long" class="extype">Long</span></span>)</span><span class="result">: <span name="scala.Unit" class="extype">Unit</span></span>
       </span>
       </h4>
-      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>final </dd><dt>Definition Classes</dt><dd>AnyRef</dd><dt>Annotations</dt><dd>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd><dt>Annotations</dt><dd>
                 <span class="name">@throws</span><span class="args">()</span>
               
         </dd></dl></div>
@@ -676,16 +745,22 @@ the requested time, or the server is shutting down, None is passed.
             </div>
 
         
+        </div>
 
+        <div id="inheritedMembers">
         <div name="scala.AnyRef" class="parent">
               <h3>Inherited from AnyRef</h3>
             </div><div name="scala.Any" class="parent">
               <h3>Inherited from <span name="scala.Any" class="extype">Any</span></h3>
             </div>
+        </div>
 
       </div>
-      
+
       <div id="tooltip"></div>
-      
+
+      <div id="footer">  </div>
+
+
     </body>
       </html>

@@ -2,7 +2,8 @@
 A working guide to kestrel
 ==========================
 
-Kestrel is a very simple message queue that runs on the JVM. It supports multiple protocols:
+Kestrel is a very simple message queue that runs on the JVM. It supports
+multiple protocols:
 
 - memcache: the memcache protocol, with some extensions
 - thrift: Apache Thrift-based RPC
@@ -26,9 +27,10 @@ case-sensitive.
 
 A cluster of kestrel servers is like a memcache cluster: the servers don't
 know about each other, and don't do any cross-communication, so you can add as
-many as you like. Clients have a list of all servers in the cluster, and pick
-one at random for each operation. In this way, each queue appears to be spread
-out across every server, with items in a loose ordering.
+many as you like. The simplest clients have a list of all servers in the
+cluster, and pick one at random for each operation. In this way, each queue
+appears to be spread out across every server, with items in a loose ordering.
+More advanced clients can find kestrel servers via ZooKeeper.
 
 When kestrel starts up, it scans the journal folder and creates queues based
 on any journal files it finds there, to restore state to the way it was when
@@ -58,8 +60,8 @@ a server (which can be done over telnet).
 
 To reload the config file on a running server, send "reload" the same way.
 You should immediately see the changes in "dump_config", to confirm. Reloading
-will only affect queue configuration, not global server configuration. To
-change the server configuration, restart the server.
+will only affect queue and alias configuration, not global server configuration.
+To change the server configuration, restart the server.
 
 Logging is configured according to `util-logging`. The logging configuration
 syntax is described here:
@@ -79,17 +81,17 @@ Starting with Kestrel 2.3.4, queue configurations are inherited:
 * Any queue with no explict configuration (see `queues` in `KestrelConfig`) uses the default
   queue configuration (see `default` in `KestrelConfig`). This behavior is unchanged from
   previous versions.
-* Any master (e.g. not fanout) queue with a queue configuration overrides the default queue
-  configuration. For example, if `default.maxMemorySize` is set, all explicitly configured
+* Any master (e.g. not fanout) queue with an explicit queue configuration overrides the default
+  queue configuration. For example, if `default.maxMemorySize` is set, all explicitly configured
   queues will inherit that setting *unless* explicitly overridden in the queue's configuration.
   Older versions of Kestrel *did not* apply values from the default queue configuration to any
   explicitly configured queue.
 * Any fanout queue (e.g., a queue with a `+` in its name), inherits its master queue's
   configuration, unless explicitly overridden (see `queues` in `KestrelConfig`). Older versions
-  of Kestrel silently ignored explicit fanout queue configurations.
+  of Kestrel silently ignored explicit fanout queue configurations and used the master queue's
+  configuration.
 
-### Example Configuration
--------------------------
+### Example Configuration ###
 
 Existing configurations should continue to load, but the resulting configuration may
 differ. As an example, the following configuration file and table illustrate the differences
@@ -112,7 +114,7 @@ between a configuration loaded by Kestrel 2.3.3 and Kestrel 2.3.4 (and later).
 
 
 <table>
-  <tr><th>Queue</th>    <th>Setting</th>       <th>Kestrel <= 2.3.3</th> <th>Kestrel >= 2.3.4</th>   </tr>
+  <tr><th>Queue</th>    <th>Setting</th>       <th>Kestrel &lt;= 2.3.3</th> <th>Kestrel &gt;= 2.3.4</th>   </tr>
   <tr><td>q</td>        <td>maxMemorySize</td> <td>128.megabytes</td>    <td>8.megabytes</td>        </tr>
   <tr><td>q+fanout</td> <td>maxMemorySize</td> <td>128.megabytes</td>    <td>8.megabytes</td>        </tr>
   <tr><td>x</td>        <td>maxMemorySize</td> <td>16.megabytes</td>     <td>16.megabytes</td>       </tr>
@@ -148,16 +150,18 @@ just a sequential record of each add or remove operation that's happened on
 that queue. When kestrel starts up, it replays each queue's journal to build
 up the in-memory queue that it uses for client queries.
 
-The journal file is rotated in one of two conditions:
+The journal file is compacted if the queue is empty and the journal is larger
+than `defaultJournalSize`.
 
-1. the queue is empty and the journal is larger than `defaultJournalSize`
-
-2. the journal is larger than `maxJournalSize`
+The current journal file is archived (or rotated) when the journal is larger
+than `maxMemorySize`. In addition, if the complete journal exceeds
+`maxJournalSize`, a checkpoint is set. The journal may then be compacted during
+read-behind (when the size of the queue exceeds `maxMemorySize`) via the
+journal packer thread.
 
 For example, if `defaultJournalSize` is 16MB (the default), then if the queue
-is empty and the journal is larger than 16MB, it will be truncated into a new
-(empty) file. If the journal is larger than `maxJournalSize` (1GB by default),
-the journal will be rewritten periodically to contain just the live items.
+is empty and the journal is larger than 16MB, it will be compacted into a new
+(empty, if there are no open transactions) file.
 
 You can turn the journal off for a queue (`keepJournal` = false) and the queue
 will exist only in memory. If the server restarts, all enqueued items are
@@ -258,8 +262,7 @@ Kestrel supports three protocols: memcache, thrift and text. The
 [Finagle project](http://twitter.github.com/finagle/) can be used to connect clients
 to a Kestrel server via the memcache or thrift protocols.
 
-### Thrift
-----------
+### Thrift ###
 
 The thrift protocol is documented in the thrift IDL:
 [kestrel.thrift](https://github.com/robey/kestrel/blob/master/src/main/thrift/kestrel.thrift)
@@ -268,8 +271,7 @@ Reliable reads via the thrift protocol are specified by indicating how long the 
 should wait before aborting the unacknowledged read.
 
 
-### Memcache
-------------
+### Memcache ###
 
 The official memcache protocol is described here:
 [protocol.txt](https://github.com/memcached/memcached/blob/master/doc/protocol.txt)
@@ -367,7 +369,7 @@ The kestrel implementation of the memcache protocol commands is described below.
   per-item, so many clients may monitor a queue at once. After the given
   timeout, a separate `END` response will signal the end of the monitor
   period. Any fetched items are open transactions (see "Reliable Reads"
-   below), and should be closed with `CONFIRM`.
+  below), and should be closed with `CONFIRM`.
 
 - `CONFIRM <queue-name> <count>`
 
@@ -375,9 +377,18 @@ The kestrel implementation of the memcache protocol commands is described below.
   to a `MONITOR` command, to confirm the items that arrived during the monitor
   period.
 
+- `STATUS`
 
-#### Reliable reads
--------------------
+Displays the kestrel server's current status (see section on Server Status,
+below).
+
+- `STATUS <new-status>`
+
+Switches the kestrel server's current status to the given status (see section
+on Server Status, below).
+
+
+#### Reliable reads ####
 
 Note: this section is specific to the memcache protocol.
 
@@ -419,13 +430,95 @@ Example:
     ...etc...
 
 
-### Text protocol
------------------
+### Text protocol ###
 
 Kestrel supports a limited, text-only protocol. You are encouraged to use the
 memcache protocol instead.
 
 The text protocol does not support reliable reads.
+
+
+Server Status
+-------------
+
+Each kestrel server maintains its current status. Normal statuses are
+
+- `Up`: the server is available for all operations
+- `ReadOnly`: the server is available for non-modifying operations only;
+              commands that modify queues (set, delete, flush) are rejected as
+	      errors.
+- `Quiescent`: the server rejects as an error operations on any queue. One
+               notable exception is transactions begun before the server entered
+	       the quiesecent state may still be confirmed.
+
+One additional status is `Down`, which is only used transiently when kestrel is
+in the process of shutting down.
+
+The server's current status is persisted (specified in
+[KestrelConfig](http://robey.github.com/kestrel/api/main/api/net/lag/kestrel/config/KestrelConfig.html)).
+When kestrel is restarted it automatically returns to it's previous status,
+based on the value in the status file. If the status file does not exist or
+cannot be read, kestrel uses a default status, also configured in KestrelConfig.
+
+When changing from a less restrictive status to a more restrictive status
+(e.g., from `Up` to `ReadOnly` or from `ReadOnly` to `Quiescent`), the
+config option `statusChangeGracePeriod` determines how long kestrel will
+continue to allow restricted operations to continue before it begins rejecting
+them. This allows clients that are aware of the kestrel server's status a
+grace period to learn the new status and cease the forbidden operations before
+beginning to encounter errors.
+
+### ZooKeeper Server Sets ###
+
+Kestrel uses Twitter's ServerSet library to support client discovery of kestrel
+servers allowing a given operation. The ServerSet class is documented here:
+[ServerSet](http://twitter.github.com/commons/apidocs/index.html#com.twitter.common.zookeeper.ServerSet)
+
+If the optional `zookeeper` field of `KestrelConfig` is specified, kestrel will
+attempt to use the given configuration to join a logical set of kestrel servers.
+The ZooKeeper host, port and other connection options are documented here:
+[ZooKeeperBuilder](http://robey.github.com/kestrel/api/main/api/net/lag/kestrel/config/ZooKeeperBuilder.html)
+
+Kestrel servers will join 0, 1, or 2 server sets depending on their current
+status. When `Up`, the server joins two server sets: one for writes and one for
+reads. When `ReadOnly`, the server joins only the read set. When `Quiescent`,
+the server joins no sets. ZooKeeper-aware kestrel clients can watch the
+server set for changes and adjust their connections accordingly. The
+`statusChangeGracePeriod` configuration option may be used to allow clients
+time to detect and react to the status change before they begin receiving
+errors from kestrel.
+
+The ZooKeeper path used to register the server set is based on the `pathPrefix`
+option. Kestrel automatically appends `/write` and `/read` to distinguish the
+write and read sets.
+
+Kestrel advertises all of its endpoints in each server set that it joins.
+The default endpoint is memcache, if configured. The default endpoint falls
+back to the thrift endpoint and then the text protocol endpoint. All three
+endpoints are advertised as additional endpoints under the names `memcache`,
+`thrift` and `text`.
+
+Kestrel advertises only a single IP address per endpoint. This IP address is
+based on Kestrel's `listenAddress`. If the listener address is the wildcard
+address (e.g., `0.0.0.0` or `::`), Kestrel will advertise the first IP address
+it finds by traversing the host's configured network interfaces (via
+`java.net.NetworkInterface`). If your host has multiple, valid external IP
+addresses you can choose the advertised address by setting the listener address
+to that IP. Finally, If the listener address is a loopback address (e.g.,
+`127.0.0.1` or `::1`), Kestrel will not start, since advertising a loopback
+address on ZooKeeper will not work and no external host could connect to
+Kestrel in any event.
+
+Consider setting the  `defaultStatus` option to `Quiescent` to prevent kestrel
+from prematurely advertising its status via ZooKeeper.
+
+Installations that require additional customization of ZooKeeper credentials,
+or other site-specific ZooKeeper initialization can override the
+`clientInitializer` and `serverSetInitializer` options to invoke the
+necessary site-specific code. The recommended implementation is to place
+the site-specific code in its own JAR file, take the necessary steps to
+include the JAR in kestrel's class path, and place as little logic as possible
+in the kestrel configuration file.
 
 
 Server stats

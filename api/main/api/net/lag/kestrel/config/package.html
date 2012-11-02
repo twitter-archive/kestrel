@@ -12,7 +12,7 @@
       <script type="text/javascript" src="../../../../lib/tools.tooltip.js"></script>
     
         </head>
-        <body class="value">
+        <body onload="sh_highlightDocument('../lib/', '.min.js');" class="value">
       <div id="definition">
         <img src="../../../../lib/package_big.png" />
         <p id="owner"><a name="net" class="extype" href="../../../package.html">net</a>.<a name="net.lag" class="extype" href="../../package.html">lag</a>.<a name="net.lag.kestrel" class="extype" href="../package.html">kestrel</a></p>
@@ -20,29 +20,30 @@
       </div>
 
       <h4 class="signature" id="signature">
-      <span class="kind">package</span>
-      <span class="symbol"> 
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">package</span>
+      </span>
+      <span class="symbol">
         <span class="name">config</span>
-        
-        
       </span>
       </h4>
       
-          <div class="fullcommenttop" id="comment"></div>
+      <div class="fullcommenttop" id="comment"></div>
+    
+
+      <div id="mbrsel">
+        <div id="textfilter"><span class="pre"></span><span class="input"><input accesskey="/" type="text" /></span><span class="post"></span></div>
         
+        
+        <div id="visbl">
+            <span class="filtertype">Visibility</span>
+            <ol><li class="public in"><span>Public</span></li><li class="all out"><span>All</span></li></ol>
+          </div>
+      </div>
 
       <div id="template">
-
-        <div id="mbrsel">
-          <div id="textfilter"><span class="pre"></span><span class="input"><input accesskey="/" type="text" /></span><span class="post"></span></div>
-          
-          
-          <div id="visbl">
-              <span class="filtertype">Visibility</span>
-              <ol><li class="public in"><span>Public</span></li><li class="all out"><span>All</span></li></ol>
-            </div>
-        </div>
-
+        <div id="allMembers">
         
 
         <div class="types members" id="types">
@@ -50,67 +51,85 @@
               <ol><li visbl="pub" name="net.lag.kestrel.config.AliasBuilder" data-isabs="false">
       <a id="AliasBuilder:AliasBuilder"></a>
       <h4 class="signature">
-      <span class="kind">class</span>
-      <span class="symbol"> 
-        <a href="AliasBuilder.html"><span class="name">AliasBuilder</span></a>
-        
-        <span class="result"> extends AnyRef</span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="AliasBuilder.html"><span class="name">AliasBuilder</span></a><span class="result"> extends AnyRef</span>
       </span>
       </h4>
       
     </li><li visbl="pub" name="net.lag.kestrel.config.AliasConfig" data-isabs="false">
       <a id="AliasConfig:AliasConfig"></a>
       <h4 class="signature">
-      <span class="kind">case class</span>
-      <span class="symbol"> 
-        <a href="AliasConfig.html"><span class="name">AliasConfig</span></a>
-        
-        <span class="params">(<span name="destinationQueues">destinationQueues: List[String]</span>)</span><span class="result"> extends Product with Serializable</span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="AliasConfig.html"><span class="name">AliasConfig</span></a><span class="params">(<span name="destinationQueues">destinationQueues: List[String]</span>)</span><span class="result"> extends Product with Serializable</span>
       </span>
       </h4>
       
     </li><li visbl="pub" name="net.lag.kestrel.config.ConfigValue" data-isabs="true">
       <a id="ConfigValue:ConfigValue[A]"></a>
       <h4 class="signature">
-      <span class="kind">class</span>
-      <span class="symbol"> 
-        <a href="ConfigValue.html"><span class="name">ConfigValue</span></a>
-        <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="result"> extends AnyRef</span>
+      <span class="modifier_kind">
+        <span class="modifier">sealed abstract </span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="ConfigValue.html"><span class="name">ConfigValue</span></a><span class="tparams">[<span name="A">A</span>]</span><span class="result"> extends AnyRef</span>
       </span>
       </h4>
       <p class="comment cmt">ConfigValue represents a value that may either be a default or a
 configuration-specified value.</p>
+    </li><li visbl="pub" name="net.lag.kestrel.config.CustomACL" data-isabs="false">
+      <a id="CustomACL:CustomACL"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="CustomACL.html"><span class="name">CustomACL</span></a><span class="params">(<span name="asList">asList: List[ACL]</span>)</span><span class="result"> extends ZooKeeperACL with Product with Serializable</span>
+      </span>
+      </h4>
+      <p class="comment cmt">Custom ZooKeeper ACL.</p>
     </li><li visbl="pub" name="net.lag.kestrel.config.Default" data-isabs="false">
       <a id="Default:Default[A]"></a>
       <h4 class="signature">
-      <span class="kind">case class</span>
-      <span class="symbol"> 
-        <a href="Default.html"><span class="name">Default</span></a>
-        <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="params">(<span name="x">x: A</span>)</span><span class="result"> extends ConfigValue[A] with Product with Serializable</span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="Default.html"><span class="name">Default</span></a><span class="tparams">[<span name="A">A</span>]</span><span class="params">(<span name="x">x: A</span>)</span><span class="result"> extends ConfigValue[A] with Product with Serializable</span>
       </span>
       </h4>
       
     </li><li visbl="pub" name="net.lag.kestrel.config.KestrelConfig" data-isabs="true">
       <a id="KestrelConfig:KestrelConfig"></a>
       <h4 class="signature">
-      <span class="kind">trait</span>
-      <span class="symbol"> 
-        <a href="KestrelConfig.html"><span class="name">KestrelConfig</span></a>
-        
-        <span class="result"> extends ServerConfig[Kestrel]</span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">trait</span>
+      </span>
+      <span class="symbol">
+        <a href="KestrelConfig.html"><span class="name">KestrelConfig</span></a><span class="result"> extends ServerConfig[Kestrel]</span>
       </span>
       </h4>
       <p class="comment cmt">KestrelConfig is the main point of configuration for Kestrel.</p>
     </li><li visbl="pub" name="net.lag.kestrel.config.QueueBuilder" data-isabs="false">
       <a id="QueueBuilder:QueueBuilder"></a>
       <h4 class="signature">
-      <span class="kind">class</span>
-      <span class="symbol"> 
-        <a href="QueueBuilder.html"><span class="name">QueueBuilder</span></a>
-        
-        <span class="result"> extends AnyRef</span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="QueueBuilder.html"><span class="name">QueueBuilder</span></a><span class="result"> extends AnyRef</span>
       </span>
       </h4>
       <p class="comment cmt">QueueBuilder produces QueueConfig objects and can resolve the QueueConfig against
@@ -119,28 +138,66 @@ defaults are left unmodified.</p>
     </li><li visbl="pub" name="net.lag.kestrel.config.QueueConfig" data-isabs="false">
       <a id="QueueConfig:QueueConfig"></a>
       <h4 class="signature">
-      <span class="kind">case class</span>
-      <span class="symbol"> 
-        <a href="QueueConfig.html"><span class="name">QueueConfig</span></a>
-        
-        <span class="params">(<span name="maxItems">maxItems: Int</span>, <span name="maxSize">maxSize: StorageUnit</span>, <span name="maxItemSize">maxItemSize: StorageUnit</span>, <span name="maxAge">maxAge: Option[Duration]</span>, <span name="defaultJournalSize">defaultJournalSize: StorageUnit</span>, <span name="maxMemorySize">maxMemorySize: StorageUnit</span>, <span name="maxJournalSize">maxJournalSize: StorageUnit</span>, <span name="discardOldWhenFull">discardOldWhenFull: Boolean</span>, <span name="keepJournal">keepJournal: Boolean</span>, <span name="syncJournal">syncJournal: Duration</span>, <span name="expireToQueue">expireToQueue: Option[String]</span>, <span name="maxExpireSweep">maxExpireSweep: Int</span>, <span name="fanoutOnly">fanoutOnly: Boolean</span>, <span name="maxQueueAge">maxQueueAge: Option[Duration]</span>)</span><span class="result"> extends Product with Serializable</span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="QueueConfig.html"><span class="name">QueueConfig</span></a><span class="params">(<span name="maxItems">maxItems: Int</span>, <span name="maxSize">maxSize: StorageUnit</span>, <span name="maxItemSize">maxItemSize: StorageUnit</span>, <span name="maxAge">maxAge: Option[Duration]</span>, <span name="defaultJournalSize">defaultJournalSize: StorageUnit</span>, <span name="maxMemorySize">maxMemorySize: StorageUnit</span>, <span name="maxJournalSize">maxJournalSize: StorageUnit</span>, <span name="discardOldWhenFull">discardOldWhenFull: Boolean</span>, <span name="keepJournal">keepJournal: Boolean</span>, <span name="syncJournal">syncJournal: Duration</span>, <span name="expireToQueue">expireToQueue: Option[String]</span>, <span name="maxExpireSweep">maxExpireSweep: Int</span>, <span name="fanoutOnly">fanoutOnly: Boolean</span>, <span name="maxQueueAge">maxQueueAge: Option[Duration]</span>)</span><span class="result"> extends Product with Serializable</span>
       </span>
       </h4>
       
     </li><li visbl="pub" name="net.lag.kestrel.config.SpecifiedValue" data-isabs="false">
       <a id="SpecifiedValue:SpecifiedValue[A]"></a>
       <h4 class="signature">
-      <span class="kind">case class</span>
-      <span class="symbol"> 
-        <a href="SpecifiedValue.html"><span class="name">SpecifiedValue</span></a>
-        <span class="tparams">[<span name="A">A</span>]</span>
-        <span class="params">(<span name="x">x: A</span>)</span><span class="result"> extends ConfigValue[A] with Product with Serializable</span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="SpecifiedValue.html"><span class="name">SpecifiedValue</span></a><span class="tparams">[<span name="A">A</span>]</span><span class="params">(<span name="x">x: A</span>)</span><span class="result"> extends ConfigValue[A] with Product with Serializable</span>
+      </span>
+      </h4>
+      
+    </li><li visbl="pub" name="net.lag.kestrel.config.ZooKeeperACL" data-isabs="true">
+      <a id="ZooKeeperACL:ZooKeeperACL"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">sealed abstract </span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="ZooKeeperACL.html"><span class="name">ZooKeeperACL</span></a><span class="result"> extends AnyRef</span>
+      </span>
+      </h4>
+      
+    </li><li visbl="pub" name="net.lag.kestrel.config.ZooKeeperBuilder" data-isabs="false">
+      <a id="ZooKeeperBuilder:ZooKeeperBuilder"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="ZooKeeperBuilder.html"><span class="name">ZooKeeperBuilder</span></a><span class="result"> extends AnyRef</span>
+      </span>
+      </h4>
+      
+    </li><li visbl="pub" name="net.lag.kestrel.config.ZooKeeperConfig" data-isabs="false">
+      <a id="ZooKeeperConfig:ZooKeeperConfig"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="ZooKeeperConfig.html"><span class="name">ZooKeeperConfig</span></a><span class="params">(<span name="host">host: String</span>, <span name="port">port: Int</span>, <span name="pathPrefix">pathPrefix: String</span>, <span name="sessionTimeout">sessionTimeout: Duration</span>, <span name="credentials">credentials: Option[(String, String)]</span>, <span name="acl">acl: ZooKeeperACL</span>, <span name="clientInitializer">clientInitializer: Option[(ZooKeeperConfig) ⇒ ZooKeeperClient]</span>, <span name="serverSetInitializer">serverSetInitializer: Option[(ZooKeeperConfig, ZooKeeperClient, String) ⇒ ServerSet]</span>)</span><span class="result"> extends Product with Serializable</span>
       </span>
       </h4>
       
     </li></ol>
             </div>
-        
+
         
 
         <div class="values members" id="values">
@@ -148,25 +205,56 @@ defaults are left unmodified.</p>
               <ol><li visbl="pub" name="net.lag.kestrel.config.ConfigValue" data-isabs="false">
       <a id="ConfigValue:ConfigValue"></a>
       <h4 class="signature">
-      <span class="kind">object</span>
-      <span class="symbol"> 
-        <a href="ConfigValue$.html"><span class="name">ConfigValue</span></a>
-        
-        <span class="result"> extends AnyRef</span>
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="ConfigValue$.html"><span class="name">ConfigValue</span></a><span class="result"> extends AnyRef</span>
       </span>
       </h4>
       <p class="comment cmt">The ConfigValue companion object provides implicit methods to convert
 bare objects into SpecifiedValue instances.</p>
+    </li><li visbl="pub" name="net.lag.kestrel.config.EveryoneReadCreatorAllACL" data-isabs="false">
+      <a id="EveryoneReadCreatorAllACL:EveryoneReadCreatorAllACL"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="EveryoneReadCreatorAllACL$.html"><span class="name">EveryoneReadCreatorAllACL</span></a><span class="result"> extends ZooKeeperACL with Product with Serializable</span>
+      </span>
+      </h4>
+      <p class="comment cmt">Predefined ZooKeeper ACL.</p>
+    </li><li visbl="pub" name="net.lag.kestrel.config.OpenUnsafeACL" data-isabs="false">
+      <a id="OpenUnsafeACL:OpenUnsafeACL"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="OpenUnsafeACL$.html"><span class="name">OpenUnsafeACL</span></a><span class="result"> extends ZooKeeperACL with Product with Serializable</span>
+      </span>
+      </h4>
+      <p class="comment cmt">Predefined, &quot;open&quot; ZooKeeper ACL.</p>
     </li></ol>
             </div>
 
         
+        </div>
 
+        <div id="inheritedMembers">
         
+        </div>
 
       </div>
-      
+
       <div id="tooltip"></div>
-      
+
+      <div id="footer">  </div>
+
+
     </body>
       </html>
