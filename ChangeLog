@@ -1,7 +1,9 @@
+2.4.1
+-----
+- Only rewrite journals for empty queues or when in read-behind
+
 2.4.0
 -----
-release: TBD
-
 - Server status: up, read-only, quiescent
 - Support for service discovery via ZooKeeper
 - Kestrel now ignores directories in its queue path.
