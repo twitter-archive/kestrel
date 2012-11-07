@@ -231,6 +231,10 @@ def process_capture
     :queues => make_stats_hash,
     :ips => make_stats_hash,
     :total => make_stats_hash,
+    :time_start => nil,
+    :time_end => nil,
+    :time_matched_start => nil,
+    :time_matched_end => nil,
   }
 
   puts "HOST #{$options[:host]}"
@@ -239,6 +243,8 @@ def process_capture
   regexp = $options[:command_filter]
   pcap.each_packet do |pkt|
     stats[:count] += 1
+    stats[:time_start] ||= pkt.time
+    stats[:time_end] = pkt.time
     if pkt.tcp? && pkt.tcp_data_len > 0
       stats[:count_with_data] += 1
       (operation, queue) =
@@ -263,6 +269,8 @@ def process_capture
         stats[:total][:matched][operation] += 1
         stats[:ips][pkt.ip_src.to_s][operation] += 1
         stats[:queues][queue][operation] += 1 unless queue.nil?
+        stats[:time_matched_start] ||= pkt.time
+        stats[:time_matched_end] = pkt.time
       else
         stats[:count_filtered] += 1
         stats[:total][:filtered][operation] += 1
@@ -270,7 +278,9 @@ def process_capture
     end
   end
 
-  puts "#{stats[:count]} packets captured, #{stats[:count_with_data]} contained data, #{stats[:count_matched]} matched"
+  puts "#{stats[:count]} packets captured over #{stats[:time_end].to_f - stats[:time_start].to_f} seconds"
+  puts "#{stats[:count_with_data]} packets contained data"
+  puts "#{stats[:count_matched]} matched over #{stats[:time_matched_end].to_f - stats[:time_matched_start].to_f} seconds"
 
   if stats[:count_matched] > 0
     puts
