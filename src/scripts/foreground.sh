@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# kestrel init.d script.
+# kestrel foreground script
 #
 # All java services require the same directory structure:
 #   /usr/local/$APP_NAME
