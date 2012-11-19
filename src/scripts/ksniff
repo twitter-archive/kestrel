@@ -7,6 +7,7 @@ require 'pcap'
 require 'optparse'
 require 'stringio'
 require 'open3'
+require 'set'
 
 DEFAULT_COUNT = 1000
 DEFAULT_PORT = 22133
@@ -14,6 +15,7 @@ DEFAULT_SNAP_LEN = 132
 TS = Time.now.strftime('%Y%m%d-%H%M%S')
 
 QUEUE_OP_REGEXP = %r[^([A-Za-z_]+) ([-A-Za-z0-9_\$%\+:]+)[ /]]
+QUEUE_SET_REGEXP = %r[^set ([-A-Za-z0-9_\$%\+:]+) [0-9]+ [0-9]+ ([0-9]+)[\r\n]]
 QUEUE_OPS = [:set, :get, :monitor, :delete, :flush, :other]
 
 HEADER_FORMAT = "%-7s %-7s %-7s %-7s %-7s %-7s %s"
@@ -32,6 +34,7 @@ $options = {
   },
   :remote_path => "/tmp/ksniff.#{TS}",
   :local_path => "/tmp/ksniff.#{TS}",
+  :skip_capture => false,
   :command_filter => nil,
   :reverse_dns => false,
   :verbose => 0,
@@ -40,6 +43,8 @@ $options = {
   :include_summary_stats => true,
   :include_host_stats => true,
   :include_queue_stats => true,
+  :track_enqueue_sizes => false,
+  :report_enqueue_percentiles => [100.0]
 }
 $sudo_password = nil
 
@@ -235,11 +240,14 @@ def process_capture
     :time_end => nil,
     :time_matched_start => nil,
     :time_matched_end => nil,
+    :enqueue_sizes => {},
+    :enqueue_size_parse_failures => Set.new
   }
 
   puts "HOST #{$options[:host]}"
   puts "=" * 70
 
+  track_enqueue_sizes = $options[:track_enqueue_sizes]
   regexp = $options[:command_filter]
   pcap.each_packet do |pkt|
     stats[:count] += 1
@@ -271,6 +279,16 @@ def process_capture
         stats[:queues][queue][operation] += 1 unless queue.nil?
         stats[:time_matched_start] ||= pkt.time
         stats[:time_matched_end] = pkt.time
+
+        if track_enqueue_sizes && operation == :set then
+          if QUEUE_SET_REGEXP =~ pkt.tcp_data then
+            size = $2.to_i
+            stats[:enqueue_sizes][queue] ||= []
+            stats[:enqueue_sizes][queue] << size
+          else
+            stats[:enqueue_size_parse_failures].add(queue)
+          end
+        end
       else
         stats[:count_filtered] += 1
         stats[:total][:filtered][operation] += 1
@@ -320,6 +338,48 @@ def process_capture
         queue_stats = stats[:queues][queue]
         values = QUEUE_OPS.map { |op| queue_stats[op] } + [ queue ]
         puts OUTPUT_FORMAT % values
+      end
+      puts
+    end
+
+    if $options[:track_enqueue_sizes] then
+      percentiles = $options[:report_enqueue_percentiles]
+      header_format = (percentiles.map { |p| "%-7s" } + ['%s']).join(' ')
+      output_format = (percentiles.map { |p| "%7d" } + ['%s']).join(' ')
+      percentile_names = percentiles.map do |p|
+        case p
+          when 0.0 then "min"
+          when 100.0 then "max"
+          else "%.1f" % p
+        end
+      end
+
+      puts header_format % (percentile_names + ['Queue'])
+      puts header_format % (percentile_names.map { |x| '-' * 7 } + ['-' * 10])
+      queues = stats[:enqueue_sizes].keys.sort
+      display_warning = false
+      queues.each do |queue|
+        enqueue_sizes = stats[:enqueue_sizes][queue].sort
+        values = percentiles.map do |p|
+          i = [(enqueue_sizes.length.to_f * p / 100.0).round, enqueue_sizes.length - 1].min
+          enqueue_sizes[i]
+        end
+        if enqueue_sizes.length < 100 then
+          queue += ' *'
+          display_warning = true
+        end
+        puts output_format % (values + [queue])
+      end
+      if display_warning then
+        puts
+        puts "* Detected fewer than 100 set operations for this queue."
+      end
+      if stats[:enqueue_size_parse_failures].length > 0 then
+        puts
+        puts "WARNING: Some set operation could not be parsed. Increase snap-len"
+        puts "to get correct enqueue size statistics. Queues with parse errors"
+        puts "(may be truncated):"
+        stats[:enqueue_size_parse_failures].to_a.sort.each { |q| puts "\t#{q}" }
       end
       puts
     end
@@ -418,6 +478,13 @@ parser = OptionParser.new do |opts|
     $options[:local_path] = file
   end
 
+  opts.on("--reprocess-file=FILE",
+          "Reprocess a previously captured local file.",
+          "Useful for debugging.") do |file|
+    $options[:local_path] = file
+    $options[:skip_capture] = true
+  end
+
   opts.on("-t", "--tcpdump=PATH",
           "Specifies full PATH to tcpdump. By default",
           "it is assumed to be on the path.") do |path|
@@ -432,15 +499,34 @@ parser = OptionParser.new do |opts|
   end
 
   opts.on("--[no-]skip-summary", "Skip reporting summary statistics.") do |s|
-    $options[:include_summary_stats] = s
+    $options[:include_summary_stats] = !s
   end
 
   opts.on("--[no-]skip-host-stats", "Skip reporting per-host statistics.") do |s|
-    $options[:include_host_stats] = s
+    $options[:include_host_stats] = !s
   end
 
   opts.on("--[no]-skip-queue-stats", "Skip reporting per-queue statistics.") do |s|
-    $options[:include_queue_stats] = s
+    $options[:include_queue_stats] = !s
+  end
+
+  opts.on("--report-enqueue-size-metrics=[PERCENTILES]",
+          "Track size of enqueues and report percentile",
+          "sizes. Default percentiles are 50, 90, and 99.",
+          "Specifying 0 or 100 will show the minimum or",
+          "maximum value seen.") do |percentiles|
+    percentiles ||= "50,90,99"
+    $options[:track_enqueue_sizes] = true
+    $options[:report_enqueue_percentiles] =
+      percentiles.split(/,/).map(&:to_f).map { |p|
+        if p < 0.0 then
+          0.0
+        elsif p > 100.0 then
+          100.0
+        else
+          p
+        end
+      }.uniq.sort
   end
 
   opts.on("-v", "--verbose",
@@ -476,23 +562,32 @@ end
 parser.load(File.expand_path(File.join(ENV['HOME'], '.ksniffrc')))
 parser.parse!(ARGV)
 
-if $options[:hosts].empty?
-  puts "ERROR: at least one host must be specified"
-  exit 1
-end
-
-$options[:hosts].each do |host|
-  $options[:host] = host
-
-  result =
-    if $options[:ssh] then
-      execute_remote_capture
-    else
-      execute_local_capture
-    end
-  if result == 0 then
+if $options[:skip_capture] then
+  if File.exists?($options[:local_path]) then
     process_capture
   else
-    puts "ERROR: failed to capture packets for #{host}"
+    puts "ERROR: did not find old capture file: #{$options[:local_path]}"
+    exit 1
+  end
+else
+  if $options[:hosts].empty?
+    puts "ERROR: at least one host must be specified"
+    exit 1
+  end
+
+  $options[:hosts].each do |host|
+    $options[:host] = host
+
+    result =
+      if $options[:ssh] then
+        execute_remote_capture
+      else
+        execute_local_capture
+      end
+    if result == 0 then
+      process_capture
+    else
+      puts "ERROR: failed to capture packets for #{host}"
+    end
   end
 end
