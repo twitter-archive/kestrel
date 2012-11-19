@@ -118,12 +118,31 @@ class PersistentQueueSpec extends Specification
       }
     }
 
-    "rewrite journals" in {
+    "rotate journals when they exceed maxMemorySize" in {
+      withTempFolder {
+        val config = new QueueBuilder {
+          maxMemorySize = 64.bytes
+        }.apply()
+        val q = new PersistentQueue("rotating", folderName, config, timer, scheduler)
+        q.setup()
+
+        q.add(new Array[Byte](32))
+        Journal.journalsForQueue(new File(folderName), "rotating").length mustEqual 1
+
+        q.add(new Array[Byte](32))
+        Journal.journalsForQueue(new File(folderName), "rotating").length mustEqual 1
+
+        q.add(new Array[Byte](32))
+        Journal.journalsForQueue(new File(folderName), "rotating").length mustEqual 2
+      }
+    }
+
+    "rewrite journals when they exceed the defaultJournalSize and are empty" in {
       withTempFolder {
         val config = new QueueBuilder {
           defaultJournalSize = 64.bytes
         }.apply()
-        val q = new PersistentQueue("rolling", folderName, config, timer, scheduler)
+        val q = new PersistentQueue("rewriting", folderName, config, timer, scheduler)
         q.setup()
 
         q.add(new Array[Byte](32))
@@ -139,7 +158,7 @@ class PersistentQueueSpec extends Specification
         q.bytes mustEqual 64
         (q.journalTotalSize > 96) mustBe true
 
-        // now it should rewrite:
+        // now it should rotate:
         q.remove()
         q.length mustEqual 0
         q.putItems.get mustEqual 2L
@@ -153,7 +172,7 @@ class PersistentQueueSpec extends Specification
         val config = new QueueBuilder {
           defaultJournalSize = 64.bytes
         }.apply()
-        val q = new PersistentQueue("rolling", folderName, config, timer, scheduler)
+        val q = new PersistentQueue("rewriting", folderName, config, timer, scheduler)
         q.setup()
 
         q.add(new Array[Byte](32))
@@ -169,7 +188,7 @@ class PersistentQueueSpec extends Specification
         q.bytes mustEqual 64
         (q.journalSize > 96) mustBe true
 
-        // now it should rewrite:
+        // now it should rotate:
         q.remove(true)
         q.length mustEqual 0
         q.openTransactionCount mustEqual 1
@@ -179,64 +198,72 @@ class PersistentQueueSpec extends Specification
       }
     }
 
-    "rotate journals when bigger than maxMemorySize and queue is empty" in {
+    "rewrite journals when they exceed the maxJournalSize but still fit in memory" in {
       withTempFolder {
         val config = new QueueBuilder {
-          maxMemorySize = 128.bytes
           defaultJournalSize = 64.bytes
+          maxJournalSize = 128.bytes
         }.apply()
-        val q = new PersistentQueue("rotating", folderName, config, timer, scheduler)
+        val q = new PersistentQueue("rewriting", folderName, config, timer, scheduler)
         q.setup()
 
-        q.add(new Array[Byte](96))
-        q.add(new Array[Byte](96))
-        q.length mustEqual 2
-        q.bytes mustEqual 96 + 96
-        (q.journalSize > 128) mustBe true
-        Journal.journalsForQueue(new File(folderName), "rotating").length mustEqual 1
+        q.add(new Array[Byte](64))
+        q.add(new Array[Byte](64))
 
-        // now it should rotate:
-        q.add(new Array[Byte](96))
-        q.length mustEqual 3
-        q.bytes mustEqual 96 + 96 + 96
-        Journal.journalsForQueue(new File(folderName), "rotating").length mustEqual 2
+        q.remove(false)
+        q.length mustEqual 1
+        (q.journalSize < 128) mustBe true
       }
     }
 
-    "rewrite rotated journals" in {
+    "not rewrite journals repeatedly on add" in {
       withTempFolder {
         val config = new QueueBuilder {
+          defaultJournalSize = 16.bytes
+          maxJournalSize = 160.bytes
           maxMemorySize = 128.bytes
-          defaultJournalSize = 64.bytes
         }.apply()
-        val q = new PersistentQueue("rotating", folderName, config, timer, scheduler)
+        val q = new PersistentQueue("rewriting", folderName, config, timer, scheduler)
         q.setup()
 
-        q.add(new Array[Byte](96))
-        q.add(new Array[Byte](96))
+        // serialized QItem = 1 + 21 bytes, 8 are 176.bytes:
+        (1 to 8).foreach { _ => q.add(new Array[Byte](1)) }
 
-        // now it should rotate:
-        q.add(new Array[Byte](96))
-        Journal.journalsForQueue(new File(folderName), "rotating").length mustEqual 2
+        q.add(new Array[Byte](1))
+        q.totalRewrites mustEqual 1
 
-        q.add(new Array[Byte](96))
+        q.add(new Array[Byte](1))
+        q.totalRewrites mustEqual 1
+      }
+    }
 
-        // rotate again:
-        q.add(new Array[Byte](96))
-        Journal.journalsForQueue(new File(folderName), "rotating").length mustEqual 3
+    "allow rewrites after some time" in {
+      withTempFolder {
+        Time.withCurrentTimeFrozen { time =>
+          val config = new QueueBuilder {
+            defaultJournalSize = 16.bytes
+            maxJournalSize = 160.bytes
+            maxMemorySize = 128.bytes
+            minJournalCompactDelay = 5.seconds
+          }.apply()
+          val q = new PersistentQueue("rewriting", folderName, config, timer, scheduler)
+          q.setup()
 
-        q.remove()
-        q.remove()
-        q.remove()
-        q.remove()
-        Journal.journalsForQueue(new File(folderName), "rotating").length mustEqual 3
+          // serialized QItem = 1 + 21 bytes, 8 are 176.bytes:
+          (1 to 8).foreach { _ => q.add(new Array[Byte](1)) }
 
-        // now it should rewrite
-        q.remove()
-        q.length mustEqual 0
-        q.bytes mustEqual 0
-        q.journalSize mustEqual 0
-        Journal.journalsForQueue(new File(folderName), "rotating").length mustEqual 1
+          q.add(new Array[Byte](1))
+          q.totalRewrites mustEqual 1
+
+          q.add(new Array[Byte](1))
+          q.totalRewrites mustEqual 1
+
+          time.advance(5.seconds)
+          timer.timeout()
+
+          q.add(new Array[Byte](1))
+          q.totalRewrites mustEqual 2
+        }
       }
     }
 
@@ -526,6 +553,51 @@ class PersistentQueueSpec extends Specification
         q2.openTransactionCount mustEqual 0
         new String(q2.remove.get.data) mustEqual "two"
         q2.length mustEqual 0
+      }
+    }
+
+    "recreate the journal file when it gets too big" in {
+      withTempFolder {
+        val config = new QueueBuilder {
+          maxJournalSize = 3.kilobytes
+        }.apply()
+        val q = new PersistentQueue("things", folderName, config, timer, scheduler)
+        q.setup
+        q.add(new Array[Byte](512))
+        // can't roll the journal normally, cuz there's always one item left.
+        for (i <- 0 until 4) {
+          q.add(new Array[Byte](512))
+          q.remove(false) must beSomeQItem(512)
+        }
+        q.add(new Array[Byte](512))
+        q.length mustEqual 2
+        q.journalSize mustEqual (512 * 6) + (6 * 21) + 4
+
+        // next remove should force a recreate, because the queue size will be 512.
+        q.remove(false) must beSomeQItem(512)
+        q.length mustEqual 1
+        q.journalSize mustEqual (512 + 21)
+
+        // journal should contain exactly 1 item.
+        q.close
+        dumpJournal("things") mustEqual "add(512:0)"
+      }
+    }
+
+    "don't recreate the journal file if the queue itself is still huge" in {
+      withTempFolder {
+        val config = new QueueBuilder {
+          maxMemorySize = 1.kilobyte
+          maxJournalSize = 3.kilobytes
+        }.apply()
+        val q = new PersistentQueue("things", folderName, config, timer, scheduler)
+        q.setup
+        for (i <- 0 until 8) {
+          q.add(new Array[Byte](512))
+        }
+        q.length mustEqual 8
+        q.bytes mustEqual 4096
+        q.journalSize must be_<(q.journalTotalSize)
       }
     }
 

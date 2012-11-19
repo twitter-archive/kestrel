@@ -89,6 +89,9 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   val totalFlushes = Stats.getCounter(statNamed("total_flushes"))
   totalFlushes.reset()
 
+  private[kestrel] var totalRewrites = 0L
+  private var allowRewrites = true
+
   // # of items in the queue (including those not in memory)
   private var queueLength: Long = 0
 
@@ -197,13 +200,28 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   private def checkRotateJournal() {
     /*
      * if the queue is empty, and the journal is larger than defaultJournalSize, rebuild it.
+     * if the queue is smaller than maxMemorySize, and the combined journals are larger than
+     *   maxJournalSize, rebuild them. (we are not in read-behind.)
      * if the current journal is larger than maxMemorySize, rotate to a new file. if the combined
      *   journals are larger than maxJournalSize, checkpoint in preparation for rebuilding the
      *   older files in the background.
      */
-    if ((journal.size >= config.defaultJournalSize.inBytes && queueLength == 0)) {
+    if (journal.size >= config.defaultJournalSize.inBytes && queueLength == 0) {
+      log.info("Rewriting journal file for '%s' (qsize=0)", name)
+      journal.rewrite(openTransactionIds.map { openTransactions(_) }, queue)
+      totalRewrites += 1
+    } else if (allowRewrites &&
+               journal.size + journal.archivedSize > config.maxJournalSize.inBytes &&
+               queueSize < config.maxMemorySize.inBytes) {
       log.info("Rewriting journal file for '%s' (qsize=%d)", name, queueSize)
       journal.rewrite(openTransactionIds.map { openTransactions(_) }, queue)
+      totalRewrites += 1
+      config.minJournalCompactDelay.foreach { delay =>
+        allowRewrites = false
+        timer.schedule(delay.fromNow) {
+          PersistentQueue.this.synchronized { allowRewrites = true }
+        }
+      }
     } else if (journal.size > config.maxMemorySize.inBytes) {
       log.info("Rotating journal file for '%s' (qsize=%d)", name, queueSize)
       val setCheckpoint = (journal.size + journal.archivedSize > config.maxJournalSize.inBytes)
@@ -217,6 +235,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       if (config.keepJournal) {
         log.info("Rewriting journal file for '%s' (qsize=%d)", name, queueSize)
         journal.rewrite(openTransactionIds.map { openTransactions(_) }, queue)
+        totalRewrites += 1
       }
     }
   }
