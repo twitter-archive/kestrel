@@ -44,7 +44,7 @@ find_java() {
 
 find_java
 
-mkdir logs
+mkdir -p logs
 
 echo "Starting $APP_NAME... "
 
