@@ -150,8 +150,12 @@ just a sequential record of each add or remove operation that's happened on
 that queue. When kestrel starts up, it replays each queue's journal to build
 up the in-memory queue that it uses for client queries.
 
-The journal file is compacted if the queue is empty and the journal is larger
-than `defaultJournalSize`.
+The journal file is always compacted if the queue is empty and the
+journal is larger than `defaultJournalSize`. If the complete journal is
+larger than `maxJournalSize` but still contains less than `maxMemorySize`
+bytes of payload, it is also compacted. Compaction in this case is only
+allow once every `minJournalCompactDelay` (which can be set to `None` to
+always perform the compacting operation when the above conditions hold).
 
 The current journal file is archived (or rotated) when the journal is larger
 than `maxMemorySize`. In addition, if the complete journal exceeds
@@ -160,8 +164,11 @@ read-behind (when the size of the queue exceeds `maxMemorySize`) via the
 journal packer thread.
 
 For example, if `defaultJournalSize` is 16MB (the default), then if the queue
-is empty and the journal is larger than 16MB, it will be compacted into a new
-(empty, if there are no open transactions) file.
+is empty and the journal is larger than 16MB, it will be truncated into a new
+(empty) file. If the journal is larger than `maxJournalSize` (1GB by default),
+but contains less than `maxMemorySize` (128MB by default) of payload, the
+journal will be rewritten to contain just the live items, at most one every
+`minJournalCompactDelay` (1 minute by default).
 
 You can turn the journal off for a queue (`keepJournal` = false) and the queue
 will exist only in memory. If the server restarts, all enqueued items are

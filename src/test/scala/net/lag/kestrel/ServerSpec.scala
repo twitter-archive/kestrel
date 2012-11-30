@@ -38,7 +38,6 @@ class ServerSpec extends Specification with TempFolder with TestLogging {
 
   def makeServer() {
     val defaultConfig = new QueueBuilder() {
-      defaultJournalSize = 12.kilobytes
       maxJournalSize = 16.kilobytes
     }.apply()
     // make a queue specify max_items and max_age
