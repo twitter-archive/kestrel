@@ -71,4 +71,4 @@ ulimit -n $FD_LIMIT || echo " (no ulimit)"
 ulimit -c unlimited || echo " (no coredump)"
 
 echo "'$$'" > $pidfile
-exec ${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar ${APP_HOME}/${JAR_NAME} "$@" >> stdout 2>> error
+exec ${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar ${APP_HOME}/${JAR_NAME} "$@"
