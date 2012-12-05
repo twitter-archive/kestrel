@@ -27,7 +27,7 @@ def verbose(s)
   puts s if $options[:verbose]
 end
 
-def status(s)
+def print_status(s)
   print s
   STDOUT.flush
 end
@@ -153,11 +153,15 @@ def report_by_host(data, queue_name, key)
   by_host.sort.each { |host, v| printf(format, v || "n/a", host) }
 end
 
-def broadcast(command, queue_name, verb)
+def broadcast(command, noun)
   $options[:server_list].each do |server|
-    status "--- #{verb} queue #{queue_name} from #{server}:#{$options[:memcache_port]} ... "
     with_server(server, $options[:memcache_port]) do |sock|
-      sock.puts("#{command} " + queue_name)
+      print_status "--- #{server}:#{$options[:memcache_port]} ... "
+      if(noun)
+        sock.puts("#{command} #{noun}")
+      else
+        sock.puts(command)
+      end
       puts sock.readline.chomp
     end
   end
@@ -165,7 +169,6 @@ def broadcast(command, queue_name, verb)
 end
 
 def get_colony_servers
-
   if ($options[:managed])
     Net::HTTP.get URI.parse("http://colony.#{$options[:datacenter]}.twitter.com:#{$colony_port}/query?q=(mo%20audubon.role.#{$options[:role]}%20%26%20mo%20audubon.managed.true)")
   else
@@ -174,11 +177,17 @@ def get_colony_servers
 end
 
 def delete_all(queue_name)
-  broadcast("delete", queue_name, "Deleting")
+  print_status "--- Deleting queue #{queue_name} ... "
+  broadcast("delete", queue_name)
 end
 
 def flush_all(queue_name)
-  broadcast("flush", queue_name, "Flushing")
+  print_status "--- Flushing queue #{queue_name} ... "
+  broadcast("flush", queue_name)
+end
+
+def status_all(status)
+  broadcast("status", status)
 end
 
 def keep_unchanged_data(last, current)
@@ -288,10 +297,11 @@ parser = OptionParser.new do |opts|
   opts.separator "    min_age         show minimum age (msec) per queue"
   opts.separator "    max_age         show maximum age (msec) per queue"
   opts.separator ""
-  opts.separator "    delete <name>   remove a queue across the cluster"
-  opts.separator "    flush <name>    drain a queue across the cluster"
-  opts.separator "    stale [rounds]  try to detect stale queues (default: 5 rounds)"
-  opts.separator "    version         report versions of kestrel across the cluster"
+  opts.separator "    status [newstatus]  get or set status of the server"
+  opts.separator "    delete <name>       remove a queue across the cluster"
+  opts.separator "    flush <name>        drain a queue across the cluster"
+  opts.separator "    stale [rounds]      try to detect stale queues (default: 5 rounds)"
+  opts.separator "    version             report versions of kestrel across the cluster"
   opts.separator ""
 end
 
@@ -316,7 +326,7 @@ end
 
 command = ARGV[0].downcase
 
-if (command == "delete" || command == "flush") && !$options[:scriptmode]
+if (command == "delete" || command == "flush" || (command == "status" && ARGV.size == 2)) && !$options[:scriptmode]
   $options[:verbose] = true
 end
 
@@ -369,6 +379,9 @@ elsif command == "flush" && ARGV.size == 2
 elsif command == "stale"
   rounds = ARGV[1] ? ARGV[1].to_i : 5
   find_stale(rounds)
+  exit 0
+elsif command == "status"
+  status_all(ARGV[1])
   exit 0
 end
 
