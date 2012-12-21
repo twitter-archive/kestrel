@@ -30,6 +30,10 @@ test -f /etc/sysconfig/kestrel && . /etc/sysconfig/kestrel
 JAVA_OPTS="-server -Dstage=$STAGE $GC_OPTS $GC_TRACE $GC_LOG $HEAP_OPTS $DEBUG_OPTS"
 
 pidfile="/var/run/$APP_NAME/$APP_NAME.pid"
+# This second pidfile exists for legacy purposes, from the days when kestrel
+# was started by daemon(1)
+daemon_pidfile="/var/run/$APP_NAME/$APP_NAME-daemon.pid"
+
 
 running() {
   kill -0 `cat $pidfile`
@@ -80,7 +84,7 @@ case "$1" in
     ulimit -n $FD_LIMIT || echo -n " (no ulimit)"
     ulimit -c unlimited || echo -n " (no coredump)"
 
-    sh -c "echo "'$$'" > $pidfile; exec ${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar ${APP_HOME}/${JAR_NAME} >> /var/log/$APP_NAME/stdout 2>> /var/log/$APP_NAME/error" &
+    sh -c "echo "'$$'" > $pidfile; echo "'$$'" > $daemon_pidfile; exec ${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar ${APP_HOME}/${JAR_NAME} >> /var/log/$APP_NAME/stdout 2>> /var/log/$APP_NAME/error" &
     disown %-
     sleep $INITIAL_SLEEP
 
@@ -109,8 +113,8 @@ case "$1" in
       tries=$((tries + 1))
       if [ $tries -ge 15 ]; then
         echo "FAILED SOFT SHUTDOWN, TRYING HARDER"
-        if [ -f $pidfile ]; then
-          kill $(cat $pidfile)
+        if [ -f $daemon_pidfile ]; then
+          kill $(cat $daemon_pidfile)
         else
           echo "CAN'T FIND PID, TRY KILL MANUALLY"
           exit 1
@@ -120,7 +124,7 @@ case "$1" in
           hardtries=$((hardtries + 1))
           if [ $hardtries -ge 5 ]; then
             echo "FAILED HARD SHUTDOWN, TRY KILL -9 MANUALLY"
-            kill -9 $(cat $pidfile)
+            kill -9 $(cat $daemon_pidfile)
           fi
           sleep 1
         done
