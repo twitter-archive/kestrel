@@ -39,7 +39,7 @@ daemon_pidfile="/var/run/$APP_NAME/$APP_NAME-daemon.pid"
 
 
 running() {
-  kill -0 `cat $pidfile`
+  kill -0 `cat $pidfile` > /dev/null 2>&1
 }
 
 find_java() {
