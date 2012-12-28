@@ -27,6 +27,9 @@ DEBUG_OPTS="-XX:ErrorFile=/var/log/$APP_NAME/java_error%p.log"
 # allow a separate file to override settings.
 test -f /etc/sysconfig/kestrel && . /etc/sysconfig/kestrel
 
+# Debian/Ubuntu use /etc/default
+test -f "/etc/default/$APP_NAME" && . "/etc/default/$APP_NAME"
+
 JAVA_OPTS="-server -Dstage=$STAGE $GC_OPTS $GC_TRACE $GC_LOG $HEAP_OPTS $DEBUG_OPTS"
 
 pidfile="/var/run/$APP_NAME/$APP_NAME.pid"
@@ -43,9 +46,10 @@ find_java() {
   if [ ! -z "$JAVA_HOME" ]; then
     return
   fi
-  for dir in /opt/jdk /System/Library/Frameworks/JavaVM.framework/Versions/CurrentJDK/Home /usr/java/default; do
-    if [ -x $dir/bin/java ]; then
-      JAVA_HOME=$dir
+  JAVA_DEB="$(readlink -f /usr/bin/java | sed 's:/bin/java::')"
+  for dir in /opt/jdk /System/Library/Frameworks/JavaVM.framework/Versions/CurrentJDK/Home /usr/java/default "$JAVA_DEB"; do
+    if [ -x "$dir/bin/java" ]; then
+      JAVA_HOME="$dir"
       break
     fi
   done
@@ -73,12 +77,12 @@ case "$1" in
       exit 0
     fi
 
-    TIMESTAMP=$(date +%Y%m%d%H%M%S);
+    TIMESTAMP="$(date +%Y%m%d%H%M%S)";
     # Move the existing gc log to a timestamped file in case we want to examine it.
     # We must do this here because we have no option to append this via the JVM's
     # command line args.
-    if [ -f /var/log/$APP_NAME/gc.log ]; then
-      mv /var/log/$APP_NAME/gc.log /var/log/$APP_NAME/gc_$TIMESTAMP.log;
+    if [ -f "/var/log/$APP_NAME/gc.log" ]; then
+      mv "/var/log/$APP_NAME/gc.log" "/var/log/$APP_NAME/gc_$TIMESTAMP.log";
     fi
 
     ulimit -n $FD_LIMIT || echo -n " (no ulimit)"
@@ -107,7 +111,11 @@ case "$1" in
       exit 0
     fi
 
-    curl -m 5 -s http://localhost:${ADMIN_PORT}/shutdown.txt > /dev/null
+    if [ -n "$(which curl)" ]; then
+      curl -m 5 -s http://localhost:${ADMIN_PORT}/shutdown.txt > /dev/null
+    elif [ -n "$(which wget)" ]; then
+      wget -T 5 -O /dev/null -q http://localhost:${ADMIN_PORT}/shutdown.txt
+    fi
     tries=0
     while running; do
       tries=$((tries + 1))
