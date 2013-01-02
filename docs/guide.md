@@ -579,6 +579,8 @@ For each queue, the following stats are also reported:
 - `canceled_transactions` - number of transactional get requests canceled (for any
   reason)
 - `total_flushes` - total number of times this queue has been flushed
+- `journal_rewrites` - total number of times the journal of this queue has been rewritten
+- `journal_rotations` - total number of times the journal of this queue has been rotated
 - `age_msec` - age of the last item read from the queue
 - `create_time` - the time that the queue was created (in milliseconds since epoch)
 

@@ -89,7 +89,11 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   val totalFlushes = Stats.getCounter(statNamed("total_flushes"))
   totalFlushes.reset()
 
-  private[kestrel] var totalRewrites = 0L
+  val totalRewrites = Stats.getCounter(statNamed("journal_rewrites"))
+  totalRewrites.reset()
+  val totalRotates = Stats.getCounter(statNamed("journal_rotations"))
+  totalRotates.reset()
+
   private var allowRewrites = true
 
   // # of items in the queue (including those not in memory)
@@ -149,7 +153,9 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       ("open_transactions", openTransactionCount.toString),
       ("transactions", totalTransactions().toString),
       ("canceled_transactions", totalCanceledTransactions().toString),
-      ("total_flushes", totalFlushes().toString)
+      ("total_flushes", totalFlushes().toString),
+      ("journal_rewrites", totalRewrites().toString),
+      ("journal_rotations", totalRotates().toString)
     )
   }
 
@@ -209,13 +215,13 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     if (journal.size >= config.defaultJournalSize.inBytes && queueLength == 0) {
       log.info("Rewriting journal file for '%s' (qsize=0)", name)
       journal.rewrite(openTransactionIds.map { openTransactions(_) }, queue)
-      totalRewrites += 1
+      totalRewrites.incr()
     } else if (allowRewrites &&
                journal.size + journal.archivedSize > config.maxJournalSize.inBytes &&
                queueSize < config.maxMemorySize.inBytes) {
       log.info("Rewriting journal file for '%s' (qsize=%d)", name, queueSize)
       journal.rewrite(openTransactionIds.map { openTransactions(_) }, queue)
-      totalRewrites += 1
+      totalRewrites.incr()
       config.minJournalCompactDelay.foreach { delay =>
         allowRewrites = false
         timer.schedule(delay.fromNow) {
@@ -226,6 +232,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       log.info("Rotating journal file for '%s' (qsize=%d)", name, queueSize)
       val setCheckpoint = (journal.size + journal.archivedSize > config.maxJournalSize.inBytes)
       journal.rotate(openTransactionIds.map { openTransactions(_) }, setCheckpoint)
+      totalRotates.incr()
     }
   }
 
@@ -235,7 +242,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       if (config.keepJournal) {
         log.info("Rewriting journal file for '%s' (qsize=%d)", name, queueSize)
         journal.rewrite(openTransactionIds.map { openTransactions(_) }, queue)
-        totalRewrites += 1
+        totalRewrites.incr()
       }
     }
   }
@@ -479,6 +486,8 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     Stats.removeCounter(statNamed("canceled_transactions"))
     Stats.removeCounter(statNamed("discarded"))
     Stats.removeCounter(statNamed("total_flushes"))
+    Stats.removeCounter(statNamed("journal_rewrites"))
+    Stats.removeCounter(statNamed("journal_rotations"))
     Stats.clearGauge(statNamed("items"))
     Stats.clearGauge(statNamed("bytes"))
     Stats.clearGauge(statNamed("journal_size"))
