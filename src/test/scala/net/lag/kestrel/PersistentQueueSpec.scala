@@ -230,10 +230,10 @@ class PersistentQueueSpec extends Specification
         (1 to 8).foreach { _ => q.add(new Array[Byte](1)) }
 
         q.add(new Array[Byte](1))
-        q.totalRewrites mustEqual 1
+        q.totalRewrites() mustEqual 1
 
         q.add(new Array[Byte](1))
-        q.totalRewrites mustEqual 1
+        q.totalRewrites() mustEqual 1
       }
     }
 
@@ -253,16 +253,16 @@ class PersistentQueueSpec extends Specification
           (1 to 8).foreach { _ => q.add(new Array[Byte](1)) }
 
           q.add(new Array[Byte](1))
-          q.totalRewrites mustEqual 1
+          q.totalRewrites() mustEqual 1
 
           q.add(new Array[Byte](1))
-          q.totalRewrites mustEqual 1
+          q.totalRewrites() mustEqual 1
 
           time.advance(5.seconds)
           timer.timeout()
 
           q.add(new Array[Byte](1))
-          q.totalRewrites mustEqual 2
+          q.totalRewrites() mustEqual 2
         }
       }
     }
