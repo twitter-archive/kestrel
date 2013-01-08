@@ -132,6 +132,7 @@ abstract class KestrelHandler(
   protected val log = Logger.get(getClass.getName)
 
   val finished = new AtomicBoolean(false)
+
   @volatile var waitingFor: Option[Future[Option[QItem]]] = None
 
   Kestrel.sessions.incrementAndGet()
@@ -139,6 +140,10 @@ abstract class KestrelHandler(
 
   if (Kestrel.traceSessions) {
     log.info("New session %d from %s", sessionId, clientDescription)
+  }
+
+  def sessionDescription(): String = {
+    "Session %d Client %s".format(sessionId, clientDescription)
   }
 
   // called exactly once by finagle when the session ends.
@@ -160,7 +165,7 @@ abstract class KestrelHandler(
 
   def flushAllQueues() {
     checkBlockWrites("flushAll", "<all>")
-    queues.queueNames.foreach { qName => queues.flush(qName, Some(clientDescription)) }
+    queues.queueNames.foreach { qName => queues.flush(qName, Some(sessionDescription)) }
   }
 
   protected def countPendingReads(key: String): Int
@@ -185,7 +190,7 @@ abstract class KestrelHandler(
         f(None, None)
       } else {
         Stats.incr("cmd_monitor_get")
-        queues.remove(key, timeLimit, opening, false, Some(clientDescription)).onSuccess {
+        queues.remove(key, timeLimit, opening, false, Some(sessionDescription)).onSuccess {
           case None =>
             f(None, None)
           case x @ Some(item) =>
@@ -204,7 +209,7 @@ abstract class KestrelHandler(
 
     if (opening && countPendingReads(key) >= maxOpenReads) {
       log.warning("Attempt to open too many reads on '%s' (sid %d, %s)", key, sessionId,
-                  clientDescription)
+                  sessionDescription)
       throw TooManyOpenReadsException
     }
 
@@ -215,7 +220,7 @@ abstract class KestrelHandler(
       Stats.incr("cmd_get")
     }
     val startTime = Time.now
-    val future = queues.remove(key, timeout, opening, peeking, Some(clientDescription))
+    val future = queues.remove(key, timeout, opening, peeking, Some(sessionDescription))
     waitingFor = Some(future)
     future.map { itemOption =>
       waitingFor = None
@@ -245,7 +250,7 @@ abstract class KestrelHandler(
     log.debug("set -> q=%s flags=%d expiry=%s size=%d", key, flags, expiry, data.length)
     Stats.incr("cmd_set")
     val (rv, nsec) = Duration.inNanoseconds {
-      queues.add(key, data, expiry, Time.now, Some(clientDescription))
+      queues.add(key, data, expiry, Time.now, Some(sessionDescription))
     }
     Stats.addMetric("set_latency_usec", nsec.inMicroseconds.toInt)
     Stats.addMetric("q/" + key + "/set_latency_usec", nsec.inMicroseconds.toInt)
@@ -255,19 +260,19 @@ abstract class KestrelHandler(
   def flush(key: String) {
     checkBlockWrites("flush", key)
     log.debug("flush -> q=%s", key)
-    queues.flush(key, Some(clientDescription))
+    queues.flush(key, Some(sessionDescription))
   }
 
   def delete(key: String) {
     checkBlockWrites("delete", key)
     log.debug("delete -> q=%s", key)
-    queues.delete(key, Some(clientDescription))
+    queues.delete(key, Some(sessionDescription))
   }
 
   def flushExpired(key: String) = {
     checkBlockWrites("flushExpired", key)
     log.debug("flush_expired -> q=%s", key)
-    queues.flushExpired(key, clientDescription = Some(clientDescription))
+    queues.flushExpired(key, false, Some(sessionDescription))
   }
 
   private def withServerStatus[T](f: (ServerStatus) => T): T = {
@@ -281,14 +286,14 @@ abstract class KestrelHandler(
 
   def checkBlockReads(op: String, key: String) {
     if (safeCheckBlockReads) {
-      log.debug("Blocking %s on '%s' (sid %d, %s)", op, key, sessionId, clientDescription)
+      log.debug("Blocking %s on '%s' (%s)", op, key, sessionDescription)
       throw new AvailabilityException(op)
     }
   }
 
   def checkBlockWrites(op: String, key: String) {
     if (serverStatus map { _.blockWrites } getOrElse(false)) {
-      log.debug("Blocking %s on '%s' (sid %d, %s)", op, key, sessionId, clientDescription)
+      log.debug("Blocking %s on '%s' (%s)", op, key, sessionDescription)
       throw new AvailabilityException(op)
     }
   }

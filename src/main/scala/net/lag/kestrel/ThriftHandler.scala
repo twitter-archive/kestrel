@@ -154,7 +154,7 @@ class ThriftHandler (
 ) extends thrift.Kestrel.FutureIface {
   val log = Logger.get(getClass.getName)
 
-  val sessionId = Kestrel.sessionId.incrementAndGet()
+  val sessionId = Kestrel.sessionIdGenerator.incrementAndGet()
   val handler = new KestrelHandler(queueCollection, maxOpenReads, clientDescription _, sessionId,
                                    serverStatus) with ThriftPendingReads
   log.debug("New thrift session %d from %s", sessionId, clientDescription)

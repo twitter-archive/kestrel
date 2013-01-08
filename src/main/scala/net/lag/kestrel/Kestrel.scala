@@ -301,7 +301,7 @@ object Kestrel {
 
   // track concurrent sessions
   val sessions = new AtomicInteger()
-  val sessionId = new AtomicInteger()
+  val sessionIdGenerator = new AtomicInteger()
 
   def main(args: Array[String]): Unit = {
     try {

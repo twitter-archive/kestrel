@@ -202,6 +202,13 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     }
   }
 
+  /**
+   * Check if this Queue has been enabled for client tracing
+   */
+  def shouldTraceQOps: Boolean = {
+    config.enableTrace
+  }
+
   // you are holding the lock, and config.keepJournal is true.
   private def checkRotateJournal() {
     /*

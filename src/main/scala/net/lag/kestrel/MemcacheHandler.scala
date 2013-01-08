@@ -39,7 +39,7 @@ class MemcacheHandler(
 ) extends Service[MemcacheRequest, MemcacheResponse] {
   val log = Logger.get(getClass.getName)
 
-  val sessionId = Kestrel.sessionId.incrementAndGet()
+  val sessionId = Kestrel.sessionIdGenerator.incrementAndGet()
   val handler = new KestrelHandler(queueCollection, maxOpenReads, clientDescription _, sessionId,
                                    serverStatus) with SimplePendingReads
   log.debug("New session %d from %s", sessionId, clientDescription)
