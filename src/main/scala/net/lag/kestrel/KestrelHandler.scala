@@ -18,7 +18,7 @@
 package net.lag.kestrel
 
 import com.twitter.conversions.time._
-import com.twitter.logging.Logger
+import com.twitter.logging.{Level, Logger}
 import com.twitter.ostrich.admin.{BackgroundProcess, ServiceTracker}
 import com.twitter.ostrich.stats.Stats
 import com.twitter.util._
@@ -137,14 +137,24 @@ abstract class KestrelHandler(
   Kestrel.sessions.incrementAndGet()
   Stats.incr("total_connections")
 
+  if (Kestrel.traceSessions) {
+    log.info("New session %d from %s", sessionId, clientDescription)
+  }
+
   // called exactly once by finagle when the session ends.
   def finish() {
-    abortAnyOpenRead()
+    abortAnyOpenRead(Kestrel.traceSessions)
     waitingFor.foreach { w =>
       w.cancel()
       Stats.incr("cmd_get_timeout_dropped")
     }
-    log.debug("End of session %d", sessionId)
+
+    if (Kestrel.traceSessions) {
+      log.info("End of session %d", sessionId)
+    } else {
+      log.debug("End of session %d", sessionId)
+    }
+
     Kestrel.sessions.decrementAndGet()
   }
 
@@ -217,13 +227,17 @@ abstract class KestrelHandler(
     }
     future.onCancellation {
       // if the connection is closed, pre-emptively return un-acked items.
-      abortAnyOpenRead()
+      abortAnyOpenRead(Kestrel.traceSessions)
     }
     future
   }
 
-  def abortAnyOpenRead() {
-    Stats.incr("cmd_get_open_dropped", cancelAllPendingReads())
+  def abortAnyOpenRead(trace: Boolean) {
+    val abortedReads = cancelAllPendingReads();
+    Stats.incr("cmd_get_open_dropped", abortedReads)
+    if (trace) {
+      log.info("Aborted %d pending reads", abortedReads);
+    }
   }
 
   def setItem(key: String, flags: Int, expiry: Option[Time], data: Array[Byte]) = {

@@ -44,7 +44,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
               thriftListenPort: Option[Int], queuePath: String,
               expirationTimerFrequency: Option[Duration], clientTimeout: Option[Duration],
               maxOpenTransactions: Int, connectionBacklog: Option[Int], statusFile: String,
-              defaultStatus: Status, statusChangeGracePeriod: Duration,
+              defaultStatus: Status, statusChangeGracePeriod: Duration, enableSessionTrace: Boolean,
               zkConfig: Option[ZooKeeperConfig])
       extends Service {
   private val log = Logger.get(getClass.getName)
@@ -60,6 +60,8 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
   var serverStatus: ServerStatus = null
 
   def thriftCodec = ThriftServerFramedCodec()
+
+  def traceSessions: Boolean = enableSessionTrace
 
   private def finagledCodec[Req, Resp](codec: => Codec[Resp]) = {
     new FinagleCodec[Req, Resp] {
@@ -118,10 +120,10 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
   def start() {
     log.info("Kestrel config: listenAddress=%s memcachePort=%s textPort=%s queuePath=%s " +
              "expirationTimerFrequency=%s clientTimeout=%s maxOpenTransactions=%d connectionBacklog=%s " +
-             "statusFile=%s defaultStatus=%s statusChangeGracePeriod=%s zookeeper=<%s>",
+             "statusFile=%s defaultStatus=%s statusChangeGracePeriod=%s enableSessionTrace=%s zookeeper=<%s>",
              listenAddress, memcacheListenPort, textListenPort, queuePath,
              expirationTimerFrequency, clientTimeout, maxOpenTransactions, connectionBacklog,
-             statusFile, defaultStatus, statusChangeGracePeriod, zkConfig)
+             statusFile, defaultStatus, statusChangeGracePeriod, enableSessionTrace, zkConfig)
 
     Stats.setLabel("version", Kestrel.runtime.jarVersion)
 
@@ -324,4 +326,13 @@ object Kestrel {
   }
 
   def uptime() = Time.now - startTime
+
+  def traceSessions:Boolean = {
+    if (kestrel != null) {
+      kestrel.traceSessions
+    }
+    else {
+      false
+    }
+  }
 }

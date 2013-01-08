@@ -238,6 +238,11 @@ trait KestrelConfig extends ServerConfig[Kestrel] {
   var statusChangeGracePeriod = 0.seconds
 
   /**
+   * When true, enables tracing of session lifetime in the kestrel log
+   */
+  var enableSessionTrace: Boolean = false
+
+  /**
    * Optional Apache Zookeeper configuration used to publish serverset-based availability of Kestrel
    * instances. By default no such information is published.
    */
@@ -247,7 +252,7 @@ trait KestrelConfig extends ServerConfig[Kestrel] {
     new Kestrel(
       default(), queues, aliases, listenAddress, memcacheListenPort, textListenPort, thriftListenPort,
       queuePath, expirationTimerFrequency, clientTimeout, maxOpenTransactions, connectionBacklog,
-      statusFile, defaultStatus, statusChangeGracePeriod, zookeeper.map { _() }
+      statusFile, defaultStatus, statusChangeGracePeriod, enableSessionTrace, zookeeper.map { _() }
     )
   }
 
