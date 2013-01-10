@@ -15,7 +15,7 @@ object Kestrel extends Build {
   ).settings(
     name := "kestrel",
     organization := "net.lag",
-    version := "2.4.2-SNAPSHOT",
+    version := "2.4.2",
     scalaVersion := "2.9.2",
 
     // time-based tests cannot be run in parallel
