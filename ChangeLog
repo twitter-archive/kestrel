@@ -1,3 +1,9 @@
+2.4.2
+-----
+- Journal rotation and rewrite metric
+- Per queue tracing of open/confirm/abort of transactions
+- Tracing for session lifetime
+
 2.4.1
 -----
 - Only rewrite journals for empty queues or when in read-behind
