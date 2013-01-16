@@ -373,11 +373,12 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
 
       "log queue name/alias duplicates" in {
         withTempFolder {
-          traceLogger(Level.WARNING)
+          traceLogger(Level.INFO)
 
           val queueConfigs = List("q1", "q2", "q3") map { q =>
             new QueueBuilder {
               name = q
+              enableTrace = true
             }
           }
           val aliasConfigs = List("a1", "q1", "q2") map { a =>

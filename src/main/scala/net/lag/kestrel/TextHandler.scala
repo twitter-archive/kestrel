@@ -107,7 +107,7 @@ class TextHandler(
 ) extends Service[TextRequest, TextResponse] {
   val log = Logger.get(getClass)
 
-  val sessionId = Kestrel.sessionId.incrementAndGet()
+  val sessionId = Kestrel.sessionIdGenerator.incrementAndGet()
   val handler = new KestrelHandler(queueCollection, maxOpenReads, clientDescription _, sessionId,
                                    serverStatus) with SimplePendingReads
   log.debug("New text session %d from %s", sessionId, clientDescription)
