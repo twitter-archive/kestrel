@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 DIST_HOME="$(dirname $(readlink $0 || echo $0))/../.."
 TEST_JAR=$DIST_HOME/@DIST_NAME@-@VERSION@-test.jar
 java -server -classpath @DIST_CLASSPATH@:$TEST_JAR net.lag.kestrel.load.ManyClients "$@"

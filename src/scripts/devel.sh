@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 echo "Starting kestrel in development mode..."
 
 # find jar no matter what the root dir name
