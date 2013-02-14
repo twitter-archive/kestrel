@@ -1,0 +1,2 @@
+var/log/kestrel
+var/spool/kestrel

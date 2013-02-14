@@ -1,0 +1,17 @@
+# Default settings for openssh-server. This file is sourced by /bin/sh from
+# /etc/init.d/kestrel.
+
+# 0 = don't start on boot, 1 = start on boot.
+START_KESTREL=1
+
+# Kestrel options
+KESTREL_USER="kestrel"
+KESTREL_GROUP="kestrel"
+ADMIN_PORT="2223"
+FD_LIMIT="262144"
+HEAP_OPTS="-Xmx4096m -Xms4096m -XX:NewSize=768m"
+GC_OPTS="-XX:+UseConcMarkSweepGC -XX:+UseParNewGC"
+GC_TRACE="-XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution -XX:+PrintHeapAtGC"
+GC_LOG="-Xloggc:/var/log/$APP_NAME/gc.log"
+DEBUG_OPTS="-XX:ErrorFile=/var/log/$APP_NAME/java_error%p.log"
+JAVA_HOME="/usr/lib/jvm/default-java"
