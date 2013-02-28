@@ -38,17 +38,18 @@ case class QueueConfig(
   maxExpireSweep: Int,
   fanoutOnly: Boolean,
   maxQueueAge: Option[Duration],
-  enableTrace: Boolean
+  enableTrace: Boolean,
+  disableAggressiveRewrites:Boolean
 ) {
   override def toString() = {
     ("maxItems=%d maxSize=%s maxItemSize=%s maxAge=%s defaultJournalSize=%s maxMemorySize=%s " +
      "maxJournalSize=%s minJournalCompactDelay=%s discardOldWhenFull=%s keepJournal=%s " +
      "syncJournal=%s expireToQueue=%s maxExpireSweep=%d fanoutOnly=%s maxQueueAge=%s " +
-     "enableTrace=%s").format(
+     "enableTrace=%s disableAggressiveRewrites=%s").format(
       maxItems, maxSize, maxItemSize, maxAge, defaultJournalSize, maxMemorySize,
       maxJournalSize, minJournalCompactDelay, discardOldWhenFull, keepJournal,
       syncJournal, expireToQueue, maxExpireSweep, fanoutOnly, maxQueueAge,
-      enableTrace)
+      enableTrace, disableAggressiveRewrites)
   }
 }
 
@@ -185,6 +186,12 @@ class QueueBuilder {
    */
   var enableTrace: ConfigValue[Boolean] = Default(false)
 
+  /**
+   * When true, operations on the queue generate trace output. Used to diagnose
+   * client misbehavior/bugs
+   */
+  var disableAggressiveRewrites: ConfigValue[Boolean] = Default(false)
+
   def apply(): QueueConfig = apply(None)
 
   def apply(parent: Option[QueueConfig]) = {
@@ -203,7 +210,8 @@ class QueueBuilder {
                 maxExpireSweep.resolve(parent.map { _.maxExpireSweep }),
                 fanoutOnly.resolve(parent.map { _.fanoutOnly }),
                 maxQueueAge.resolve(parent.map { _.maxQueueAge }),
-                enableTrace.resolve(parent.map { _.enableTrace })
-              )
+                enableTrace.resolve(parent.map { _.enableTrace }),
+                disableAggressiveRewrites.resolve(parent.map { _.disableAggressiveRewrites})
+                )
   }
 }

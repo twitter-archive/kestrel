@@ -202,6 +202,14 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     }
   }
 
+  private def disallowRewritesForDelay() {
+    config.minJournalCompactDelay.foreach { delay =>
+      allowRewrites = false
+      timer.schedule(delay.fromNow) {
+        PersistentQueue.this.synchronized { allowRewrites = true }
+      }
+    }
+  }
   /**
    * Check if this Queue has been enabled for client tracing
    */
@@ -219,27 +227,71 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
      *   journals are larger than maxJournalSize, checkpoint in preparation for rebuilding the
      *   older files in the background.
      */
-    if (journal.size >= config.defaultJournalSize.inBytes && queueLength == 0) {
-      log.info("Rewriting journal file for '%s' (qsize=0)", name)
-      journal.rewrite(openTransactionIds.map { openTransactions(_) }, queue)
-      totalRewrites.incr()
-    } else if (allowRewrites &&
-               journal.size + journal.archivedSize > config.maxJournalSize.inBytes &&
-               queueSize < config.maxMemorySize.inBytes) {
-      log.info("Rewriting journal file for '%s' (qsize=%d)", name, queueSize)
-      journal.rewrite(openTransactionIds.map { openTransactions(_) }, queue)
-      totalRewrites.incr()
-      config.minJournalCompactDelay.foreach { delay =>
-        allowRewrites = false
-        timer.schedule(delay.fromNow) {
-          PersistentQueue.this.synchronized { allowRewrites = true }
+    if (!config.disableAggressiveRewrites) {
+      if (journal.size >= config.defaultJournalSize.inBytes && queueLength == 0) {
+        log.info("Rewriting journal file for '%s' (qsize=0)", name)
+        journal.rewrite(openTransactionIds.map { openTransactions(_) }, queue)
+        totalRewrites.incr()
+      } else if (allowRewrites &&
+        journal.size + journal.archivedSize > config.maxJournalSize.inBytes &&
+        queueSize < config.maxMemorySize.inBytes) {
+        log.info("Rewriting journal file for '%s' (qsize=%d)", name, queueSize)
+        journal.rewrite(openTransactionIds.map { openTransactions(_) }, queue)
+        totalRewrites.incr()
+        config.minJournalCompactDelay.foreach { delay =>
+          allowRewrites = false
+          timer.schedule(delay.fromNow) {
+            PersistentQueue.this.synchronized { allowRewrites = true }
+          }
+        }
+      } else if (journal.size > config.maxMemorySize.inBytes) {
+        log.info("Rotating journal file for '%s' (qsize=%d)", name, queueSize)
+        val setCheckpoint = (journal.size + journal.archivedSize > config.maxJournalSize.inBytes)
+        journal.rotate(openTransactionIds.map { openTransactions(_) }, setCheckpoint)
+        totalRotates.incr()
+      }
+    } else {
+      if (allowRewrites &&
+          journal.size >= config.defaultJournalSize.inBytes &&
+          queueLength == 0) {
+        log.info("Rewriting journal file for '%s' (qsize=0)", name)
+        journal.rewrite(openTransactionIds.map { openTransactions(_) }, queue)
+        totalRewrites.incr()
+        /* KEST 366 - This condition is supposed to be opportunistic and is done frequently
+         * with the hope that the journal shrinks to a very small size at the end of this operation
+         * as the queue is empty.
+         * This assumption is however untrue if there are a large number of open transactions,
+         * if after rewrite we end up with a size greater than half the default size,
+         * take a break before attempting to rewrite again
+         */
+        if (journal.size >= (config.defaultJournalSize.inBytes / 2)) {
+            disallowRewritesForDelay()
+          }
+      } else if (allowRewrites &&
+                 journal.size + journal.archivedSize > config.maxJournalSize.inBytes &&
+                 queueSize < config.maxMemorySize.inBytes) {
+        log.info("Rewriting journal file for '%s' (qsize=%d)", name, queueSize)
+        journal.rewrite(openTransactionIds.map { openTransactions(_) }, queue)
+        totalRewrites.incr()
+        disallowRewritesForDelay()
+      } else if (journal.size > config.maxMemorySize.inBytes) {
+        /*
+         * If the queue is empty, we should First try re-writing -
+         * only if that doesn't help, then rotate the journals
+         */
+        if (queueLength == 0) {
+          log.info("Rewriting journal file for '%s' (qsize=0)", name)
+          journal.rewrite(openTransactionIds.map { openTransactions(_) }, queue)
+          totalRewrites.incr()
+        }
+
+        if (journal.size > config.maxMemorySize.inBytes) {
+          log.info("Rotating journal file for '%s' (qsize=%d)", name, queueSize)
+          val setCheckpoint = (journal.size + journal.archivedSize > config.maxJournalSize.inBytes)
+          journal.rotate(openTransactionIds.map { openTransactions(_) }, setCheckpoint)
+          totalRotates.incr()
         }
       }
-    } else if (journal.size > config.maxMemorySize.inBytes) {
-      log.info("Rotating journal file for '%s' (qsize=%d)", name, queueSize)
-      val setCheckpoint = (journal.size + journal.archivedSize > config.maxJournalSize.inBytes)
-      journal.rotate(openTransactionIds.map { openTransactions(_) }, setCheckpoint)
-      totalRotates.incr()
     }
   }
 
