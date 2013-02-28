@@ -39,6 +39,15 @@ class PersistentQueueSpec extends Specification
     val timer = new FakeTimer()
     val scheduler = new ScheduledThreadPoolExecutor(1)
 
+    def withJournalPacker(f: => Unit) {
+      Journal.packer.start()
+      try {
+        f
+      } finally {
+        Journal.packer.shutdown()
+      }
+    }
+
     doBefore {
       timer.timerTask.cancelled = false
     }
@@ -136,6 +145,43 @@ class PersistentQueueSpec extends Specification
         Journal.journalsForQueue(new File(folderName), "rotating").length mustEqual 2
       }
     }
+
+    "rotate and pack journals" in {
+      withTempFolder {
+        withJournalPacker {
+          val config = new QueueBuilder {
+            defaultJournalSize = 16.bytes
+            maxJournalSize = 256.bytes
+            maxMemorySize = 64.bytes
+          }.apply()
+          val queueName = "rotate-pack-journal" + Time.now
+          val q = new PersistentQueue(queueName, folderName, config, timer, scheduler)
+          q.setup()
+
+          // Set the checkpoint
+          (1 to 16).foreach { _ =>
+            q.add(new Array[Byte](32))
+          }
+          q.length mustEqual 16
+
+          (1 to 15).foreach { _ =>
+            q.remove
+            q.add(new Array[Byte](32))
+          }
+          q.length mustEqual 16
+          q.close()
+
+          val q2 = new PersistentQueue(queueName, folderName, config, timer, scheduler)
+          q2.setup()
+          if (q2.length != 16) {
+            // If the queue length doesn't meet the expectations, dump the journal so
+            // that we can debug the cause of the incorrect length
+            dumpJournal(queueName) mustEqual ""
+          }
+        }
+      }
+    }
+
 
     "rewrite journals when they exceed the defaultJournalSize and are empty" in {
       withTempFolder {

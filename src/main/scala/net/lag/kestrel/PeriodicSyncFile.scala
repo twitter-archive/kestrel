@@ -57,7 +57,7 @@ class PeriodicSyncFile(file: File, scheduler: ScheduledExecutorService, period: 
 
   @volatile var closed = false
 
-  private def fsync() {
+  def fsync() {
     synchronized {
       // race: we could underestimate the number of completed writes. that's okay.
       val completed = promises.size

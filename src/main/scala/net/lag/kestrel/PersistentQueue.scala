@@ -318,6 +318,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
         _remove(false, None)
         totalDiscarded.incr()
         if (config.keepJournal) journal.remove()
+        fillReadBehind()
       }
 
       val item = QItem(addTime, adjustExpiry(Time.now, expiry), value, 0)
@@ -380,6 +381,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
         val item = _remove(transaction, None)
         if (config.keepJournal && item.isDefined) {
           if (transaction) journal.removeTentative(item.get.xid) else journal.remove()
+          fillReadBehind()
           checkRotateJournal()
         }
 
@@ -523,6 +525,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   def setup() {
     synchronized {
       queueSize = 0
+      queueLength = 0
       replayJournal()
     }
   }
@@ -655,7 +658,9 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     queueSize -= len
     _memoryBytes -= len
     queueLength -= 1
-    fillReadBehind()
+    if (journal.isReplaying) {
+      fillReadBehind()
+    }
     _currentAge = item.addTime
     if (transaction) {
       item.xid = xid.getOrElse { nextXid() }
@@ -681,8 +686,8 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
             queueSize -= len
             _memoryBytes -= len
             queueLength -= 1
-            fillReadBehind()
             if (config.keepJournal) journal.remove()
+            fillReadBehind()
             toRemove += item
           } else {
             continue = false

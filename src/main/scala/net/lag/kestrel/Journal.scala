@@ -309,7 +309,7 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
   }
 
   def replayFile(name: String, filename: String)(f: JournalItem => Unit): Unit = {
-    log.debug("Replaying '%s' file %s", name, filename)
+    log.info("Replaying '%s' file %s", name, filename)
     size = 0
     var lastUpdate = 0L
     try {
@@ -491,6 +491,10 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
     newJournal.open()
     newJournal.dump(state.checkpoint.reservedItems, state.openItems, state.pentUpDeletes, state.queueState)
     newJournal.close()
+
+    // Flush the updates to the current journal so that any removes that have been accounted
+    // for in the pack are persisted before the packed file replaces existing files
+    writer.fsync()
 
     log.info("Packing '%s' -- erasing old files.", queueName)
     val packFile = new File(queuePath, state.checkpoint.filename + ".pack")
