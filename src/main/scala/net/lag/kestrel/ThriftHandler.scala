@@ -161,7 +161,7 @@ class ThriftHandler (
 
   protected def clientDescription: String = {
     val address = connection.remoteAddress.asInstanceOf[InetSocketAddress]
-    "%s:%d".format(address.getHostName, address.getPort)
+    "%s:%d".format(address.getHostString, address.getPort)
   }
 
   def put(queueName: String, items: Seq[ByteBuffer], expirationMsec: Int): Future[Int] = {
