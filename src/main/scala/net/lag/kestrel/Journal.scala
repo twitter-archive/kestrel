@@ -222,7 +222,7 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
   def add(item: QItem): Future[Unit] = add(true, item)
 
   def continue(xid: Int, item: QItem): Future[Unit] = {
-    removesSinceReadBehind += 1
+    if (inReadBehind) removesSinceReadBehind += 1
     val blob = item.pack(CMD_CONTINUE.toByte, xid)
     size += blob.limit
     writer.write(blob)
