@@ -182,6 +182,57 @@ class PersistentQueueSpec extends Specification
       }
     }
 
+    "rotate and pack journals and then recover" in {
+      withTempFolder {
+        withJournalPacker {
+          val config = new QueueBuilder {
+            defaultJournalSize = 16.bytes
+            maxJournalSize = 256.bytes
+            maxMemorySize = 64.bytes
+          }.apply()
+          val queueName = "rotate-pack-journal-recover" + Time.now
+          val q = new PersistentQueue(queueName, folderName, config, timer, scheduler)
+          q.setup()
+
+          // Set the checkpoint
+          (1 to 16).foreach { _ =>
+            q.add(new Array[Byte](32))
+          }
+          q.length mustEqual 16
+
+          (1 to 15).foreach { _ =>
+            q.remove
+            q.add(new Array[Byte](32))
+          }
+          q.length mustEqual 16
+          q.close()
+
+          val q2 = new PersistentQueue(queueName, folderName, config, timer, scheduler)
+          q2.setup()
+          if (q2.length != 16) {
+            // If the queue length doesn't meet the expectations, dump the journal so
+            // that we can debug the cause of the incorrect length
+            dumpJournal(queueName) mustEqual ""
+          }
+
+          (1 to 31).foreach { _ =>
+            q2.remove
+            q2.add(new Array[Byte](32))
+          }
+          q2.length mustEqual 16
+          q2.close()
+
+          val q3 = new PersistentQueue(queueName, folderName, config, timer, scheduler)
+          q3.setup()
+          if (q3.length != 16) {
+            // If the queue length doesn't meet the expectations, dump the journal so
+            // that we can debug the cause of the incorrect length
+            dumpJournal(queueName) mustEqual ""
+          }
+        }
+      }
+    }
+
 
     "rewrite journals when they exceed the defaultJournalSize and are empty" in {
       withTempFolder {

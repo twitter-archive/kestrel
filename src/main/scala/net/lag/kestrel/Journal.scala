@@ -105,6 +105,12 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
     open(queueFile)
   }
 
+  def notifyRemoveDuringReplay() {
+    if (inReadBehind) {
+      removesSinceReadBehind += 1
+    }
+  }
+
   def calculateArchiveSize() {
     val files = Journal.archivedFilesForQueue(queuePath, queueName)
     archivedSize = files.foldLeft(0L) { (sum, filename) =>

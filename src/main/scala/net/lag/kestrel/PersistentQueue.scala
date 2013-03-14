@@ -604,15 +604,20 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
           log.info("Dropping to read-behind for queue '%s' (%d bytes)", name, queueSize)
           journal.startReadBehind()
         }
-      case JournalItem.Remove => _remove(false, None)
+      case JournalItem.Remove =>
+        _remove(false, None)
+        journal.notifyRemoveDuringReplay()
       case JournalItem.RemoveTentative(xid) =>
         _remove(true, Some(xid))
         xidCounter = xid
       case JournalItem.SavedXid(xid) => xidCounter = xid
       case JournalItem.Unremove(xid) => _unremove(xid)
-      case JournalItem.ConfirmRemove(xid) => openTransactions.remove(xid)
+      case JournalItem.ConfirmRemove(xid) =>
+        openTransactions.remove(xid)
+        journal.notifyRemoveDuringReplay()
       case JournalItem.Continue(item, xid) =>
         openTransactions.remove(xid)
+        journal.notifyRemoveDuringReplay()
         _add(item)
       case x => log.error("Unexpected item in journal: %s", x)
     }
