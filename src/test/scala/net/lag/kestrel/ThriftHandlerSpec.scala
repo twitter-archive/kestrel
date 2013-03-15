@@ -35,7 +35,7 @@ class ThriftHandlerSpec extends Specification with JMocker with ClassMocker {
   "ThriftHandler" should {
     val queueCollection = mock[QueueCollection]
     val connection = mock[ClientConnection]
-    val address = mock[InetSocketAddress]
+    val address = new InetSocketAddress(10000)
     val timer = new MockTimer()
 
     val item1 = "forty second songs".getBytes
