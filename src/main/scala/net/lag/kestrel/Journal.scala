@@ -74,7 +74,7 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
   @volatile var closed: Boolean = false
 
   @volatile var checkpoint: Option[Checkpoint] = None
-  var removesSinceReadBehind = 0
+  var removesSinceReadBehind: Int = 0
 
   // small temporary buffer for formatting operations into the journal:
   private val buffer = new Array[Byte](16)
@@ -112,7 +112,7 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
   }
 
   def calculateArchiveSize() {
-    val files = Journal.archivedFilesForQueue(queuePath, queueName)
+    val files = archivedJournalFiles()
     archivedSize = files.foldLeft(0L) { (sum, filename) =>
       sum + new File(queuePath, filename).length()
     }
@@ -206,7 +206,7 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
   def erase() {
     try {
       close()
-      Journal.archivedFilesForQueue(queuePath, queueName).foreach { filename =>
+      archivedJournalFiles().foreach { filename =>
         new File(queuePath, filename).delete()
       }
       queueFile.delete()
@@ -289,7 +289,7 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
             // move to next file and try again.
             val oldFilename = readerFilename.get
             rj.close()
-            readerFilename = Journal.journalAfter(queuePath, queueName, readerFilename.get)
+            readerFilename = journalFilesAfter(readerFilename.get)
             reader = Some(new FileInputStream(new File(queuePath, readerFilename.get)).getChannel)
             log.info("Read-behind on '%s' moving from file %s to %s", queueName, oldFilename, readerFilename.get)
             if (checkpoint.isDefined && checkpoint.get.filename == oldFilename) {
@@ -309,7 +309,7 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
     }.foreach { filename =>
       new File(queuePath, filename).delete()
     }
-    Journal.journalsForQueue(queuePath, queueName).foreach { filename =>
+    allJournalFiles().foreach { filename =>
       replayFile(queueName, filename)(f)
     }
   }
@@ -487,9 +487,8 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
   }
 
   private[kestrel] def pack(state: PackRequest) {
-    val oldFilenames =
-      Journal.journalsBefore(queuePath, queueName, state.checkpoint.filename) ++
-      List(state.checkpoint.filename)
+    val oldFilenames = journalFilesBefore(state.checkpoint.filename) ++
+          List(state.checkpoint.filename)
     log.info("Packing journals for '%s': %s", queueName, oldFilenames.mkString(", "))
 
     val tempFile = uniqueFile("~~")
@@ -506,9 +505,27 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
     val packFile = new File(queuePath, state.checkpoint.filename + ".pack")
     tempFile.renameTo(packFile)
     calculateArchiveSize()
-    log.info("Packing '%s' done: %s", queueName, Journal.journalsForQueue(queuePath, queueName).mkString(", "))
+    log.info("Packing '%s' done: %s", queueName, allJournalFiles().mkString(", "))
 
     checkpoint = None
+  }
+
+  def archivedJournalFiles(): List[String] = {
+    this.synchronized {
+      Journal.archivedFilesForQueue(queuePath, queueName)
+    }
+  }
+
+  def allJournalFiles(): List[String] = {
+    archivedJournalFiles() ++ List(queueName)
+  }
+
+  def journalFilesBefore(filename: String): Seq[String] = {
+    allJournalFiles().takeWhile { _ != filename }
+  }
+
+  def journalFilesAfter(filename: String): Option[String] = {
+    allJournalFiles().dropWhile { _ != filename }.drop(1).headOption
   }
 }
 
@@ -572,6 +589,8 @@ class JournalPackerTask {
 }
 
 object Journal {
+  private val log = Logger.get(getClass)
+
   def getQueueNamesFromFolder(path: File): Set[String] = {
     path.listFiles().filter { file =>
       !file.isDirectory()
@@ -599,6 +618,7 @@ object Journal {
         (timestamp <= packTimestamp) && !(filename endsWith ".pack")
       }
       doomed.foreach { case (filename, timestamp) =>
+        log.info ("Deleting packed file %s", filename)
         new File(path, filename).delete()
       }
       val newFilename = packFilename.substring(0, packFilename.length - 5)

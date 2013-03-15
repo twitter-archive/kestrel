@@ -622,8 +622,8 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       case x => log.error("Unexpected item in journal: %s", x)
     }
 
-    log.info("Finished transaction journal for '%s' (%d items, %d bytes) xid=%d", name, queueLength,
-             journal.size, xidCounter)
+    log.info("Finished transaction journal for '%s' (%d items, %d bytes) xid=%d, removes=%d", name, queueLength,
+             journal.size, xidCounter, journal.removesSinceReadBehind)
     journal.open()
 
     // now, any unfinished transactions must be backed out.
