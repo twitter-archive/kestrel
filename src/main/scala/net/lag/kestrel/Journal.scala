@@ -510,21 +510,21 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
     checkpoint = None
   }
 
-  def archivedJournalFiles(): List[String] = {
+  private def archivedJournalFiles(): List[String] = {
     this.synchronized {
       Journal.archivedFilesForQueue(queuePath, queueName)
     }
   }
 
-  def allJournalFiles(): List[String] = {
+  private def allJournalFiles(): List[String] = {
     archivedJournalFiles() ++ List(queueName)
   }
 
-  def journalFilesBefore(filename: String): Seq[String] = {
+  private def journalFilesBefore(filename: String): Seq[String] = {
     allJournalFiles().takeWhile { _ != filename }
   }
 
-  def journalFilesAfter(filename: String): Option[String] = {
+  private def journalFilesAfter(filename: String): Option[String] = {
     allJournalFiles().dropWhile { _ != filename }.drop(1).headOption
   }
 }

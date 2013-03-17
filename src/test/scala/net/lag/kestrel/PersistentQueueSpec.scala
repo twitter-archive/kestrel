@@ -20,6 +20,7 @@ package net.lag.kestrel
 import java.io.{File, FileInputStream}
 import java.util.concurrent.{CountDownLatch, ScheduledThreadPoolExecutor}
 import scala.collection.mutable
+import scala.util.Random
 import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
 import com.twitter.ostrich.stats.Stats
@@ -45,6 +46,14 @@ class PersistentQueueSpec extends Specification
         f
       } finally {
         Journal.packer.shutdown()
+      }
+    }
+
+    def verifyQLengthAndDumpJournal (q: PersistentQueue, queueName: String, expectedLength: Int) {
+      if (q.length != expectedLength) {
+        // If the queue length doesn't meet the expectations, dump the journal so
+        // that we can debug the cause of the incorrect length
+        (q.length, dumpJournal(queueName)) mustEqual (expectedLength, "")
       }
     }
 
@@ -154,7 +163,7 @@ class PersistentQueueSpec extends Specification
             maxJournalSize = 256.bytes
             maxMemorySize = 64.bytes
           }.apply()
-          val queueName = "rotate-pack-journal" + Time.now
+          val queueName = "rotate-pack-journal" + Random.nextInt
           val q = new PersistentQueue(queueName, folderName, config, timer, scheduler)
           q.setup()
 
@@ -173,11 +182,7 @@ class PersistentQueueSpec extends Specification
 
           val q2 = new PersistentQueue(queueName, folderName, config, timer, scheduler)
           q2.setup()
-          if (q2.length != 16) {
-            // If the queue length doesn't meet the expectations, dump the journal so
-            // that we can debug the cause of the incorrect length
-            dumpJournal(queueName) mustEqual ""
-          }
+          verifyQLengthAndDumpJournal(q2, queueName, 16)
         }
       }
     }
@@ -190,7 +195,7 @@ class PersistentQueueSpec extends Specification
             maxJournalSize = 256.bytes
             maxMemorySize = 64.bytes
           }.apply()
-          val queueName = "rotate-pack-journal-recover" + Time.now
+          val queueName = "rotate-pack-journal-recover" + Random.nextInt
           val q = new PersistentQueue(queueName, folderName, config, timer, scheduler)
           q.setup()
 
@@ -209,11 +214,7 @@ class PersistentQueueSpec extends Specification
 
           val q2 = new PersistentQueue(queueName, folderName, config, timer, scheduler)
           q2.setup()
-          if (q2.length != 16) {
-            // If the queue length doesn't meet the expectations, dump the journal so
-            // that we can debug the cause of the incorrect length
-            dumpJournal(queueName) mustEqual ""
-          }
+          verifyQLengthAndDumpJournal(q2, queueName, 16)
 
           (1 to 31).foreach { _ =>
             q2.remove
@@ -224,15 +225,54 @@ class PersistentQueueSpec extends Specification
 
           val q3 = new PersistentQueue(queueName, folderName, config, timer, scheduler)
           q3.setup()
-          if (q3.length != 16) {
-            // If the queue length doesn't meet the expectations, dump the journal so
-            // that we can debug the cause of the incorrect length
-            dumpJournal(queueName) mustEqual ""
-          }
+          verifyQLengthAndDumpJournal(q3, queueName, 16)
         }
       }
     }
 
+    "rotate pack journals with remove tentative and then recover" in {
+      withTempFolder {
+        withJournalPacker {
+          val config = new QueueBuilder {
+            defaultJournalSize = 16.bytes
+            maxJournalSize = 256.bytes
+            maxMemorySize = 64.bytes
+          }.apply()
+          val queueName = "rotate-pack-journal-recover-tentative" + Random.nextInt
+          val q = new PersistentQueue(queueName, folderName, config, timer, scheduler)
+          q.setup()
+
+          // Set the checkpoint
+          (1 to 16).foreach { _ =>
+            q.add(new Array[Byte](32))
+          }
+          q.length mustEqual 16
+
+          (1 to 10).foreach { _ =>
+            val item = q.remove(true).get
+            q.confirmRemove(item.xid)
+            q.add(new Array[Byte](32))
+          }
+          q.length mustEqual 16
+          q.close()
+
+          val q2 = new PersistentQueue(queueName, folderName, config, timer, scheduler)
+          q2.setup()
+          verifyQLengthAndDumpJournal(q2, queueName, 16)
+
+          (1 to 31).foreach { _ =>
+            q2.remove
+            q2.add(new Array[Byte](32))
+          }
+          q2.length mustEqual 16
+          q2.close()
+
+          val q3 = new PersistentQueue(queueName, folderName, config, timer, scheduler)
+          q3.setup()
+          verifyQLengthAndDumpJournal(q3, queueName, 16)
+        }
+      }
+    }
 
     "rewrite journals when they exceed the defaultJournalSize and are empty" in {
       withTempFolder {
