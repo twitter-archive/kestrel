@@ -262,7 +262,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
     Journal.packer.shutdown()
 
     if (queueCollection ne null) {
-      queueCollection.shutdown()
+      queueCollection.shutdown(serverStatus.gracefulShutdown)
       queueCollection = null
     }
 

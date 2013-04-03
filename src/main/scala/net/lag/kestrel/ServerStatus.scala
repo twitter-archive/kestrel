@@ -29,26 +29,31 @@ abstract sealed class Status(val strictness: Int) {
   def stricterThan(that: Status) = (this.strictness - that.strictness) > 0
   def blocksReads: Boolean
   def blocksWrites: Boolean
+  def gracefulShutdown: Boolean
 }
 
 case object Down extends Status(100) {
   val blocksReads = true
   val blocksWrites = true
+  val gracefulShutdown = false
 }
 
 case object Quiescent extends Status(3) {
   val blocksReads = true
   val blocksWrites = true
+  val gracefulShutdown = true
 }
 
 case object ReadOnly extends Status(2) {
   val blocksReads = false
   val blocksWrites = true
+  val gracefulShutdown = true
 }
 
 case object Up extends Status(1) {
   val blocksReads = false
   val blocksWrites = false
+  val gracefulShutdown = false
 }
 
 object Status {
@@ -200,6 +205,7 @@ class ServerStatus(val statusFile: String, val timer: Timer, val defaultStatus: 
 
   def blockReads = currentOperationStatus.blocksReads
   def blockWrites = currentOperationStatus.blocksWrites
+  def gracefulShutdown = currentOperationStatus.gracefulShutdown
 
   /**
    * Mark this host as stopped.

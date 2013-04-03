@@ -456,6 +456,22 @@ class PersistentQueueSpec extends Specification
       }
     }
 
+    "rewrite empty queue on graceful shutdown" in {
+      withTempFolder {
+        val q = new PersistentQueue("gracefulshutdown", folderName, new QueueBuilder().apply(), timer, scheduler)
+        q.setup()
+        q.add("first".getBytes)
+        q.add("second".getBytes)
+        new String(q.remove().get.data) mustEqual "first"
+        new String(q.remove().get.data) mustEqual "second"
+        dumpJournal("gracefulshutdown") mustEqual "add(5:0:first), add(6:0:second), remove, remove"
+        q.close(true)
+        val q2 = new PersistentQueue("gracefulshutdown", folderName, new QueueBuilder().apply(), timer, scheduler)
+        q2.setup()
+        dumpJournal("gracefulshutdown") mustEqual ""
+      }
+    }
+
     "honor max_age" in {
       withTempFolder {
         Time.withCurrentTimeFrozen { time =>

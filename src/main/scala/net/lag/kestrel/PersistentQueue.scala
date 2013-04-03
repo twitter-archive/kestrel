@@ -502,7 +502,21 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
    * Close the queue's journal file. Not safe to call on an active queue.
    */
   def close() {
+    close(false)
+  }
+
+    /**
+   * Close the queue's journal file. Not safe to call on an active queue.
+   */
+  def close(gracefulShutdown: Boolean) {
     synchronized {
+      if (gracefulShutdown) {
+        if (0 == queueLength) {
+          log.info("Rewriting journal file for '%s' (qsize=0)", name)
+          journal.rewrite(openTransactionIds.map { openTransactions(_) }, queue)
+          totalRewrites.incr()
+        }
+      }
       closed = true
       if (config.keepJournal) journal.close()
       waiters.triggerAll()

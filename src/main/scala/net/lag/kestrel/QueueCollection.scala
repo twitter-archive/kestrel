@@ -372,14 +372,21 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
   /**
    * Shutdown this queue collection. Any future queue requests will fail.
    */
-  def shutdown(): Unit = synchronized {
+  def shutdown(): Unit = {
+    shutdown(false)
+  }
+
+  /**
+   * Shutdown this queue collection. Any future queue requests will fail.
+   */
+  def shutdown(gracefulShutdown: Boolean): Unit = synchronized {
     if (shuttingDown) {
       return
     }
     shuttingDown = true
     for ((name, q) <- queues) {
       // synchronous, so the journals are all officially closed before we return.
-      q.close
+      q.close(gracefulShutdown)
     }
     queues.clear
   }
