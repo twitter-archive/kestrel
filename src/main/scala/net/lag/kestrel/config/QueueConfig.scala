@@ -190,7 +190,7 @@ class QueueBuilder {
    * When true, operations on the queue generate trace output. Used to diagnose
    * client misbehavior/bugs
    */
-  var disableAggressiveRewrites: ConfigValue[Boolean] = Default(false)
+  var disableAggressiveRewrites: ConfigValue[Boolean] = Default(true)
 
   def apply(): QueueConfig = apply(None)
 
