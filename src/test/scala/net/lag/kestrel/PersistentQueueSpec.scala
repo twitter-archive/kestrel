@@ -404,6 +404,109 @@ class PersistentQueueSpec extends Specification
       }
     }
 
+    "allow rewrites for empty queue after some time" in {
+      withTempFolder {
+        Time.withCurrentTimeFrozen { time =>
+          val config = new QueueBuilder {
+            defaultJournalSize = 160.bytes
+            maxJournalSize = 1024.bytes
+            maxMemorySize = 1024.bytes
+            minJournalCompactDelay = 5.seconds
+          }.apply()
+          val q = new PersistentQueue("aggressiverewritingemptyqueueopentran", folderName, config, timer, scheduler)
+          q.setup()
+
+          // Leave 8 open transactions so that the journal rewrites
+          // results in no shrinkage
+          (1 to 8).foreach { _ =>
+            q.add(new Array[Byte](1))
+            q.remove(true)
+          }
+
+          q.totalRewrites() mustEqual 1
+
+          (1 to 8).foreach { _ =>
+            q.add(new Array[Byte](1))
+            q.remove
+          }
+          q.totalRewrites() mustEqual 1
+
+          time.advance(5.seconds)
+          timer.timeout()
+
+          q.add(new Array[Byte](1))
+          q.remove
+          q.totalRewrites() mustEqual 2
+        }
+      }
+    }
+
+    "continue aggressive rewrites for empty queue if rewrite frees up space" in {
+      withTempFolder {
+        Time.withCurrentTimeFrozen { time =>
+          val config = new QueueBuilder {
+            defaultJournalSize = 160.bytes
+            maxJournalSize = 1024.bytes
+            maxMemorySize = 1024.bytes
+            minJournalCompactDelay = 5.seconds
+          }.apply()
+          val q = new PersistentQueue("aggressiverewritingemptyqueue", folderName, config, timer, scheduler)
+          q.setup()
+
+          // Leave 8 open transactions so that the journal rewrites
+          // results in no shrinkage
+          (1 to 8).foreach { _ =>
+            q.add(new Array[Byte](1))
+            q.remove
+          }
+
+          q.totalRewrites() mustEqual 1
+
+          (1 to 8).foreach { _ =>
+            q.add(new Array[Byte](1))
+            q.remove
+          }
+          q.totalRewrites() mustEqual 2
+        }
+      }
+    }
+
+
+    "aggressive rewrites" in {
+      withTempFolder {
+        Time.withCurrentTimeFrozen { time =>
+          val config = new QueueBuilder {
+            defaultJournalSize = 160.bytes
+            maxJournalSize = 256.bytes
+            maxMemorySize = 256.bytes
+            minJournalCompactDelay = 5.seconds
+            disableAggressiveRewrites = false
+          }.apply()
+          val q = new PersistentQueue("aggresiverewriting", folderName, config, timer, scheduler)
+          q.setup()
+
+          // serialized QItem = 1 + 21 bytes, 8 are 176.bytes:
+          (1 to 8).foreach { _ =>
+            q.add(new Array[Byte](1))
+            q.remove
+          }
+
+          q.totalRewrites() mustEqual 1
+
+          (1 to 8).foreach { _ =>
+            q.add(new Array[Byte](1))
+            q.remove
+          }
+
+          q.totalRewrites() mustEqual 2
+
+          time.advance(5.seconds)
+          timer.timeout()
+        }
+      }
+    }
+
+
     "recover the journal after a restart" in {
       withTempFolder {
         val q = new PersistentQueue("rolling", folderName, new QueueBuilder().apply(), timer, scheduler)
