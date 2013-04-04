@@ -458,17 +458,53 @@ class PersistentQueueSpec extends Specification
 
     "rewrite empty queue on graceful shutdown" in {
       withTempFolder {
-        val q = new PersistentQueue("gracefulshutdown", folderName, new QueueBuilder().apply(), timer, scheduler)
+        val q = new PersistentQueue("gracefulshutdownempty", folderName, new QueueBuilder().apply(), timer, scheduler)
         q.setup()
         q.add("first".getBytes)
         q.add("second".getBytes)
         new String(q.remove().get.data) mustEqual "first"
         new String(q.remove().get.data) mustEqual "second"
-        dumpJournal("gracefulshutdown") mustEqual "add(5:0:first), add(6:0:second), remove, remove"
+        dumpJournal("gracefulshutdownempty") mustEqual "add(5:0:first), add(6:0:second), remove, remove"
         q.close(true)
-        val q2 = new PersistentQueue("gracefulshutdown", folderName, new QueueBuilder().apply(), timer, scheduler)
+        val q2 = new PersistentQueue("gracefulshutdownempty", folderName, new QueueBuilder().apply(), timer, scheduler)
         q2.setup()
-        dumpJournal("gracefulshutdown") mustEqual ""
+        dumpJournal("gracefulshutdownempty") mustEqual ""
+      }
+    }
+
+    "not write non-empty queue on graceful shutdown" in {
+      withTempFolder {
+        val q = new PersistentQueue("gracefulshutdownnonempty", folderName, new QueueBuilder().apply(), timer, scheduler)
+        q.setup()
+        q.add("first".getBytes)
+        q.add("second".getBytes)
+        new String(q.remove().get.data) mustEqual "first"
+        dumpJournal("gracefulshutdownnonempty") mustEqual "add(5:0:first), add(6:0:second), remove"
+        q.close(true)
+        val q2 = new PersistentQueue("gracefulshutdownnonempty", folderName, new QueueBuilder().apply(), timer, scheduler)
+        q2.setup()
+        dumpJournal("gracefulshutdownnonempty") mustEqual "add(5:0:first), add(6:0:second), remove"
+        new String(q2.remove().get.data) mustEqual "second"
+      }
+    }
+
+    "rewrite empty queue with open transactions on graceful shutdown" in {
+      withTempFolder {
+        val q = new PersistentQueue("gracefulshutdownopentran", folderName, new QueueBuilder().apply(), timer, scheduler)
+        q.setup()
+        q.add("first".getBytes)
+        q.add("second".getBytes)
+        val first = q.remove(true).get
+        new String(first.data) mustEqual "first"
+        q.confirmRemove(first.xid)
+
+        val second = q.remove(true).get
+        new String(second.data) mustEqual "second"
+        q.close(true)
+        dumpJournal("gracefulshutdownopentran") mustEqual "add(6:0:second), remove-tentative(2)"
+        val q2 = new PersistentQueue("gracefulshutdownopentran", folderName, new QueueBuilder().apply(), timer, scheduler)
+        q2.setup()
+        dumpJournal("gracefulshutdownopentran") mustEqual "add(6:0:second), remove-tentative(2), unremove(2)"
       }
     }
 
