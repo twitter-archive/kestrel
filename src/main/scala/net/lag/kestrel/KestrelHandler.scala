@@ -25,6 +25,7 @@ import com.twitter.util._
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable
 import scala.collection.Set
+import java.util.concurrent.CancellationException
 
 class TooManyOpenReadsException extends Exception("Too many open reads.")
 object TooManyOpenReadsException extends TooManyOpenReadsException
@@ -221,6 +222,17 @@ abstract class KestrelHandler(
     }
     val startTime = Time.now
     val future = queues.remove(key, timeout, opening, peeking, Some(sessionDescription))
+
+    // Add an exception handler to handle the cancellation exceptions
+    future.onFailure {
+        case _: CancellationException | _: FutureCancelledException =>
+          // if the connection is closed, pre-emptively return un-acked items.
+          abortAnyOpenRead(Kestrel.traceSessions)
+        case e =>
+          // There is no clean-up action here, simply log the fact that this happened
+          log.info("Exception thrown in get %s", e)
+    }
+
     waitingFor = Some(future)
     future.map { itemOption =>
       waitingFor = None
@@ -229,10 +241,6 @@ abstract class KestrelHandler(
         if (opening) addPendingRead(key, item.xid)
       }
       itemOption
-    }
-    future.onCancellation {
-      // if the connection is closed, pre-emptively return un-acked items.
-      abortAnyOpenRead(Kestrel.traceSessions)
     }
     future
   }

@@ -117,9 +117,9 @@ class TextHandler(
     "%s:%d".format(address.getAddress.getHostAddress, address.getPort)
   }
 
-  override def release() {
+  override def close(deadline: Time) = {
     handler.finish()
-    super.release()
+    super.close(deadline)
   }
 
   def apply(request: TextRequest): Future[TextResponse] = {

@@ -412,7 +412,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
           // checking future.isCancelled is a race, but only means that an item may be removed &
           // then un-removed at a higher level if the connection is closed. it's an optimization
           // to let un-acked items get returned before this timeout.
-          if (promise.isCancelled) {
+          if (promise.isInterrupted.isDefined) {
             promise.setValue(None)
             waiters.trigger()
           } else {
@@ -427,7 +427,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
           promise.setValue(None)
         }
         val w = waiters.add(deadline.get, onTrigger, onTimeout)
-        promise.onCancellation { waiters.remove(w) }
+        promise.setInterruptHandler { case _ => waiters.remove(w) }
         false
       } else {
         true

@@ -44,9 +44,9 @@ class MemcacheHandler(
                                    serverStatus) with SimplePendingReads
   log.debug("New session %d from %s", sessionId, clientDescription)
 
-  override def release() {
+  override def close(deadline: Time) = {
     handler.finish()
-    super.release()
+    super.close(deadline)
   }
 
   protected def clientDescription: String = {

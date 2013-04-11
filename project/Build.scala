@@ -3,7 +3,7 @@ import Keys._
 import com.twitter.sbt._
 
 object Kestrel extends Build {
-  val finagleVersion = "5.3.23"
+  val finagleVersion = "6.1.0"
 
   lazy val root = Project(
     id = "kestrel",
