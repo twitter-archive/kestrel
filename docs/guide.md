@@ -1,4 +1,3 @@
-
 A working guide to kestrel
 ==========================
 
@@ -55,11 +54,11 @@ queues. The fields on `KestrelConfig` are documented here with their default
 values:
 [KestrelConfig](http://robey.github.com/kestrel/api/main/api/net/lag/kestrel/config/KestrelConfig.html)
 
-To confirm the current configuration of each queue, send "dump_config" to
+To confirm the current configuration of each queue, send "dump_stats" to
 a server (which can be done over telnet).
 
 To reload the config file on a running server, send "reload" the same way.
-You should immediately see the changes in "dump_config", to confirm. Reloading
+You should immediately see the changes in "dump_stats", to confirm. Reloading
 will only affect queue and alias configuration, not global server configuration.
 To change the server configuration, restart the server.
 
