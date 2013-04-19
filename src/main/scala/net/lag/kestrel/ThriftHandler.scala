@@ -20,7 +20,7 @@ package net.lag.kestrel
 import com.twitter.conversions.time._
 import com.twitter.finagle.ClientConnection
 import com.twitter.logging.Logger
-import com.twitter.util.{Duration, Future, Promise, Time, Timer, TimerTask}
+import com.twitter.util.{Duration, Future, Promise, Timer, TimerTask}
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
@@ -32,9 +32,9 @@ import scala.collection.Set
 class ThriftFinagledService(val handler: ThriftHandler, val protocolFactory: TProtocolFactory)
   extends thrift.Kestrel.FinagledService(handler, protocolFactory) {
 
-  override def close(deadline: Time) = {
+  override def release() {
     handler.release()
-    super.close(deadline)
+    super.release()
   }
 }
 
