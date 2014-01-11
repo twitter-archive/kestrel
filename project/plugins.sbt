@@ -10,7 +10,7 @@ resolvers <<= (resolvers) { r =>
   } getOrElse {
     r ++ Seq(
       "twitter.com" at "http://maven.twttr.com/",
-      "scala-tools" at "http://scala-tools.org/repo-releases/",
+      "scala-tools" at "http://oss.sonatype.org/content/groups/scala-tools/",
       "maven" at "http://repo1.maven.org/maven2/",
       "freemarker" at "http://freemarker.sourceforge.net/maven2/"
     )
