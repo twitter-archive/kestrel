@@ -551,6 +551,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     putBytes.getAndAdd(item.data.length)
     queueSize += item.data.length
     queueLength += 1
+    _currentAge = item.addTime
   }
 
   private def _peek(): Option[QItem] = {
@@ -569,7 +570,6 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     _memoryBytes -= len
     queueLength -= 1
     fillReadBehind()
-    _currentAge = item.addTime
     if (transaction) {
       item.xid = xid.getOrElse { nextXid() }
       openTransactions(item.xid) = item
