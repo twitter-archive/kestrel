@@ -129,9 +129,6 @@ The startup script logs extensive GC information to a file named `stdout` in
 the log folder. If kestrel has problems starting up (before it can initialize
 logging), it will usually appear in `error` in the same folder.
 
-Options dependency:
-   specs :https://github.com/vongosling/specs/tree/specs-2.8.0/src/main/scala/org/specs
-
 
 Configuration
 -------------
