@@ -52,6 +52,10 @@ new KestrelConfig {
   } :: new QueueBuilder {
     name = "spam0"
   } :: new QueueBuilder {
+    name = "spam-thrift"
+    whiteListClientIdForDequeue = "load-test"
+    whiteListClientIdForEnqueue = "load-test"
+  } :: new QueueBuilder {
     name = "hello"
     fanoutOnly = true
   } :: new QueueBuilder {

@@ -20,7 +20,7 @@ package net.lag.kestrel
 import com.twitter.conversions.time._
 import com.twitter.finagle.ClientConnection
 import com.twitter.logging.Logger
-import com.twitter.util.{Duration, Future, Promise, Timer, TimerTask}
+import com.twitter.util.{Future, Promise, Time, Timer, TimerTask}
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
@@ -29,12 +29,12 @@ import org.apache.thrift.protocol.TProtocolFactory
 import scala.collection.mutable
 import scala.collection.Set
 
-class ThriftFinagledService(val handler: ThriftHandler, val protocolFactory: TProtocolFactory)
+class ThriftFinagledService(val handler: ThriftHandler, protocolFactory: TProtocolFactory)
   extends thrift.Kestrel.FinagledService(handler, protocolFactory) {
 
-  override def release() {
+  override def close(deadline: Time) = {
     handler.release()
-    super.release()
+    Future.Unit
   }
 }
 
@@ -161,7 +161,7 @@ class ThriftHandler (
 
   protected def clientDescription: String = {
     val address = connection.remoteAddress.asInstanceOf[InetSocketAddress]
-    "%s:%d".format(address.getHostString, address.getPort)
+    "%s:%d".format(address.getHostName, address.getPort)
   }
 
   def put(queueName: String, items: Seq[ByteBuffer], expirationMsec: Int): Future[Int] = {

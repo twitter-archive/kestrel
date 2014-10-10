@@ -18,10 +18,10 @@ import java.util.concurrent.ScheduledThreadPoolExecutor
 import com.twitter.conversions.time._
 import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{TempFolder, Time}
-import org.specs.Specification
+import org.specs.SpecificationWithJUnit
 import config._
 
-class AliasedQueueSpec extends Specification with TempFolder {
+class AliasedQueueSpec extends SpecificationWithJUnit with TempFolder {
 
   private var qc: QueueCollection = null
   private var aq: AliasedQueue = null

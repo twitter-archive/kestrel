@@ -6,6 +6,7 @@ require 'optparse'
 require 'socket'
 require 'net/http'
 require 'json'
+require 'cgi'
 
 # FIXME this really only works inside twitter. it would be nice to support
 # a general serverset interface (or opensource colony).
@@ -49,7 +50,7 @@ end
 def fetch_stats(hostname, port, data)
   verbose "--- Fetching stats from #{hostname}:#{port}"
   begin
-    stats = JSON.parse Net::HTTP.get URI.parse("http://#{hostname}:#{port}/stats.json?period=5")
+    stats = JSON.parse Net::HTTP.get URI.parse("http://#{hostname}:#{port}/stats.json?period=60")
   rescue
     puts "WARNING: Unable to fetch stats for #{hostname}:#{port}"
     return
@@ -88,7 +89,8 @@ end
 def fetch_all
   data = new_queue_stats
   $options[:server_list].each do |server|
-    fetch_stats(server, $options[:port], data)
+    (host, port) = get_server_parts(server, $options[:port])
+    fetch_stats(host, port, data)
   end
   data
 end
@@ -97,7 +99,8 @@ def fetch_all_by_host
   data = {}
   $options[:server_list].each do |server|
     data[server] = new_queue_stats
-    fetch_stats(server, $options[:port], data[server])
+    (host, port) = get_server_parts(server, $options[:port])
+    fetch_stats(host, port, data[server])
   end
   data
 end
@@ -155,8 +158,9 @@ end
 
 def broadcast(command, noun)
   $options[:server_list].each do |server|
-    with_server(server, $options[:memcache_port]) do |sock|
-      print_status "--- #{server}:#{$options[:memcache_port]} ... "
+    (host, port) = get_server_parts(server, $options[:memcache_port])
+    with_server(host, port) do |sock|
+      print_status "--- #{host}:#{port} ... "
       if(noun)
         sock.puts("#{command} #{noun}")
       else
@@ -168,12 +172,30 @@ def broadcast(command, noun)
   puts "Done."
 end
 
-def get_colony_servers
-  if ($options[:managed])
-    Net::HTTP.get URI.parse("http://colony.#{$options[:datacenter]}.twitter.com:#{$colony_port}/query?q=(mo%20audubon.role.#{$options[:role]}%20%26%20mo%20audubon.managed.true)")
-  else
-    Net::HTTP.get URI.parse("http://colony.#{$options[:datacenter]}.twitter.com:#{$colony_port}/query?q=mo+audubon.role.#{$options[:role]}")
+def get_server_parts(server, default)
+  server_parts = server.split(":")
+  port = default
+  if server_parts.length > 1
+    port = server_parts[1]
   end
+  return [server_parts[0], port]
+end
+
+def get_colony_servers
+  base_url = "http://colony.#{$options[:datacenter]}.twitter.com:#{$colony_port}"
+  query = ""
+  if ($options[:query])
+    query = $options[:query]
+  elsif ($options[:role])
+    query = "mo audubon.role.#{$options[:role]}"
+  elsif ($options[:group])
+    query = "mo #{$options[:group]}"
+  end
+  if ($options[:managed])
+    query = "#{query} & mo audubon.managed.true"
+  end
+  query = CGI::escape(query)
+  Net::HTTP.get URI.parse("#{base_url}/query?q=(#{query})")
 end
 
 def delete_all(queue_name)
@@ -232,12 +254,13 @@ end
 
 def show_versions
   $options[:server_list].each do |server|
-    verbose "--- Fetching version from #{server}:#{$options[:memcache_port]}"
-    with_server(server, $options[:memcache_port]) do |sock|
+    (host, port) = get_server_parts(server, $options[:memcache_port])
+    verbose "--- Fetching version from #{host}:#{port}"
+    with_server(host, port) do |sock|
       sock.puts("version")
       line = sock.gets.chomp
       line =~ /VERSION (.*)/
-      puts "#{server}: #{$1}"
+      puts "#{host}: #{$1}"
     end
   end
 end
@@ -271,6 +294,12 @@ parser = OptionParser.new do |opts|
   end
   opts.on("-r", "--role=ROLE", "load kestrel server list from colony audubon role (requires colony)") do |role|
     $options[:role] = role
+  end
+  opts.on("-g", "--group=GROUP", "load kestrel server list from colony group (requires colony)") do |group|
+    $options[:group] = group
+  end
+  opts.on("-q", "--colony_query=QUERY", "load kestrel server list from colony query (requires colony)") do |query|
+    $options[:query] = query
   end
   opts.on("-v", "--verbose", "print verbose debugging info as we work") do
     $options[:verbose] = true
@@ -313,9 +342,16 @@ if ARGV.size < 1
   exit 1
 end
 
-if $options[:role]
-    data = get_colony_servers
-    $options[:server_list] = JSON.parse(data).values.flatten
+if $options[:query]
+  data = get_colony_servers
+  $options[:server_list] = JSON.parse(data).values.flatten
+  abort("managed flag can't be set with colony query flag") if $options[:managed]
+elsif $options[:role]
+  data = get_colony_servers
+  $options[:server_list] = JSON.parse(data).values.flatten
+elsif $options[:group]
+  data = get_colony_servers
+  $options[:server_list] = JSON.parse(data).values.flatten
 elsif $options[:singlehost]
   $options[:server_list] = Array[$options[:singlehost]]
 else

@@ -49,21 +49,31 @@ object JournalItem {
   case object EndOfFile extends JournalItem
 }
 
+abstract class Failpoint()
+object Failpoint {
+  case object Default extends Failpoint
+  case object RewriteFPBeforePack extends Failpoint
+  case object RewriteFPAfterPack extends Failpoint
+  case object RewriteFPAfterDelete extends Failpoint
+}
+
 /**
  * Codes for working with the journal file for a PersistentQueue.
  */
-class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecutorService, syncJournal: Duration) {
+class Journal(queuePath: PersistentStreamContainer, queueName: String, syncPeriod: Duration) {
   import Journal._
 
   private val log = Logger.get(getClass)
-
-  private val queueFile = new File(queuePath, queueName)
-
-  private var writer: PeriodicSyncFile = null
-  private var reader: Option[FileChannel] = None
+  private var writer: PersistentStreamWriter = null
+  private var reader: Option[PersistentStreamReader] = None
   private var readerFilename: Option[String] = None
-  private var replayer: Option[FileChannel] = None
+  private var replayer: Option[PersistentStreamReader] = None
   private var replayerFilename: Option[String] = None
+
+  private def queueFile = getStream(queueName)
+
+  // TODO: This should eventually be removed
+  queueFile
 
   // size of the current file, so far
   var size: Long = 0
@@ -92,13 +102,17 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
   private val CMD_CONTINUE = 8
   private val CMD_REMOVE_TENTATIVE_XID = 9
 
-  def this(fullPath: String, syncJournal: Duration) =
-    this(new File(fullPath).getParentFile, new File(fullPath).getName, null, syncJournal)
+  private def open(stream: PersistentStream) {
+    writer = stream.getWriter
+  }
 
-  def this(fullPath: String) = this(fullPath, Duration.MaxValue)
-
-  private def open(file: File) {
-    writer = new PeriodicSyncFile(file, syncScheduler, syncJournal)
+  // Since PersistentStreamContainer#getStream has the semantics of
+  // create if not exists
+  // We should at most have one outstanding call to getStream for a given queue
+  private def getStream(streamName: String) = {
+    synchronized {
+      queuePath.getStream(streamName, syncPeriod)
+    }
   }
 
   def open() {
@@ -114,49 +128,65 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
   def calculateArchiveSize() {
     val files = archivedJournalFiles()
     archivedSize = files.foldLeft(0L) { (sum, filename) =>
-      sum + new File(queuePath, filename).length()
+      sum + getStream(filename).length
     }
   }
 
-  private def uniqueFile(infix: String, suffix: String = ""): File = {
-    var file = new File(queuePath, queueName + infix + Time.now.inMilliseconds + suffix)
-    while (!file.createNewFile()) {
-      Thread.sleep(1)
-      file = new File(queuePath, queueName + infix + Time.now.inMilliseconds + suffix)
-    }
-    file
+  private def uniqueFile(infix: String, suffix: String = ""): String = {
+    queuePath.uniqueStreamName(queueName, infix, suffix)
   }
 
   def rotate(reservedItems: Seq[QItem], setCheckpoint: Boolean): Option[Checkpoint] = {
     writer.close()
     val rotatedFile = uniqueFile(".")
-    new File(queuePath, queueName).renameTo(rotatedFile)
+    queuePath.renameStream(queueName, rotatedFile)
     size = 0
     calculateArchiveSize()
     open()
 
     if (readerFilename == Some(queueName)) {
-      readerFilename = Some(rotatedFile.getName)
+      readerFilename = Some(rotatedFile)
     }
 
     if (setCheckpoint && !checkpoint.isDefined) {
-      checkpoint = Some(Checkpoint(rotatedFile.getName, reservedItems))
+      checkpoint = Some(Checkpoint(rotatedFile, reservedItems))
     }
     checkpoint
   }
 
   def rewrite(reservedItems: Seq[QItem], queue: Iterable[QItem]) {
+    rewrite(reservedItems, queue, Failpoint.Default)
+  }
+
+  // Directly invoked only by tests
+  def rewrite(reservedItems: Seq[QItem], queue: Iterable[QItem], failPoint: Failpoint) {
     writer.close()
     val tempFile = uniqueFile("~~")
-    open(tempFile)
+    open(getStream(tempFile))
     dump(reservedItems, queue)
     writer.close()
 
+    if (Failpoint.RewriteFPBeforePack == failPoint) return
+
     val packFile = uniqueFile(".", ".pack")
-    tempFile.renameTo(packFile)
+    queuePath.renameStream(tempFile, packFile)
+
     // cleanup the .pack file:
     val files = Journal.archivedFilesForQueue(queuePath, queueName)
-    new File(queuePath, files(0)).renameTo(queueFile)
+
+    // TODO: Failure at this point causes incorrect recovery =>
+    // TODO: need to fix this
+    if (Failpoint.RewriteFPAfterPack == failPoint) return
+
+    // Making the delete of the old queue file explicit.
+    // Its fine if fail after this point before renaming the file.
+    // This leaves the journal in no different state that what would
+    // happen if we failed in the middle of journal rotation
+    queuePath.deleteStream(queueName)
+
+    if (Failpoint.RewriteFPAfterDelete == failPoint) return
+
+    queuePath.renameStream(files(0), queueName)
     calculateArchiveSize()
     open()
   }
@@ -207,9 +237,9 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
     try {
       close()
       archivedJournalFiles().foreach { filename =>
-        new File(queuePath, filename).delete()
+        queuePath.deleteStream(filename)
       }
-      queueFile.delete()
+      queuePath.deleteStream(queueName)
     } catch {
       case _ =>
     }
@@ -253,10 +283,19 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
   }
 
   def startReadBehind() {
-    val pos = if (replayer.isDefined) replayer.get.position else writer.position
+    val pos = if (replayer.isDefined) {
+      replayer.get.position
+    } else {
+      // Tests are mostly the reason for including this fsync
+      // In practice, its unlikely for a queue to keep
+      // switching in and out of readbehind, so it adds no
+      // performance penalty
+      writer.force(false)
+      writer.position
+    }
     val filename = if (replayerFilename.isDefined) replayerFilename.get else queueName
-    val rj = new FileInputStream(new File(queuePath, filename)).getChannel
-    rj.position(pos)
+    val rj = getStream(filename).getReader
+    rj.positionAt(pos)
     reader = Some(rj)
     readerFilename = Some(filename)
     removesSinceReadBehind = 0
@@ -275,7 +314,7 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
         reader = None
         readerFilename = None
       } else {
-        readJournalEntry(rj) match {
+        readJournalEntry(rj, readerFilename.get == queueName) match {
           case (JournalItem.Add(item), _) =>
             gotItem(item)
           case (JournalItem.Remove, _) =>
@@ -288,9 +327,18 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
           case (JournalItem.EndOfFile, _) =>
             // move to next file and try again.
             val oldFilename = readerFilename.get
-            rj.close()
             readerFilename = journalFilesAfter(readerFilename.get)
-            reader = Some(new FileInputStream(new File(queuePath, readerFilename.get)).getChannel)
+            if (readerFilename.isEmpty) {
+              // in theory, if we caught up on current journal file, we should enter
+              // (rj.position = pos && readerFilename.get == filename) branch and get ouf of readbehind
+              // but it seems that we reach EndOfFile on current writing journal file, which cause None.get
+              // to throw NoSuchElementException
+              log.warning("Read-behind is trying to move over journal file %s : reader(%s, position = %d), "
+                          + " writer(%s, position = %d), journals = (%s)",
+                          oldFilename, oldFilename, rj.position, filename, pos, allJournalFiles())
+            }
+            rj.close()
+            reader = Some(getStream(readerFilename.get).getReader)
             log.info("Read-behind on '%s' moving from file %s to %s", queueName, oldFilename, readerFilename.get)
             if (checkpoint.isDefined && checkpoint.get.filename == oldFilename) {
               gotCheckpoint(checkpoint.get)
@@ -303,29 +351,37 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
   }
 
   def replay(f: JournalItem => Unit) {
-    // first, erase any lingering temp files.
-    queuePath.list().filter {
+    replay(false, f)
+  }
+
+  def replay(recover: Boolean, f: JournalItem => Unit) {
+      // first, erase any lingering temp files.
+    queuePath.listStreams.filter {
       _.startsWith(queueName + "~~")
     }.foreach { filename =>
-      new File(queuePath, filename).delete()
+      queuePath.deleteStream(filename)
     }
     allJournalFiles().foreach { filename =>
-      replayFile(queueName, filename)(f)
+      replayFile(queueName, filename, recover)(f)
     }
   }
 
-  def replayFile(name: String, filename: String)(f: JournalItem => Unit): Unit = {
+  def replayFile(name: String, filename: String, recover: Boolean)(f: JournalItem => Unit): Unit = {
     log.info("Replaying '%s' file %s", name, filename)
     size = 0
     var lastUpdate = 0L
     try {
-      val in = new FileInputStream(new File(queuePath, filename).getCanonicalPath).getChannel
+      val stream = getStream(filename)
+      if (recover) {
+        stream.recover()
+      }
+      val in = stream.getReader
       replayer = Some(in)
       replayerFilename = Some(filename)
       try {
         var done = false
         do {
-          readJournalEntry(in) match {
+          readJournalEntry(in, false) match {
             case (JournalItem.EndOfFile, _) =>
               done = true
             case (x, itemsize) =>
@@ -352,27 +408,45 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
         // this can happen if the server hardware died abruptly in the middle
         // of writing a journal. not awesome but we should recover.
     }
-    replayer = None
+    // If we did open a reader then we would have assigned a value to the replayer
+    // close this reader
+    replayer.foreach { _.close() }
+    replayer  = None
     replayerFilename = None
   }
 
   private def truncateJournal(position: Long) {
-    val trancateWriter = new FileOutputStream(queueFile, true).getChannel
+    val truncateWriter = queueFile.getWriter
     try {
-      trancateWriter.truncate(position)
+      truncateWriter.truncate(position)
+    } catch {
+      case ex: Exception => log.error(ex, "journal truncate failed")
     } finally {
-      trancateWriter.close()
+      truncateWriter.close()
     }
   }
 
-  def readJournalEntry(in: FileChannel): (JournalItem, Int) = {
-    byteBuffer.rewind
-    byteBuffer.limit(1)
-    val lastPosition = in.position
+  def readJournalEntry(in: PersistentStreamReader, forceOnEmpty: Boolean): (JournalItem, Int) = {
+    var shouldFSync: Boolean = forceOnEmpty
+    var tryAgain: Boolean = false
+    var lastPosition: Long = in.position
     var x: Int = 0
     do {
-      x = in.read(byteBuffer)
-    } while (byteBuffer.position < byteBuffer.limit && x >= 0)
+      tryAgain = false
+      byteBuffer.rewind
+      byteBuffer.limit(1)
+      lastPosition = in.position
+      x = 0
+      do {
+        x = in.read(byteBuffer)
+      } while (byteBuffer.position < byteBuffer.limit && x >= 0)
+
+      if (shouldFSync && (x < 0)) {
+        writer.force(false)
+        shouldFSync = false
+        tryAgain = true
+      }
+    } while (tryAgain)
 
     if (x < 0) {
       (JournalItem.EndOfFile, 0)
@@ -423,9 +497,9 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
   }
 
   def walk(): Iterator[(JournalItem, Int)] = {
-    val in = new FileInputStream(new File(queuePath, queueName)).getChannel
+    val in = getStream(queueName).getReader
     def next(): Stream[(JournalItem, Int)] = {
-      readJournalEntry(in) match {
+      readJournalEntry(in, false) match {
         case (JournalItem.EndOfFile, _) =>
           in.close()
           Stream.Empty
@@ -436,7 +510,7 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
     next().iterator
   }
 
-  private def readBlock(in: FileChannel): Array[Byte] = {
+  private def readBlock(in: PersistentStreamReader): Array[Byte] = {
     val size = readInt(in)
     val data = new Array[Byte](size)
     val dataBuffer = ByteBuffer.wrap(data)
@@ -451,7 +525,7 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
     data
   }
 
-  private def readInt(in: FileChannel): Int = {
+  private def readInt(in: PersistentStreamReader): Int = {
     byteBuffer.rewind
     byteBuffer.limit(4)
     var x: Int = 0
@@ -486,24 +560,27 @@ class Journal(queuePath: File, queueName: String, syncScheduler: ScheduledExecut
     }
   }
 
+  def persistChanges() {
+    writer.force(false)
+  }
+
   private[kestrel] def pack(state: PackRequest) {
     val oldFilenames = journalFilesBefore(state.checkpoint.filename) ++
           List(state.checkpoint.filename)
     log.info("Packing journals for '%s': %s", queueName, oldFilenames.mkString(", "))
 
     val tempFile = uniqueFile("~~")
-    val newJournal = new Journal(tempFile.getAbsolutePath)
+    val newJournal = new Journal(queuePath, tempFile, syncPeriod)
     newJournal.open()
     newJournal.dump(state.checkpoint.reservedItems, state.openItems, state.pentUpDeletes, state.queueState)
     newJournal.close()
 
     // Flush the updates to the current journal so that any removes that have been accounted
     // for in the pack are persisted before the packed file replaces existing files
-    writer.fsync()
+    writer.force(false)
 
     log.info("Packing '%s' -- erasing old files.", queueName)
-    val packFile = new File(queuePath, state.checkpoint.filename + ".pack")
-    tempFile.renameTo(packFile)
+    queuePath.renameStream(tempFile, state.checkpoint.filename + ".pack")
     calculateArchiveSize()
     log.info("Packing '%s' done: %s", queueName, allJournalFiles().mkString(", "))
 
@@ -591,16 +668,8 @@ class JournalPackerTask {
 object Journal {
   private val log = Logger.get(getClass)
 
-  def getQueueNamesFromFolder(path: File): Set[String] = {
-    path.listFiles().filter { file =>
-      !file.isDirectory()
-    }.map { file =>
-      file.getName
-    }.filter { name =>
-      !(name contains "~~")
-    }.map { name =>
-      name.split('.')(0)
-    }.toSet
+  def getQueueNamesFromFolder(streamContainer: PersistentStreamContainer): Set[String] = {
+    streamContainer.listQueues
   }
 
   /**
@@ -608,7 +677,7 @@ object Journal {
    * of every journal file with a lesser-or-equal timestamp. If we find such a file, it's safe and
    * race-free to erase the older files and move the .pack file into place.
    */
-  private def cleanUpPackedFiles(path: File, files: List[(String, Long)]): Boolean = {
+  private def cleanUpPackedFiles(path: PersistentStreamContainer, files: List[(String, Long)]): Boolean = {
     val packFile = files.find { case (filename, timestamp) =>
       filename endsWith ".pack"
     }
@@ -619,10 +688,10 @@ object Journal {
       }
       doomed.foreach { case (filename, timestamp) =>
         log.info ("Deleting packed file %s", filename)
-        new File(path, filename).delete()
+        path.deleteStream(filename)
       }
       val newFilename = packFilename.substring(0, packFilename.length - 5)
-      new File(path, packFilename).renameTo(new File(path, newFilename))
+      path.renameStream(packFilename, newFilename)
       true
     } else {
       false
@@ -634,8 +703,8 @@ object Journal {
    * timestamp), and erase the remains of any unfinished business that we find along the way.
    */
   @tailrec
-  def archivedFilesForQueue(path: File, queueName: String): List[String] = {
-    val totalFiles = path.list()
+  def archivedFilesForQueue(path: PersistentStreamContainer, queueName: String): List[String] = {
+    val totalFiles = path.listStreams
     if (totalFiles eq null) {
       // directory is gone.
       Nil
@@ -655,18 +724,6 @@ object Journal {
         timedFiles.map { case (filename, timestamp) => filename }
       }
     }
-  }
-
-  def journalsForQueue(path: File, queueName: String): List[String] = {
-    archivedFilesForQueue(path, queueName) ++ List(queueName)
-  }
-
-  def journalsBefore(path: File, queueName: String, filename: String): Seq[String] = {
-    journalsForQueue(path, queueName).takeWhile { _ != filename }
-  }
-
-  def journalAfter(path: File, queueName: String, filename: String): Option[String] = {
-    journalsForQueue(path, queueName).dropWhile { _ != filename }.drop(1).headOption
   }
 
   val packer = new JournalPackerTask

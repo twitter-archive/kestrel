@@ -18,18 +18,18 @@
 package net.lag.kestrel
 package tools
 
-import java.io.{FileNotFoundException, IOException}
+import java.io.{FileNotFoundException, IOException, File}
 import scala.collection.mutable
 import com.twitter.conversions.time._
 import com.twitter.util.{Duration, Time}
 
-class QueueDumper(filename: String, quiet: Boolean, dump: Boolean, dumpRaw: Boolean) {
+class QueueDumper(filename: String, quiet: Boolean, dump: Boolean, dumpRaw: Boolean, dumpQueue: Boolean) {
   var offset = 0L
   var operations = 0L
   var currentXid = 0
 
-  val queue = new mutable.Queue[Int]
-  val openTransactions = new mutable.HashMap[Int, Int]
+  val queue = new mutable.Queue[QItem]
+  val openTransactions = new mutable.HashMap[Int, QItem]
 
   def verbose(s: String, args: Any*) {
     if (!quiet) {
@@ -37,8 +37,14 @@ class QueueDumper(filename: String, quiet: Boolean, dump: Boolean, dumpRaw: Bool
     }
   }
 
+  def mkJournal(filename: String) = {
+    val container = new LocalDirectory(new File(filename).getParent, null)
+    val queueName = new File(filename).getName
+    new Journal(container, queueName, Duration.Top)
+  }
+
   def apply() {
-    val journal = new Journal(filename, Duration.MaxValue)
+    val journal = mkJournal(filename)
     var lastDisplay = 0L
 
     try {
@@ -59,9 +65,16 @@ class QueueDumper(filename: String, quiet: Boolean, dump: Boolean, dumpRaw: Bool
       if (!dumpRaw) {
         println()
         val totalItems = queue.size + openTransactions.size
-        val totalBytes = queue.foldLeft(0L) { _ + _ } + openTransactions.values.foldLeft(0L) { _ + _ }
+        val totalBytes = queue.foldLeft(0L) { _ + _.data.size } + openTransactions.values.foldLeft(0L) { _ + _.data.size }
         println("Journal size: %d bytes, with %d operations.".format(offset, operations))
         println("%d items totalling %d bytes.".format(totalItems, totalBytes))
+      }
+
+      if (dumpQueue) {
+        while (queue.size > 0) {
+          val qitem = queue.dequeue()
+          println(new String(qitem.data, "ISO-8859-1"))
+        }
       }
     } catch {
       case e: FileNotFoundException =>
@@ -96,7 +109,7 @@ class QueueDumper(filename: String, quiet: Boolean, dump: Boolean, dumpRaw: Bool
         } else if (dumpRaw) {
           print(new String(qitem.data, "ISO-8859-1"))
         }
-        queue += qitem.data.size
+        queue += qitem
       case JournalItem.Remove =>
         verbose("REM\n")
         queue.dequeue()
@@ -141,7 +154,7 @@ class QueueDumper(filename: String, quiet: Boolean, dump: Boolean, dumpRaw: Bool
           print(new String(qitem.data, "ISO-8859-1"))
         }
         openTransactions.remove(xid)
-        queue += qitem.data.size
+        queue += qitem
       case x =>
         verbose(x.toString)
     }
@@ -154,6 +167,7 @@ object QDumper {
   var quiet = false
   var dump = false
   var dumpRaw = false
+  var dumpQueue = false
 
   def usage() {
     println()
@@ -164,6 +178,7 @@ object QDumper {
     println("    -q      quiet: don't describe every line, just the summary")
     println("    -d      dump contents of added items")
     println("    -A      dump only the raw contents of added items")
+    println("    -Q      dump only the raw queue state (data for items actually in the queue)")
     println()
   }
 
@@ -183,6 +198,10 @@ object QDumper {
         dumpRaw = true
         quiet = true
         parseArgs(xs)
+      case "-Q" :: xs =>
+        dumpQueue = true
+        quiet = true
+        parseArgs(xs)
       case x :: xs =>
         filenames += x
         parseArgs(xs)
@@ -198,7 +217,7 @@ object QDumper {
 
     for (filename <- filenames) {
       if (!quiet) println("Queue: " + filename)
-      new QueueDumper(filename, quiet, dump, dumpRaw)()
+      new QueueDumper(filename, quiet, dump, dumpRaw, dumpQueue)()
     }
   }
 }

@@ -18,11 +18,11 @@
 package net.lag.kestrel
 
 import java.io._
-import org.specs.Specification
+import org.specs.SpecificationWithJUnit
 import com.twitter.logging.TestLogging
 import com.twitter.util.{Duration, TempFolder, Time}
 
-class JournalSpec extends Specification with TempFolder with TestLogging with DumpJournal {
+class JournalSpec extends SpecificationWithJUnit with TempFolder with TestLogging with DumpJournal {
   def withJournalPacker(f: => Unit) {
     Journal.packer.start()
     try {
@@ -32,17 +32,21 @@ class JournalSpec extends Specification with TempFolder with TestLogging with Du
     }
   }
 
+  def mkLocalContainer(path: String) = new LocalDirectory(path, null) 
+  def mkJournal(path: String, name: String, sync: Duration): Journal = new Journal(mkLocalContainer(path), name, sync)
+  def mkJournal(path: String): Journal = mkJournal(new File(path).getParent, new File(path).getName, Duration.Top)
+
   "Journal" should {
     "walk" in {
       withTempFolder {
-        val journal = new Journal(folderName + "/a1")
+        val journal = mkJournal(folderName + "/a1")
         journal.open()
         journal.add(QItem(Time.now, None, new Array[Byte](32), 0))
         journal.add(QItem(Time.now, None, new Array[Byte](64), 0))
         journal.add(QItem(Time.now, None, new Array[Byte](10), 0))
         journal.close()
 
-        val journal2 = new Journal(folderName + "/a1")
+        val journal2 = mkJournal(folderName + "/a1")
         journal2.walk().map {
           case (item, itemsize) => item match {
             case JournalItem.Add(qitem) => qitem.data.size.toString
@@ -54,7 +58,7 @@ class JournalSpec extends Specification with TempFolder with TestLogging with Du
 
     "recover from corruption" in {
       withTempFolder {
-        val journal = new Journal(folderName + "/a1")
+        val journal = mkJournal(folderName + "/a1")
         journal.open()
         journal.add(QItem(Time.now, None, new Array[Byte](32), 0))
         journal.close()
@@ -63,7 +67,7 @@ class JournalSpec extends Specification with TempFolder with TestLogging with Du
         f.write(127)
         f.close()
 
-        val journal2 = new Journal(folderName + "/a1")
+        val journal2 = mkJournal(folderName + "/a1")
         journal2.walk().map { case (item, itemsize) => item.toString }.mkString(",") must throwA[BrokenItemException]
       }
     }
@@ -73,7 +77,7 @@ class JournalSpec extends Specification with TempFolder with TestLogging with Du
         withTempFolder {
           new FileOutputStream(folderName + "/j1").close()
           new FileOutputStream(folderName + "/j2").close()
-          Journal.getQueueNamesFromFolder(new File(folderName)) mustEqual Set("j1", "j2")
+          Journal.getQueueNamesFromFolder(mkLocalContainer(folderName)) mustEqual Set("j1", "j2")
         }
       }
 
@@ -83,7 +87,7 @@ class JournalSpec extends Specification with TempFolder with TestLogging with Du
           new FileOutputStream(folderName + "/j1.1000").close()
           new FileOutputStream(folderName + "/j1.2000").close()
           new FileOutputStream(folderName + "/j2").close()
-          Journal.getQueueNamesFromFolder(new File(folderName)) mustEqual Set("j1", "j2")
+          Journal.getQueueNamesFromFolder(mkLocalContainer(folderName)) mustEqual Set("j1", "j2")
         }
       }
 
@@ -92,7 +96,7 @@ class JournalSpec extends Specification with TempFolder with TestLogging with Du
           new FileOutputStream(folderName + "/j1").close()
           new FileOutputStream(folderName + "/j2").close()
           new FileOutputStream(folderName + "/j2~~").close()
-          Journal.getQueueNamesFromFolder(new File(folderName)) mustEqual Set("j1", "j2")
+          Journal.getQueueNamesFromFolder(mkLocalContainer(folderName)) mustEqual Set("j1", "j2")
         }
       }
 
@@ -101,7 +105,7 @@ class JournalSpec extends Specification with TempFolder with TestLogging with Du
           new FileOutputStream(folderName + "/j1").close()
           new FileOutputStream(folderName + "/j2").close()
           new File(folderName, "subdir").mkdirs()
-          Journal.getQueueNamesFromFolder(new File(folderName)) mustEqual Set("j1", "j2")
+          Journal.getQueueNamesFromFolder(mkLocalContainer(folderName)) mustEqual Set("j1", "j2")
         }
       }
     }
@@ -113,7 +117,7 @@ class JournalSpec extends Specification with TempFolder with TestLogging with Du
           new FileOutputStream(folderName + "/test.100")
           new FileOutputStream(folderName + "/test.3000")
           new FileOutputStream(folderName + "/test")
-          Journal.journalsForQueue(new File(folderName), "test").toList mustEqual
+          JournalTestUtil.journalsForQueue(new File(folderName), "test").toList mustEqual
             List("test.50", "test.100", "test.3000", "test")
         }
       }
@@ -125,7 +129,7 @@ class JournalSpec extends Specification with TempFolder with TestLogging with Du
           new FileOutputStream(folderName + "/test.100.pack")
           new FileOutputStream(folderName + "/test.3000")
           new FileOutputStream(folderName + "/test")
-          Journal.journalsForQueue(new File(folderName), "test").toList mustEqual
+          JournalTestUtil.journalsForQueue(new File(folderName), "test").toList mustEqual
             List("test.100", "test.3000", "test")
 
           // and it should clean up after itself:
@@ -140,14 +144,14 @@ class JournalSpec extends Specification with TempFolder with TestLogging with Du
         withTempFolder {
           new FileOutputStream(folderName + "/test.50")
           new FileOutputStream(folderName + "/test.100")
-          Journal.journalsForQueue(new File(folderName), "test").toList mustEqual
+          JournalTestUtil.journalsForQueue(new File(folderName), "test").toList mustEqual
             List("test.50", "test.100", "test")
         }
       }
 
       "missing any files" in {
         withTempFolder {
-          Journal.journalsForQueue(new File(folderName), "test").toList mustEqual
+          JournalTestUtil.journalsForQueue(new File(folderName), "test").toList mustEqual
             List("test")
         }
       }
@@ -160,12 +164,12 @@ class JournalSpec extends Specification with TempFolder with TestLogging with Du
           new FileOutputStream(folderName + "/test.3000")
           new FileOutputStream(folderName + "/test")
 
-          Journal.journalsBefore(new File(folderName), "test", "test.3000").toList mustEqual
+          JournalTestUtil.journalsBefore(new File(folderName), "test", "test.3000").toList mustEqual
             List("test.50", "test.100", "test.999")
-          Journal.journalsBefore(new File(folderName), "test", "test.50").toList mustEqual Nil
-          Journal.journalAfter(new File(folderName), "test", "test.100") mustEqual Some("test.999")
-          Journal.journalAfter(new File(folderName), "test", "test.3000") mustEqual Some("test")
-          Journal.journalAfter(new File(folderName), "test", "test") mustEqual None
+          JournalTestUtil.journalsBefore(new File(folderName), "test", "test.50").toList mustEqual Nil
+          JournalTestUtil.journalAfter(new File(folderName), "test", "test.100") mustEqual Some("test.999")
+          JournalTestUtil.journalAfter(new File(folderName), "test", "test.3000") mustEqual Some("test")
+          JournalTestUtil.journalAfter(new File(folderName), "test", "test") mustEqual None
         }
       }
     }
@@ -173,19 +177,19 @@ class JournalSpec extends Specification with TempFolder with TestLogging with Du
     "pack old files" in {
       withTempFolder {
         withJournalPacker {
-          val journal = new Journal(new File(folderName), "test", null, Duration.MaxValue)
+          val journal = mkJournal(folderName, "test", Duration.Top)
           journal.open()
           journal.add(QItem(Time.now, None, "".getBytes, 0))
           journal.rotate(Nil, false)
           journal.add(QItem(Time.now, None, "".getBytes, 0))
           val checkpoint = journal.rotate(Nil, true)
-          val oldFiles = Journal.journalsForQueue(new File(folderName), "test")
+          val oldFiles = JournalTestUtil.journalsForQueue(new File(folderName), "test")
           oldFiles.map { f => new File(folderName, f).length }.toList mustEqual List(21, 21, 0)
 
           journal.startPack(checkpoint.get, Nil, Nil)
           journal.waitForPacksToFinish()
 
-          val files = Journal.journalsForQueue(new File(folderName), "test")
+          val files = JournalTestUtil.journalsForQueue(new File(folderName), "test")
           files.size mustEqual 2
           files mustEqual oldFiles.slice(1, 3)
           dumpJournal("test") mustEqual ""
@@ -196,7 +200,7 @@ class JournalSpec extends Specification with TempFolder with TestLogging with Du
 
     "report file sizes correctly" in {
       withTempFolder {
-        val journal = new Journal(new File(folderName), "test", null, Duration.MaxValue)
+        val journal = mkJournal(folderName, "test", Duration.Top)
         journal.open()
         journal.add(QItem(Time.now, None, "".getBytes, 0))
         journal.size mustEqual 21
@@ -219,7 +223,7 @@ class JournalSpec extends Specification with TempFolder with TestLogging with Du
     "rebuild from a checkpoint correctly" in {
       withTempFolder {
         withJournalPacker {
-          val journal = new Journal(new File(folderName), "test", null, Duration.MaxValue)
+          val journal = mkJournal(folderName, "test", Duration.Top)
           journal.open()
 
           val initialOpenItems = List(

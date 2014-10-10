@@ -9,14 +9,11 @@
 
 APP_NAME="kestrel"
 ADMIN_PORT="2223"
-if [ "$VERSION" == "" ]; then
-    VERSION="@VERSION@"
-fi
-SCALA_VERSION="2.9.2"
 APP_HOME="."
 INITIAL_SLEEP=15
 
-JAR_NAME="${APP_NAME}_${SCALA_VERSION}-${VERSION}.jar"
+source base.sh
+JAR=$(find_jar $APP_HOME)
 FD_LIMIT="262144"
 
 if [ "$HEAP_OPTS" == "" ]; then
@@ -60,11 +57,6 @@ mkdir -p logs
 
 echo "Starting $APP_NAME... "
 
-if [ ! -r $APP_HOME/$JAR_NAME ]; then
-  echo "FAIL"
-  echo "*** $APP_NAME jar missing: $APP_HOME/$JAR_NAME - not starting"
-  exit 1
-fi
 if [ ! -x $JAVA_HOME/bin/java ]; then
   echo "FAIL"
   echo "*** $JAVA_HOME/bin/java doesn't exist -- check JAVA_HOME?"
@@ -85,4 +77,4 @@ ulimit -n $FD_LIMIT || echo " (no ulimit)"
 ulimit -c unlimited || echo " (no coredump)"
 
 echo "'$$'" > $pidfile
-exec ${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar ${APP_HOME}/${JAR_NAME} "$@"
+exec ${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar $JAR "$@"

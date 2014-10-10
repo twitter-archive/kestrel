@@ -25,6 +25,7 @@ import com.twitter.logging.Logger
 import com.twitter.thrift.{Status => TStatus}
 import com.twitter.util.{Duration, Timer}
 import java.net.{NetworkInterface, InetAddress, InetSocketAddress, UnknownHostException}
+import net.lag.kestrel.config.ZooKeeperConfig
 import scala.collection.JavaConversions
 import config.ZooKeeperConfig
 
@@ -63,6 +64,7 @@ object ZooKeeperServerStatus {
   def statusToReadStatus(status: Status): TStatus =
     status match {
       case Down => TStatus.DEAD
+      case WriteAvoid => TStatus.ALIVE
       case Quiescent => TStatus.DEAD
       case ReadOnly => TStatus.ALIVE
       case Up => TStatus.ALIVE
@@ -71,6 +73,7 @@ object ZooKeeperServerStatus {
   def statusToWriteStatus(status: Status): TStatus =
     status match {
       case Down => TStatus.DEAD
+      case WriteAvoid => TStatus.DEAD
       case Quiescent => TStatus.DEAD
       case ReadOnly => TStatus.DEAD
       case Up => TStatus.ALIVE
@@ -79,14 +82,19 @@ object ZooKeeperServerStatus {
 
 class EndpointsAlreadyConfigured extends Exception
 
-class ZooKeeperServerStatus(val zkConfig: ZooKeeperConfig, statusFile: String, timer: Timer,
-                            defaultStatus: Status = Quiescent,
-                            statusChangeGracePeriod: Duration = 30.seconds)
-extends ServerStatus(statusFile, timer, defaultStatus, statusChangeGracePeriod) {
+class ZooKeeperServerStatus(val zkConfig: ZooKeeperConfig, statusStore: PersistentMetadataStore, timer: Timer,
+                            defaultStatus: Status,
+                            statusChangeGracePeriod: Duration,
+                            statusName: Option[String])
+  extends AbstractZooKeeperServerStatus(statusStore, timer, defaultStatus, statusChangeGracePeriod, statusName) {
 
-  import ZooKeeperServerStatus._
-
-  private val log = Logger.get(getClass.getName)
+  def this (zkConfig: ZooKeeperConfig, statusFile: String, timer: Timer,
+            defaultStatus: Status = Quiescent,
+            statusChangeGracePeriod: Duration = 30.seconds,
+            statusName: Option[String] = None) {
+    this(zkConfig, new LocalMetadataStore(statusFile, statusName.map("status/%s".format(_)).getOrElse("status")), timer,
+      defaultStatus, statusChangeGracePeriod, statusName)
+  }
 
   protected val zkClient: ZooKeeperClient =
     zkConfig.clientInitializer.getOrElse(ZooKeeperServerStatus.createClient _)(zkConfig)
@@ -94,8 +102,63 @@ extends ServerStatus(statusFile, timer, defaultStatus, statusChangeGracePeriod) 
   private var mainAddress: InetSocketAddress = null
   private var externalEndpoints: Map[String, InetSocketAddress] = null
 
-  private var readEndpointStatus: Option[EndpointStatus] = None
-  private var writeEndpointStatus: Option[EndpointStatus] = None
+  protected override def postShutdown() {
+    zkClient.close()
+  }
+
+  protected def createServerSet(nodeType: String): ServerSet = {
+    zkConfig.serverSetInitializer.getOrElse(ZooKeeperServerStatus.createServerSet _)(zkConfig,
+                                                                                     zkClient,
+                                                                                     nodeType)
+  }
+
+  override def join(nodeType: String, status: TStatus): Option[EndpointStatus] = {
+    try {
+      val set = createServerSet(nodeType)
+      val endpointStatus = set.join(mainAddress, JavaConversions.asJavaMap(externalEndpoints), status)
+      Some(endpointStatus)
+    } catch { case e =>
+      // join will auto-retry the retryable set of errors -- anything we catch
+      // here is not retryable
+      log.error(e, "error joining %s server set for endpoint '%s'".format(nodeType, mainAddress))
+      throw e
+    }
+  }
+
+  def addEndpoints(mainEndpoint: String, endpoints: Map[String, InetSocketAddress]) {
+    if (externalEndpoints ne null) throw new EndpointsAlreadyConfigured
+
+    externalEndpoints = endpoints.map { case (name, givenSocketAddress) =>
+      val address = ZooKeeperIP.toExternalAddress(givenSocketAddress.getAddress)
+      val socketAddress = new InetSocketAddress(address, givenSocketAddress.getPort)
+      (name, socketAddress)
+    }
+
+    mainAddress = externalEndpoints(mainEndpoint)
+
+    // reader first, then writer in case of some failure
+    readEndpointStatus = join("read", ZooKeeperServerStatus.statusToReadStatus(status))
+    log.info("joined read server set with status '%s'".format(status))
+
+    writeEndpointStatus = join("write", ZooKeeperServerStatus.statusToWriteStatus(status))
+    log.info("joined write server set with status '%s'".format(status))
+  }
+}
+
+abstract class AbstractZooKeeperServerStatus(statusStore: PersistentMetadataStore, timer: Timer,
+                                             defaultStatus: Status = Quiescent,
+                                             statusChangeGracePeriod: Duration = 30.seconds,
+                                             statusName: Option[String] = None)
+  extends ServerStatus(statusStore, timer, defaultStatus, statusChangeGracePeriod, statusName) {
+
+  import ZooKeeperServerStatus._
+
+  protected val log = Logger.get(getClass.getName)
+
+  var readEndpointStatus: Option[EndpointStatus] = None
+  var writeEndpointStatus: Option[EndpointStatus] = None
+
+  protected def postShutdown(): Unit
 
   override def shutdown() {
     synchronized {
@@ -115,46 +178,8 @@ extends ServerStatus(statusFile, timer, defaultStatus, statusChangeGracePeriod) 
       }
       readEndpointStatus = None
 
-      zkClient.close()
+      postShutdown()
     }
-  }
-
-  protected def createServerSet(nodeType: String): ServerSet = {
-    zkConfig.serverSetInitializer.getOrElse(ZooKeeperServerStatus.createServerSet _)(zkConfig,
-                                                                                     zkClient,
-                                                                                     nodeType)
-  }
-
-  private def join(nodeType: String, status: TStatus): Option[EndpointStatus] = {
-    try {
-      val set = createServerSet(nodeType)
-      val endpointStatus = set.join(mainAddress, JavaConversions.asJavaMap(externalEndpoints), status)
-      Some(endpointStatus)
-    } catch { case e =>
-      // join will auto-retry the retryable set of errors -- anything we catch
-      // here is not retryable
-      log.error(e, "error joining %s server set for endpoint '%s'".format(nodeType, mainAddress))
-      throw e
-    }
-  }
-
-  override def addEndpoints(mainEndpoint: String, endpoints: Map[String, InetSocketAddress]) {
-    if (externalEndpoints ne null) throw new EndpointsAlreadyConfigured
-
-    externalEndpoints = endpoints.map { case (name, givenSocketAddress) =>
-      val address = ZooKeeperIP.toExternalAddress(givenSocketAddress.getAddress)
-      val socketAddress = new InetSocketAddress(address, givenSocketAddress.getPort)
-      (name, socketAddress)
-    }
-
-    mainAddress = externalEndpoints(mainEndpoint)
-
-    // reader first, then writer in case of some failure
-    readEndpointStatus = join("read", statusToReadStatus(status))
-    log.info("joined read server set with status '%s'".format(status))
-
-    writeEndpointStatus = join("write", statusToWriteStatus(status))
-    log.info("joined write server set with status '%s'".format(status))
   }
 
   override protected def proposeStatusChange(oldStatus: Status, newStatus: Status): Boolean = {
@@ -181,6 +206,8 @@ extends ServerStatus(statusFile, timer, defaultStatus, statusChangeGracePeriod) 
     super.statusChanged(oldStatus, newStatus, immediate)
   }
 
+  def join(nodeType: String, status: TStatus): Option[EndpointStatus]
+
   private def updateWriteMembership(newStatus: Status, oldStatus: Status) {
     val oldWriteStatus = statusToWriteStatus(oldStatus)
     val writeStatus = statusToWriteStatus(newStatus)
@@ -199,9 +226,9 @@ extends ServerStatus(statusFile, timer, defaultStatus, statusChangeGracePeriod) 
     }
   }
 
-  private def updateReadMembership(newStatus: Status, oldStatus: Status) {
-    val oldReadStatus = statusToReadStatus(oldStatus)
-    val readStatus = statusToReadStatus(newStatus)
+  protected def updateReadMembership(newStatus: Status, oldStatus: Status) {
+    val oldReadStatus = ZooKeeperServerStatus.statusToReadStatus(oldStatus)
+    val readStatus = ZooKeeperServerStatus.statusToReadStatus(newStatus)
     if (oldReadStatus != readStatus) {
       readEndpointStatus match {
         case Some(endpointStatus) if oldReadStatus != TStatus.DEAD =>
@@ -247,13 +274,13 @@ object ZooKeeperIP {
       return givenAddress
     }
 
-    val interfaces = NetworkInterface.getNetworkInterfaces()
+    val interfaces = NetworkInterface.getNetworkInterfaces
     if (interfaces eq null) {
       throw new UnknownHostException("no network interfaces configured")
     }
 
     val candidates = interfaces.flatMap { iface =>
-      iface.getInetAddresses().map { addr => (iface, addr) }
+      iface.getInetAddresses.map { addr => (iface, addr) }
     }.filter { case (iface, addr) =>
       !addr.isLoopbackAddress && (iface.isPointToPoint || !addr.isLinkLocalAddress)
     }.map { case (iface, addr) => addr }.take(1).toList

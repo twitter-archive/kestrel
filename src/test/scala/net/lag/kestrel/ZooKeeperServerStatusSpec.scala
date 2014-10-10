@@ -25,13 +25,13 @@ import com.twitter.thrift.{Status => TStatus}
 import com.twitter.util.{MockTimer, TempFolder, Time, TimeControl}
 import java.io._
 import java.net.{InetAddress, InetSocketAddress, UnknownHostException}
-import org.specs.Specification
+import org.specs.SpecificationWithJUnit
 import org.specs.mock.{ClassMocker, JMocker}
 import scala.collection.JavaConversions
 import scala.collection.mutable.Queue
 import config._
 
-class ZooKeeperServerStatusSpec extends Specification with JMocker with ClassMocker with TempFolder
+class ZooKeeperServerStatusSpec extends SpecificationWithJUnit with JMocker with ClassMocker with TempFolder
 with TestLogging {
   val mockZKClient = mock[ZooKeeperClient]
   val mockZKServerSets = Map(

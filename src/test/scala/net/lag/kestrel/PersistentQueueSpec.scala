@@ -25,12 +25,12 @@ import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
 import com.twitter.ostrich.stats.Stats
 import com.twitter.logging.TestLogging
-import com.twitter.util.{Duration, TempFolder, Time, Timer, TimerTask}
-import org.specs.Specification
+import com.twitter.util.{Await, Duration, TempFolder, Time, Timer, TimerTask}
+import org.specs.SpecificationWithJUnit
 import org.specs.matcher.Matcher
 import config._
 
-class PersistentQueueSpec extends Specification
+class PersistentQueueSpec extends SpecificationWithJUnit
   with TempFolder
   with TestLogging
   with QueueMatchers
@@ -47,6 +47,32 @@ class PersistentQueueSpec extends Specification
       } finally {
         Journal.packer.shutdown()
       }
+    }
+
+    def interruptRewrites(name: String, failpoint: Failpoint): String = {
+      val q = new PersistentQueue(name, folderName, new QueueBuilder().apply(), timer, scheduler)
+      q.setup()
+      q.add("zero".getBytes)
+      q.add("first".getBytes)
+      q.add("second".getBytes)
+
+      // force-bump xid
+      val zero = q.remove(true).get
+      new String(zero.data) mustEqual "zero"
+      q.confirmRemove(zero.xid)
+
+      val item = q.remove(true).get
+      new String(item.data) mustEqual "first"
+      q.forceRewrite(failpoint)
+      q.close()
+
+      val q2 = new PersistentQueue(name, folderName, new QueueBuilder().apply(), timer, scheduler)
+      q2.setup()
+      q2.length mustEqual 2
+      new String(q2.remove().get.data) mustEqual "first"
+      new String(q2.remove().get.data) mustEqual "second"
+      q2.close()
+      dumpJournal(name)
     }
 
     def verifyQLengthAndDumpJournal (q: PersistentQueue, queueName: String, expectedLength: Int) {
@@ -145,13 +171,13 @@ class PersistentQueueSpec extends Specification
         q.setup()
 
         q.add(new Array[Byte](32))
-        Journal.journalsForQueue(new File(folderName), "rotating").length mustEqual 1
+        JournalTestUtil.journalsForQueue(new File(folderName), "rotating").length mustEqual 1
 
         q.add(new Array[Byte](32))
-        Journal.journalsForQueue(new File(folderName), "rotating").length mustEqual 1
+        JournalTestUtil.journalsForQueue(new File(folderName), "rotating").length mustEqual 1
 
         q.add(new Array[Byte](32))
-        Journal.journalsForQueue(new File(folderName), "rotating").length mustEqual 2
+        JournalTestUtil.journalsForQueue(new File(folderName), "rotating").length mustEqual 2
       }
     }
 
@@ -335,6 +361,50 @@ class PersistentQueueSpec extends Specification
       }
     }
 
+    "timeout open transactions" in {
+      withTempFolder {
+        Time.withCurrentTimeFrozen { time =>
+          val config = new QueueBuilder {
+            openTransactionTimeout = 10.milliseconds
+          }.apply()
+          val q = new PersistentQueue("rewriting", folderName, config, timer, scheduler)
+          q.setup
+
+          q.add("one".getBytes)
+          q.add("two".getBytes)
+          q.add("three".getBytes)
+          q.add("four".getBytes)
+          q.add("five".getBytes)
+
+          q.length mustEqual 5
+          q.putItems.get mustEqual 5
+
+          val item1 = q.remove(true)
+          item1 must beSome[QItem].which { item => new String(item.data) == "one" }
+          new String(item1.get.data) mustEqual "one"
+          val item2 = q.remove(true)
+          new String(item2.get.data) mustEqual "two"
+          val item3 = q.remove(true)
+          new String(item3.get.data) mustEqual "three"
+
+          time.advance(6.milliseconds)
+
+          val item4 = q.remove(true)
+          new String(item4.get.data) mustEqual "four"
+
+          time.advance(6.milliseconds)
+
+          val item5 = q.remove(true)
+          new String(item5.get.data) mustEqual "one"
+          val item6 = q.remove(true)
+          new String(item6.get.data) mustEqual "two"
+          val item7 = q.remove(true)
+          new String(item7.get.data) mustEqual "three"
+        }
+      }
+    }
+
+
     "rewrite journals when they exceed the maxJournalSize but still fit in memory" in {
       withTempFolder {
         val config = new QueueBuilder {
@@ -408,6 +478,7 @@ class PersistentQueueSpec extends Specification
       withTempFolder {
         Time.withCurrentTimeFrozen { time =>
           val config = new QueueBuilder {
+            disableAggressiveRewrites = true
             defaultJournalSize = 160.bytes
             maxJournalSize = 1024.bytes
             maxMemorySize = 1024.bytes
@@ -547,7 +618,7 @@ class PersistentQueueSpec extends Specification
 
         val item = q.remove(true).get
         new String(item.data) mustEqual "first"
-        q.forceRewrite()
+        q.forceRewrite(Failpoint.Default)
         q.confirmRemove(item.xid)
         q.close()
 
@@ -556,6 +627,18 @@ class PersistentQueueSpec extends Specification
         new String(q2.remove().get.data) mustEqual "second"
         q2.close()
         dumpJournal("rolling") mustEqual "add(5:0:first), remove-tentative(2), add(6:0:second), confirm-remove(2), remove"
+      }
+    }
+
+    "recover a journal with a incomplete rewrite fail before pack" in {
+      withTempFolder {
+        interruptRewrites("incomplete-rewrite-1", Failpoint.RewriteFPBeforePack) mustEqual "add(4:0:zero), add(5:0:first), add(6:0:second), remove-tentative(1), confirm-remove(1), remove-tentative(2), unremove(2), remove, remove"
+      }
+    }
+
+    "recover a journal with a incomplete rewrite fail after delete" in {
+      withTempFolder {
+        interruptRewrites("incomplete-rewrite-3", Failpoint.RewriteFPAfterDelete) mustEqual "add(5:0:first), remove-tentative(2), add(6:0:second), unremove(2), remove, remove"
       }
     }
 
@@ -951,6 +1034,22 @@ class PersistentQueueSpec extends Specification
         statNamesAfter must beEmpty
       }
     }
+
+    "get oldest add time" in {
+      withTempFolder {
+        val q = new PersistentQueue("work", folderName, new QueueBuilder().apply(), timer, scheduler)
+        q.setup
+        q.length mustEqual 0
+
+        q.add("item1".getBytes, None, None, Time.fromMilliseconds(2000))
+        q.add("item2".getBytes, None, None, Time.fromMilliseconds(1000))
+        q.add("item3".getBytes, None, None, Time.fromMilliseconds(3000))
+
+        q.getOldestAddTime mustEqual 1000
+
+        q.close
+      }
+    }
   }
 
 
@@ -1157,7 +1256,7 @@ class PersistentQueueSpec extends Specification
           q.add("cappadonna".getBytes, Some(expiryQ)) mustEqual true
           q.add("raekwon".getBytes) mustEqual true
           time.advance(2.seconds)
-          q.discardExpired(true) mustEqual 3
+          q.discardExpired() mustEqual 3
           q.length mustEqual 2
           q.remove must beSomeQItem("raekwon")
           q.length mustEqual 0
@@ -1169,11 +1268,112 @@ class PersistentQueueSpec extends Specification
           r.add("luka".getBytes, Some(expiryR)) mustEqual true
           r.add("geso".getBytes) mustEqual true
           time.advance(2.seconds)
-          r.discardExpired(true) mustEqual 4
+          r.discardExpired() mustEqual 4
           r.length mustEqual 1
           r.remove must beSomeQItem("geso")
         }
       }
+    }
+
+    "whitelisted queues should disallow reads when clientId is not specified" in {
+      withTempFolder {
+        val configureWithWhitelist = new QueueBuilder {
+          whiteListClientIdForDequeue = "test-client"
+          maxExpireSweep = 3
+        }.apply()
+
+        val r = new PersistentQueue("white-list", folderName, configureWithWhitelist, timer, scheduler)
+        r.setup()
+
+        r.add("one".getBytes) mustEqual true
+        r.add("two".getBytes) mustEqual true
+
+        try {
+          r.remove(true)
+        } catch {
+          case e:Exception => e.isInstanceOf[AvailabilityException] mustBe true
+        }
+
+        r.length mustEqual 2
+
+        try {
+          r.remove(false)
+        } catch {
+          case e:Exception => e.isInstanceOf[AvailabilityException] mustBe true
+        }
+
+        r.length mustEqual 2
+
+
+      }
+    }
+
+    "whitelisted queues should disallow writes when clientId is not specified" in {
+      withTempFolder {
+        val configureWithWhitelist = new QueueBuilder {
+          whiteListClientIdForEnqueue = "test-client"
+          maxExpireSweep = 3
+        }.apply()
+
+        val r = new PersistentQueue("white-list-write", folderName, configureWithWhitelist, timer, scheduler)
+        r.setup()
+
+        try {
+          r.add("one".getBytes)
+        } catch {
+          case e:Exception => e.isInstanceOf[AvailabilityException] mustBe true
+        }
+
+        r.length mustEqual 0
+
+        try {
+          r.remove()
+        } catch {
+          case _ => false mustBe true
+        }
+      }
+    }
+  }
+
+  "PersistentQueue put future" should {
+    val timer = new FakeTimer()
+    val scheduler = new ScheduledThreadPoolExecutor(1)
+
+    "timeout according to writeTimeout if write stalls" in {
+      val config = new QueueBuilder {
+        keepJournal = true
+      }.apply()
+      val q = new PersistentQueue("mem", new BlockingContainer(Duration.Top), config, timer, None)
+      q.setup()
+      val futureWrite = q.addDurable("kombucha".getBytes) 
+      futureWrite.isDefined mustEqual true
+      Await.result(futureWrite.get, 1.milliseconds) must throwA[com.twitter.util.TimeoutException]
+    }
+
+    "succeed after short blocking write" in {
+      val config = new QueueBuilder {
+        keepJournal = true
+      }.apply()
+      val q = new PersistentQueue("mem", new BlockingContainer(50.milliseconds), config, timer, None)
+      q.setup()
+
+      // future must not throw
+      val futureWrite = q.addDurable("artisanal matcha".getBytes) 
+      futureWrite.isDefined mustEqual true
+      Await.result(futureWrite.get, 30.seconds) 
+    }
+
+    "succeed immediately for immediately completed future" in {
+      val config = new QueueBuilder {
+        keepJournal = true
+      }.apply()
+      val q = new PersistentQueue("mem", new BlockingContainer(Duration.Bottom), config, timer, None)
+      q.setup()
+
+      // future must not throw
+      val futureWrite = q.addDurable("non fat double chocolate chip frappuccino".getBytes) 
+      futureWrite.isDefined mustEqual true
+      Await.result(futureWrite.get, Duration.Bottom) 
     }
   }
 }

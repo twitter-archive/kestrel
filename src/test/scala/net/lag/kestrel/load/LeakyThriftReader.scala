@@ -26,8 +26,8 @@ import scala.util.Random
 import com.twitter.conversions.string._
 import com.twitter.finagle.Service
 import com.twitter.finagle.builder.ClientBuilder
-import com.twitter.finagle.thrift.{ThriftClientFramedCodec, ThriftClientRequest}
-import com.twitter.util.Time
+import com.twitter.finagle.thrift.{ClientId, ThriftClientFramedCodec, ThriftClientRequest}
+import com.twitter.util.{Await,Time}
 import net.lag.kestrel.thrift._
 import org.apache.thrift.protocol.TBinaryProtocol
 
@@ -42,16 +42,15 @@ object LeakyThriftReader {
   def put(client: Kestrel.FinagledClient, queueName: String, id: Int) = {
     val data = DATA_TEMPLATE.format(id)
 
-    val putRequest = client.put(queueName, List[ByteBuffer](ByteBuffer.wrap(data.getBytes)))
-    if (putRequest() != 1) {
+    val putRequest = Await.result(client.put(queueName, List[ByteBuffer](ByteBuffer.wrap(data.getBytes))))
+    if (putRequest != 1) {
       // the "!" is important.
       throw new Exception("Unexpected response at " + id + "!")
     }
   }
 
   def get(client: Kestrel.FinagledClient, queueName: String): Option[(Long, Int)] = {
-    val getRequest = client.get(queueName, 1, 100, 5000)
-    val items = getRequest()
+    val items = Await.result(client.get(queueName, 1, 100, 5000))
 
     if (items.isEmpty) {
       None
@@ -71,8 +70,7 @@ object LeakyThriftReader {
 
   def confirm(client: Kestrel.FinagledClient, queueName: String, id: Long) = {
     if (verbose) println("%s: confirm %016x".format(Time.now, id))
-    val confirmRequest = client.confirm(queueName, Set(id))
-    val confirmedCount = confirmRequest()
+    val confirmedCount = Await.result(client.confirm(queueName, Set(id)))
 
     if (confirmedCount != 1) {
       // the "!" is important.
@@ -82,7 +80,7 @@ object LeakyThriftReader {
 
   var totalItems = 1000
   var dropRate = 0.01
-  var queueName = "spam"
+  var queueName = "spam-thrift"
   var hostname = "localhost"
   var port = 2229
   var threads = 1
@@ -151,7 +149,7 @@ object LeakyThriftReader {
 
     val service: Service[ThriftClientRequest, Array[Byte]] = ClientBuilder()
       .hosts("%s:%d".format(hostname, port))
-      .codec(ThriftClientFramedCodec())
+      .codec(ThriftClientFramedCodec(Some(ClientId("load-test"))))
       .hostConnectionLimit(threads * 5)
       .hostConnectionCoresize(threads)
       .retries(5)
@@ -165,7 +163,7 @@ object LeakyThriftReader {
     // flush queues first
     if (flushFirst) {
       println("Flushing queues first.")
-      client.flushQueue(queueName)()
+      Await.result(client.flushQueue(queueName))
     }
 
     val producerThread = new Thread {
@@ -212,7 +210,7 @@ object LeakyThriftReader {
     threadList.foreach { _.join() }
     val duration = System.currentTimeMillis - startTime
 
-    service.release()
+    service.close()
 
     println("Finished in %d msec (%.1f usec/put throughput).".format(duration, duration * 1000.0 / (totalItems * threads)))
     if (incompleteReads.nonEmpty) {

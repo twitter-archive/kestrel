@@ -20,11 +20,11 @@ package net.lag.kestrel
 import java.io.File
 import java.util.concurrent.{CountDownLatch, ScheduledExecutorService}
 import scala.collection.mutable
-import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.ostrich.stats.Stats
-import com.twitter.util.{Duration, Future, Time, Timer}
+import com.twitter.util._
 import config._
+import net.lag.kestrel.config.QueueConfig
 
 class InaccessibleQueuePath extends Exception("Inaccessible queue path: Must be a directory and writable")
 
@@ -32,7 +32,7 @@ object QueueCollection {
   val unknown = () => "<unknown>"
 }
 
-class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: ScheduledExecutorService,
+class QueueCollection(var storageContainer:PersistentStreamContainer, timer: Timer,
                       @volatile private var defaultQueueConfig: QueueConfig,
                       @volatile var queueBuilders: List[QueueBuilder],
                       @volatile var aliasBuilders: List[AliasBuilder]) {
@@ -40,16 +40,6 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
   type SessionDescription = Option[() => String]
 
   private val log = Logger.get(getClass.getName)
-
-  private val path = new File(queueFolder)
-
-  if (! path.isDirectory) {
-    path.mkdirs()
-  }
-  if (! path.isDirectory || ! path.canWrite) {
-    throw new InaccessibleQueuePath
-  }
-
   private val queues = new mutable.HashMap[String, PersistentQueue]
   private val fanout_queues = new mutable.HashMap[String, mutable.HashSet[String]]
   private val aliases = new mutable.HashMap[String, AliasedQueue]
@@ -57,6 +47,14 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
 
   @volatile private var queueBuilderMap = Map(queueBuilders.map { builder => (builder.name, builder) }: _*)
   @volatile private var aliasConfigMap = Map(aliasBuilders.map { builder => (builder.name, builder()) }: _*)
+
+  def this(queueFolder: String, timer: Timer, journalSyncScheduler: ScheduledExecutorService,
+                        defaultQueueConfig: QueueConfig,
+                        queueBuilders: List[QueueBuilder],
+                        aliasBuilders: List[AliasBuilder]) = {
+    this(new LocalDirectory(queueFolder, journalSyncScheduler), timer,
+      defaultQueueConfig, queueBuilders, aliasBuilders)
+  }
 
   private def checkNames {
     val duplicates = queueBuilderMap.keySet & aliasConfigMap.keySet
@@ -75,7 +73,7 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
     }
   }
 
-  private def buildQueue(name: String, masterName: Option[String], path: String,
+  private def buildQueue(name: String, masterName: Option[String], path: PersistentStreamContainer,
                          sessionDescription: SessionDescription) = {
     if ((name contains ".") || (name contains "/") || (name contains "~")) {
       throw new Exception("Queue name contains illegal characters (one of: ~ . /).")
@@ -83,13 +81,14 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
     val config = getQueueConfig(name, masterName)
     log.info("Setting up queue %s: %s (via %s)", name, config, sessionDescription.getOrElse(unknown)())
     Stats.incr("queue_creates")
-    new PersistentQueue(name, path, config, timer, journalSyncScheduler, Some(this.apply))
+    val queueLookup:(String => Option[PersistentQueue]) = this.apply
+    new PersistentQueue(name, path, config, timer, Option(queueLookup))
   }
 
   // preload any queues
   def loadQueues() {
     val startupDesc = Some(() => "<startup>")
-    Journal.getQueueNamesFromFolder(path) map { queue(_, startupDesc) }
+    Journal.getQueueNamesFromFolder(storageContainer) map { queue(_, startupDesc) }
     createAliases()
   }
 
@@ -169,12 +168,12 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
           // only happens when creating a queue for the first time.
           val q = if (name contains '+') {
             val master = name.split('+')(0)
-            val fanoutQ = buildQueue(name, Some(master), path.getPath, sessionDescription)
+            val fanoutQ = buildQueue(name, Some(master), storageContainer, sessionDescription)
             fanout_queues.getOrElseUpdate(master, new mutable.HashSet[String]) += name
             log.info("Fanout queue %s added to %s by %s", name, master, sessionDescription.getOrElse(unknown)())
             fanoutQ
           } else {
-            buildQueue(name, None, path.getPath, sessionDescription)
+            buildQueue(name, None, storageContainer, sessionDescription)
           }
           q.setup
           queues(name) = q
@@ -185,7 +184,7 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
       }
     }
 
-  def apply(name: String) = queue(name)
+  def apply(name: String): Option[PersistentQueue] = queue(name)
 
   /**
    * Get an alias, creating it if necessary.
@@ -305,12 +304,12 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
     }
   }
 
-  def flushExpired(name: String, limit: Boolean = false, sessionDescription: SessionDescription = None): Int = {
+  def flushExpired(name: String, sessionDescription: SessionDescription = None): Int = {
     if (shuttingDown) {
       0
     } else {
       queue(name, false) map { q =>
-        val flushed = q.discardExpired(limit)
+        val flushed = q.discardExpired()
         if (flushed > 0) {
           log.info("Queue %s flushed of %d expired item(s) by %s",
                    name, flushed, sessionDescription.getOrElse(unknown)())
@@ -332,8 +331,8 @@ class QueueCollection(queueFolder: String, timer: Timer, journalSyncScheduler: S
     }
   }
 
-  def flushAllExpired(limit: Boolean = false, sessionDescription: SessionDescription = None): Int = {
-    queueNames(true).foldLeft(0) { (sum, qName) => sum + flushExpired(qName, limit, sessionDescription) }
+  def flushAllExpired(sessionDescription: SessionDescription = None): Int = {
+    queueNames(true).foldLeft(0) { (sum, qName) => sum + flushExpired(qName, sessionDescription) }
   }
 
   def deleteExpiredQueues(): Unit = {

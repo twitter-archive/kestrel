@@ -20,13 +20,13 @@ import com.twitter.conversions.time._
 import com.twitter.finagle.ClientConnection
 import com.twitter.naggati.test.TestCodec
 import com.twitter.ostrich.admin.RuntimeEnvironment
-import com.twitter.util.{Future, Promise, Time}
+import com.twitter.util.{Await, Future, Promise, Time}
 import java.net.InetSocketAddress
 import org.jboss.netty.buffer.ChannelBuffers
-import org.specs.Specification
+import org.specs.SpecificationWithJUnit
 import org.specs.mock.{ClassMocker, JMocker}
 
-class TextHandlerSpec extends Specification with JMocker with ClassMocker {
+class TextHandlerSpec extends SpecificationWithJUnit with JMocker with ClassMocker {
   def wrap(s: String) = ChannelBuffers.wrappedBuffer(s.getBytes)
 
   type ClientDesc = Option[() => String]
@@ -102,7 +102,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
 
         textHandler.handler.pendingReads.add("test", 100)
         textHandler.handler.pendingReads.peek("test") mustEqual List(100)
-        textHandler(TextRequest("get", List("test"), Nil))() mustEqual ItemResponse(Some(qitem.data))
+        Await.result(textHandler(TextRequest("get", List("test"), Nil))) mustEqual ItemResponse(Some(qitem.data))
         textHandler.handler.pendingReads.peek("test") mustEqual List(qitem.xid)
       }
 
@@ -113,7 +113,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
               one(queueCollection).remove(equal("test"), equal(Some(500.milliseconds.fromNow)), equal(true), equal(false), any[ClientDesc]) willReturn Future.value(Some(qitem))
             }
 
-            textHandler(TextRequest("get", List("test", "500"), Nil))() mustEqual ItemResponse(Some(qitem.data))
+            Await.result(textHandler(TextRequest("get", List("test", "500"), Nil))) mustEqual ItemResponse(Some(qitem.data))
           }
         }
 
@@ -128,7 +128,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
             val future = textHandler(TextRequest("get", List("test", "500"), Nil))
 
             promise.setValue(Some(qitem))
-            future() mustEqual ItemResponse(Some(qitem.data))
+            Await.result(future) mustEqual ItemResponse(Some(qitem.data))
           }
         }
 
@@ -143,7 +143,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
             val future = textHandler(TextRequest("get", List("test", "500"), Nil))
 
             promise.setValue(None)
-            future() mustEqual ItemResponse(None)
+            Await.result(future) mustEqual ItemResponse(None)
           }
         }
       }
@@ -153,7 +153,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
           one(queueCollection).remove(equal("test"), equal(None), equal(true), equal(false), any[ClientDesc]) willReturn Future.value(None)
         }
 
-        textHandler(TextRequest("get", List("test"), Nil))() mustEqual ItemResponse(None)
+        Await.result(textHandler(TextRequest("get", List("test"), Nil))) mustEqual ItemResponse(None)
       }
 
       "item ready" in {
@@ -161,7 +161,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
           one(queueCollection).remove(equal("test"), equal(None), equal(true), equal(false), any[ClientDesc]) willReturn Future.value(Some(qitem))
         }
 
-        textHandler(TextRequest("get", List("test"), Nil))() mustEqual ItemResponse(Some(qitem.data))
+        Await.result(textHandler(TextRequest("get", List("test"), Nil))) mustEqual ItemResponse(Some(qitem.data))
       }
     }
 
@@ -173,7 +173,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
         }
 
         val textHandler = new TextHandler(connection, queueCollection, 10)
-        textHandler(TextRequest("put", List("test"), List("hello".getBytes)))() mustEqual CountResponse(1)
+        Await.result(textHandler(TextRequest("put", List("test"), List("hello".getBytes)))) mustEqual CountResponse(1)
       }
     }
 
@@ -184,7 +184,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
       }
 
       val textHandler = new TextHandler(connection, queueCollection, 10)
-      textHandler(TextRequest("delete", List("test"), Nil))() mustEqual CountResponse(0)
+      Await.result(textHandler(TextRequest("delete", List("test"), Nil))) mustEqual CountResponse(0)
     }
 
     "version request" in {
@@ -196,7 +196,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
       Kestrel.runtime = runtime
 
       val textHandler = new TextHandler(connection, queueCollection, 10)
-      textHandler(TextRequest("version", Nil, Nil))() must haveClass[StringResponse]
+      Await.result(textHandler(TextRequest("version", Nil, Nil))) must haveClass[StringResponse]
     }
 
     "status request" in {
@@ -208,11 +208,11 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
         val textHandler = new TextHandler(connection, queueCollection, 10)
 
         "check status should return an error" in {
-          textHandler(TextRequest("status", Nil, Nil))() must haveClass[ErrorResponse]
+          Await.result(textHandler(TextRequest("status", Nil, Nil))) must haveClass[ErrorResponse]
         }
 
         "set status should return an error" in {
-          textHandler(TextRequest("status", List("UP"), Nil))() must haveClass[ErrorResponse]
+          Await.result(textHandler(TextRequest("status", List("UP"), Nil))) must haveClass[ErrorResponse]
         }
       }
 
@@ -229,7 +229,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
           expect {
             one(serverStatus).status willReturn Up
           }
-          textHandler(TextRequest("status", Nil, Nil))() mustEqual StringResponse("UP")
+          Await.result(textHandler(TextRequest("status", Nil, Nil))) mustEqual StringResponse("UP")
         }
 
         "set status should set current status" in {
@@ -237,7 +237,7 @@ class TextHandlerSpec extends Specification with JMocker with ClassMocker {
             one(serverStatus).setStatus("ReadOnly")
           }
 
-          textHandler(TextRequest("status", List("ReadOnly"), Nil))() mustEqual CountResponse(0)
+          Await.result(textHandler(TextRequest("status", List("ReadOnly"), Nil))) mustEqual CountResponse(0)
         }
       }
     }

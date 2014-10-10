@@ -24,10 +24,10 @@ import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
 import com.twitter.logging.TestLogging
 import com.twitter.util.{Duration, TempFolder, Time, Timer, TimerTask}
-import org.specs.Specification
+import org.specs.SpecificationWithJUnit
 import config._
 
-class ReadBehindSpec extends Specification with TempFolder with TestLogging with QueueMatchers {
+class ReadBehindSpec extends SpecificationWithJUnit with TempFolder with TestLogging with QueueMatchers {
   "PersistentQueue read-behind" should {
     doBefore {
       Journal.packer.start()

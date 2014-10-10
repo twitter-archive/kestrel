@@ -17,24 +17,35 @@
 
 package net.lag.kestrel
 
-import java.io._
-import java.nio.{ByteBuffer, ByteOrder}
-import java.nio.channels.FileChannel
-import java.util.concurrent.{CountDownLatch, Executor, ScheduledExecutorService}
-import java.util.concurrent.atomic.AtomicLong
-import scala.collection.mutable
 import com.twitter.conversions.storage._
 import com.twitter.conversions.time._
+import com.twitter.finagle.thrift.ClientId
 import com.twitter.logging.Logger
-import com.twitter.ostrich.stats.Stats
+import com.twitter.ostrich.stats.{Metric, Stats}
 import com.twitter.util._
 import config._
+import java.io._
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.atomic.AtomicLong
+import scala.collection.mutable
+import scala.collection.JavaConversions._
 
-class PersistentQueue(val name: String, persistencePath: String, @volatile var config: QueueConfig,
-                      timer: Timer, journalSyncScheduler: ScheduledExecutorService,
-                      queueLookup: Option[(String => Option[PersistentQueue])]) {
+class PersistentQueue(val name: String, persistencePath: PersistentStreamContainer, @volatile var config: QueueConfig,
+                      timer: Timer, queueLookup: Option[(String => Option[PersistentQueue])]) {
+
+  def this(name: String, persistencePath: PersistentStreamContainer, config: QueueConfig, timer: Timer) =
+    this(name, persistencePath, config, timer, None)
+
+  // TODO: These constructors are retained to avoid a large scale change to existing tests.
+  // Hope to remove this after completing refactoring of the
+  // affected tests
+  def this(name: String, persistencePath: String, config: QueueConfig,
+           timer: Timer, journalSyncScheduler: ScheduledExecutorService,
+           queueLookup: Option[(String => Option[PersistentQueue])]) =
+    this(name, new LocalDirectory(persistencePath, journalSyncScheduler), config, timer, queueLookup)
+
   def this(name: String, persistencePath: String, config: QueueConfig, timer: Timer, journalSyncScheduler: ScheduledExecutorService) =
-    this(name, persistencePath, config, timer, journalSyncScheduler, None)
+    this(name, new LocalDirectory(persistencePath, journalSyncScheduler), config, timer, None)
 
   private val log = Logger.get(getClass.getName)
 
@@ -91,15 +102,21 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
 
   val totalRewrites = Stats.getCounter(statNamed("journal_rewrites"))
   totalRewrites.reset()
+  val rewriteMetric = Stats.getMetric(statNamed("journal_rewrite_usec"))
+  rewriteMetric.clear()
   val totalRotates = Stats.getCounter(statNamed("journal_rotations"))
   totalRotates.reset()
+  val rotationMetric = Stats.getMetric(statNamed("journal_rotation_usec"))
+  rotationMetric.clear()
 
   private var allowRewrites = true
 
   // # of items in the queue (including those not in memory)
   private var queueLength: Long = 0
 
-  private var queue = new mutable.Queue[QItem]
+  // We use java LinkedList here for the same reason we use java LinkedHashMap
+  // below: the scala datastructure (Queue) is susceptible to gc nepotism.
+  private var queue: java.util.Deque[QItem] = new java.util.LinkedList[QItem]
 
   private var _memoryBytes: Long = 0
 
@@ -107,18 +124,26 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   private var paused = false
 
   private var journal =
-    new Journal(new File(persistencePath).getCanonicalFile, name, journalSyncScheduler, config.syncJournal)
+    new Journal(persistencePath, name, config.syncJournal)
 
   private val waiters = new DeadlineWaitQueue(timer)
 
   // track tentative removals
   private var xidCounter: Int = 0
   private val openTransactions = new mutable.HashMap[Int, QItem]
+
+  // We use java LinkedHashMap rather than the scala impl because of VM-406.
+  // A bug in LinkedHashMap causes linked entries to pile up in old gen under load.
+  // The bug has been fixed in the twitter jdk but not yet in scala. 
+  private val transactionExpiryList = new java.util.LinkedHashMap[Int, Time]
+
   private def openTransactionIds = openTransactions.keys.toSeq.sorted.reverse
   def openTransactionCount = synchronized { openTransactions.size }
 
   def length: Long = synchronized { queueLength }
   def bytes: Long = synchronized { queueSize }
+  def maxItems: Int = synchronized { config.maxItems }
+  def maxBytes: Long = synchronized { config.maxSize.inBytes }
   def maxMemoryBytes: Long = synchronized { config.maxMemorySize.inBytes }
   def journalSize: Long = synchronized { journal.size }
   def journalTotalSize: Long = journal.archivedSize + journalSize
@@ -162,7 +187,9 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   def gauge(gaugeName: String, value: => Double) = Stats.addGauge("q/" + name + "/" + gaugeName)(value)
 
   gauge("items", length)
+  gauge("max_items", maxItems)
   gauge("bytes", bytes)
+  gauge("max_bytes", maxBytes)
   gauge("journal_size", journalTotalSize)
   gauge("mem_items", memoryLength)
   gauge("mem_bytes", memoryBytes)
@@ -171,15 +198,30 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   gauge("open_transactions", openTransactionCount)
   gauge("create_time", createTime)
 
-  def metric(metricName: String) {
-    Stats.getMetric(metricName).clear()
+  def metric(metricName: String): Metric = {
+    val metric = Stats.getMetric(metricName)
+    metric.clear()
+    metric
   }
-  metric(statNamed("set_latency_usec")) // see KestrelHandler
+
+  // see KestrelHandler
+  metric(statNamed("set_latency_usec")) 
   metric(statNamed("get_timeout_msec"))
   metric(statNamed("delivery_latency_msec"))
   metric(statNamed("get_hit_latency_usec"))
   metric(statNamed("get_miss_latency_usec"))
 
+  // readbehind
+  val fillReadBehindMetric = metric(statNamed("fill_readbehind_usec"))
+  
+  // internal datastructure metrics
+  val txMapSizeMetric = metric(statNamed("tx_map_size"))
+  val txExpireListSizeMetric = metric(statNamed("tx_expire_list_size"))
+  val queueSizeMetric = metric(statNamed("queue_size"))
+
+  // request size
+  val requestSizeMetric = metric(statNamed("request_size"))
+  
   private final def adjustExpiry(startingTime: Time, expiry: Option[Time]): Option[Time] = {
     if (config.maxAge.isDefined) {
       val maxExpiry = startingTime + config.maxAge.get
@@ -210,11 +252,30 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       }
     }
   }
+
   /**
    * Check if this Queue has been enabled for client tracing
    */
   def shouldTraceQOps: Boolean = {
     config.enableTrace
+  }
+
+  def persistChanges() {
+    journal.persistChanges()
+  }
+
+  private[this] def rewriteJournal() {
+    val elapsed = Stopwatch.start()
+    journal.rewrite(openTransactionIds.map { openTransactions(_) }, queue)
+    rewriteMetric.add(elapsed().inMicroseconds.toInt)
+    totalRewrites.incr()
+  }
+
+  private[this] def rotateJournal(setCheckpoint: Boolean) {
+    val elapsed = Stopwatch.start()
+    journal.rotate(openTransactionIds.map { openTransactions(_) }, setCheckpoint)
+    rotationMetric.add(elapsed().inMicroseconds.toInt)
+    totalRotates.incr()
   }
 
   // you are holding the lock, and config.keepJournal is true.
@@ -230,14 +291,12 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     if (!config.disableAggressiveRewrites) {
       if (journal.size >= config.defaultJournalSize.inBytes && queueLength == 0) {
         log.info("Rewriting journal file for '%s' (qsize=0)", name)
-        journal.rewrite(openTransactionIds.map { openTransactions(_) }, queue)
-        totalRewrites.incr()
+        rewriteJournal()
       } else if (allowRewrites &&
         journal.size + journal.archivedSize > config.maxJournalSize.inBytes &&
         queueSize < config.maxMemorySize.inBytes) {
         log.info("Rewriting journal file for '%s' (qsize=%d)", name, queueSize)
-        journal.rewrite(openTransactionIds.map { openTransactions(_) }, queue)
-        totalRewrites.incr()
+        rewriteJournal()
         config.minJournalCompactDelay.foreach { delay =>
           allowRewrites = false
           timer.schedule(delay.fromNow) {
@@ -247,16 +306,14 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       } else if (journal.size > config.maxMemorySize.inBytes) {
         log.info("Rotating journal file for '%s' (qsize=%d)", name, queueSize)
         val setCheckpoint = (journal.size + journal.archivedSize > config.maxJournalSize.inBytes)
-        journal.rotate(openTransactionIds.map { openTransactions(_) }, setCheckpoint)
-        totalRotates.incr()
+        rotateJournal(setCheckpoint)
       }
     } else {
       if (allowRewrites &&
           journal.size >= config.defaultJournalSize.inBytes &&
           queueLength == 0) {
         log.info("Rewriting journal file for '%s' (qsize=0)", name)
-        journal.rewrite(openTransactionIds.map { openTransactions(_) }, queue)
-        totalRewrites.incr()
+        rewriteJournal()
         /* KEST 366 - This condition is supposed to be opportunistic and is done frequently
          * with the hope that the journal shrinks to a very small size at the end of this operation
          * as the queue is empty.
@@ -271,8 +328,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
                  journal.size + journal.archivedSize > config.maxJournalSize.inBytes &&
                  queueSize < config.maxMemorySize.inBytes) {
         log.info("Rewriting journal file for '%s' (qsize=%d)", name, queueSize)
-        journal.rewrite(openTransactionIds.map { openTransactions(_) }, queue)
-        totalRewrites.incr()
+        rewriteJournal()
         disallowRewritesForDelay()
       } else if (journal.size > config.maxMemorySize.inBytes) {
         /*
@@ -281,46 +337,84 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
          */
         if (queueLength == 0) {
           log.info("Rewriting journal file for '%s' (qsize=0)", name)
-          journal.rewrite(openTransactionIds.map { openTransactions(_) }, queue)
-          totalRewrites.incr()
+          rewriteJournal()
         }
 
         if (journal.size > config.maxMemorySize.inBytes) {
           log.info("Rotating journal file for '%s' (qsize=%d)", name, queueSize)
           val setCheckpoint = (journal.size + journal.archivedSize > config.maxJournalSize.inBytes)
-          journal.rotate(openTransactionIds.map { openTransactions(_) }, setCheckpoint)
-          totalRotates.incr()
+          rotateJournal(setCheckpoint)
         }
       }
     }
   }
 
   // for tests.
-  def forceRewrite() {
+  def forceRewrite(failPoint: Failpoint) {
     synchronized {
       if (config.keepJournal) {
         log.info("Rewriting journal file for '%s' (qsize=%d)", name, queueSize)
-        journal.rewrite(openTransactionIds.map { openTransactions(_) }, queue)
+        journal.rewrite(openTransactionIds.map { openTransactions(_) }, queue, failPoint)
         totalRewrites.incr()
       }
     }
   }
 
   /**
-   * Add a value to the end of the queue, transactionally.
+   * Add a value to the end of the in memory queue, and ignore the journal write future.
    */
   def add(value: Array[Byte], expiry: Option[Time], xid: Option[Int], addTime: Time): Boolean = {
-    val future = synchronized {
-      if (closed || value.size > config.maxItemSize.inBytes) return false
-      if (config.fanoutOnly && !isFanout) return true
+    addDurable(value, expiry, xid, addTime) match {
+      case Some(f) => true
+      case None => false
+    } 
+  }
+
+  def add(value: Array[Byte]): Boolean = add(value, None, None, Time.now)
+  def add(value: Array[Byte], expiry: Option[Time]): Boolean = add(value, expiry, None, Time.now)
+
+  def continue(xid: Int, value: Array[Byte]): Boolean = add(value, None, Some(xid), Time.now)
+  def continue(xid: Int, value: Array[Byte], expiry: Option[Time]): Boolean = add(value, expiry, Some(xid), Time.now)
+
+  /**
+   * Add a value to the end of the queue, transactionally. If the result is defined, the item has been added to 
+   * the in memory queue and the future will be completed when the write is persisted. If the result is not defined 
+   * enqueue to in memory queue failed and journal write was not attempted. 
+   */
+  def addDurable(value: Array[Byte], expiry: Option[Time], xid: Option[Int], addTime: Time): Option[Future[Unit]] = {
+    requestSizeMetric.add(value.size)
+
+    // The check is done once per main queue and skipped on each fanout.
+    // If a separate whiteListClientIdForEnqueue is specified on the fanout,
+    // it is disregarded
+    if (!isFanout) {
+      config.whiteListClientIdForEnqueue map { whitelistId =>
+        ClientId.current match {
+          case Some(clientId) => {
+            if (!whitelistId.equals(clientId.name)) {
+              val error = String.format("ClientId %s is not allowed to enqueue to queue %s", clientId.name, name)
+              log.error(error)
+              throw new AvailabilityException("add", name, error)
+            }
+          }
+          case None => {
+            val error = String.format("ClientId not specified when queue %s only allows a white-listed clientId", name)
+            log.warning(error)
+            throw new AvailabilityException("add", name, error)
+          }
+        }
+      }
+    }
+    val futureWrite = synchronized {
+      if (closed || value.size > config.maxItemSize.inBytes) return None
+      if (config.fanoutOnly && !isFanout) return Some(Future.Done)
       while (queueLength >= config.maxItems || queueSize >= config.maxSize.inBytes) {
-        if (!config.discardOldWhenFull) return false
+        if (!config.discardOldWhenFull) return None
         _remove(false, None)
         totalDiscarded.incr()
         if (config.keepJournal) journal.remove()
         fillReadBehind()
       }
-
       val item = QItem(addTime, adjustExpiry(Time.now, expiry), value, 0)
       if (config.keepJournal) {
         checkRotateJournal()
@@ -329,7 +423,13 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
           journal.startReadBehind()
         }
       }
-      if (xid != None) openTransactions.remove(xid.get)
+      if (xid != None) {
+        openTransactions.remove(xid.get) map { item =>
+          config.openTransactionTimeout.map { timeout =>
+            transactionExpiryList.remove(item.xid)
+          }
+        }
+      }
       _add(item)
       if (config.keepJournal) {
         xid match {
@@ -337,20 +437,26 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
           case Some(xid) => journal.continue(xid, item)
         }
       } else {
-        Future.void()
+        Future.Done
       }
     }
+    addInternalsMetrics()
     waiters.trigger()
-    // for now, don't wait:
-    //future()
-    true
+    Some(futureWrite)
   }
 
-  def add(value: Array[Byte]): Boolean = add(value, None, None, Time.now)
-  def add(value: Array[Byte], expiry: Option[Time]): Boolean = add(value, expiry, None, Time.now)
+  def addDurable(value: Array[Byte]): Option[Future[Unit]] = addDurable(value, None, None, Time.now)
 
-  def continue(xid: Int, value: Array[Byte]): Boolean = add(value, None, Some(xid), Time.now)
-  def continue(xid: Int, value: Array[Byte], expiry: Option[Time]): Boolean = add(value, expiry, Some(xid), Time.now)
+  /**
+   * Allows us to get more detail about the state of internal datastructures efficiently.
+   * We don't care what percentiles or counts mean here, we just want to keep track of how 
+   * these data structures look most of the time.
+   */
+  private[this] def addInternalsMetrics() {  
+    txMapSizeMetric.add(openTransactions.size)
+    txExpireListSizeMetric.add(transactionExpiryList.size)
+    queueSizeMetric.add(queue.size)
+  }
 
   /**
    * Peek at the head item in the queue, if there is one.
@@ -373,22 +479,54 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
    *     head of the queue)
    */
   def remove(transaction: Boolean): Option[QItem] = {
+    config.whiteListClientIdForDequeue map { whitelistId =>
+      ClientId.current match {
+        case Some(clientId) => {
+          if (!whitelistId.equals(clientId.name)) {
+            val error = String.format("ClientId %s is not allowed to dequeue from queue %s", clientId.name, name)
+            log.error(error)
+            throw new AvailabilityException("remove", name, error)
+          }
+        }
+        case None => {
+          val error = String.format("ClientId not specified when queue %s only allows a white-listed clientId", name)
+          log.warning(error)
+          throw new AvailabilityException("remove", name, error)
+        }
+      }
+    }
+
     val removedItem = synchronized {
       if (closed || paused || queueLength == 0) {
         None
       } else {
         if (transaction) totalTransactions.incr()
-        val item = _remove(transaction, None)
-        if (config.keepJournal && item.isDefined) {
-          if (transaction) journal.removeTentative(item.get.xid) else journal.remove()
+        // We time out the oldest read if any, this is done before the remove so that
+        // the same checks that are used for live items (expiration etc.) can be applied
+        // before redelivery
+        timeOutOldestOpenRead()
+        val itemOption = _remove(transaction, None)
+
+        // Track the item in the transaction expiry list if the queue has an
+        // open transaction timeout
+        if (transaction) {
+          config.openTransactionTimeout.map { timeout =>
+            itemOption map { item =>
+              transactionExpiryList.put(item.xid, Time.now + timeout)
+            }
+          }
+        }
+
+        if (config.keepJournal && itemOption.isDefined) {
+          if (transaction) journal.removeTentative(itemOption.get.xid) else journal.remove()
           fillReadBehind()
           checkRotateJournal()
         }
 
-        item
+        itemOption
       }
     }
-
+    addInternalsMetrics()
     removedItem.foreach { qItem =>
       val usec = (Time.now - qItem.addTime).inMilliseconds.toInt max 0
       Stats.addMetric("delivery_latency_msec", usec)
@@ -412,7 +550,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
           // checking future.isCancelled is a race, but only means that an item may be removed &
           // then un-removed at a higher level if the connection is closed. it's an optimization
           // to let un-acked items get returned before this timeout.
-          if (promise.isCancelled) {
+          if (promise.isInterrupted.isDefined) {
             promise.setValue(None)
             waiters.trigger()
           } else {
@@ -427,7 +565,9 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
           promise.setValue(None)
         }
         val w = waiters.add(deadline.get, onTrigger, onTimeout)
-        promise.onCancellation { waiters.remove(w) }
+        promise.setInterruptHandler { case _ =>
+          waiters.remove(w)
+        }
         false
       } else {
         true
@@ -435,7 +575,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     }) promise.setValue(item)
   }
 
-  final def waitRemove(deadline: Option[Time], transaction: Boolean): Future[Option[QItem]] = {
+  def waitRemove(deadline: Option[Time], transaction: Boolean): Future[Option[QItem]] = {
     val startTime = Time.now
     val promise = new Promise[Option[QItem]]()
     waitOperation(remove(transaction), startTime, deadline, promise)
@@ -474,10 +614,17 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   def unremove(xid: Int) {
     synchronized {
       if (!closed) {
-        if (config.keepJournal) journal.unremove(xid)
         _unremove(xid) match {
-          case Some(_) => totalCanceledTransactions.incr()
-          case None => ()
+          case Some(_) => {
+            if (config.keepJournal) journal.unremove(xid)
+            totalCanceledTransactions.incr()
+            config.openTransactionTimeout.map { timeout =>
+              transactionExpiryList.remove(xid)
+            }
+          }
+          case None =>
+            log.warning("Queue %s: Trying to abort a transaction (%d) that was not open", name, xid)
+
         }
         waiters.trigger()
       }
@@ -487,8 +634,17 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   def confirmRemove(xid: Int) {
     synchronized {
       if (!closed) {
-        if (config.keepJournal) journal.confirmRemove(xid)
-        openTransactions.remove(xid)
+        openTransactions.remove(xid) match {
+          case Some(_) => {
+            if (config.keepJournal) journal.confirmRemove(xid)
+            config.openTransactionTimeout.map { timeout =>
+              transactionExpiryList.remove(xid)
+            }
+          }
+          case None => {
+            log.warning("Queue %s: Trying to commit a transaction (%d) that was not open", name, xid)
+          }
+        }
       }
     }
   }
@@ -510,12 +666,9 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
    */
   def close(gracefulShutdown: Boolean) {
     synchronized {
-      if (gracefulShutdown) {
-        if (0 == queueLength) {
-          log.info("Rewriting journal file for '%s' (qsize=0)", name)
-          journal.rewrite(openTransactionIds.map { openTransactions(_) }, queue)
-          totalRewrites.incr()
-        }
+      if ((gracefulShutdown) && (0 == queueLength)) {
+        log.info("Rewriting journal file during graceful shutdown for '%s' (qsize=0)", name)
+        rewriteJournal()
       }
       closed = true
       if (config.keepJournal) journal.close()
@@ -565,7 +718,9 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     Stats.removeCounter(statNamed("journal_rewrites"))
     Stats.removeCounter(statNamed("journal_rotations"))
     Stats.clearGauge(statNamed("items"))
+    Stats.clearGauge(statNamed("max_items"))
     Stats.clearGauge(statNamed("bytes"))
+    Stats.clearGauge(statNamed("max_bytes"))
     Stats.clearGauge(statNamed("journal_size"))
     Stats.clearGauge(statNamed("mem_items"))
     Stats.clearGauge(statNamed("mem_bytes"))
@@ -573,11 +728,18 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     Stats.clearGauge(statNamed("waiters"))
     Stats.clearGauge(statNamed("open_transactions"))
     Stats.clearGauge(statNamed("create_time"))
+    Stats.removeMetric(statNamed("journal_rewrite_usec"))
+    Stats.removeMetric(statNamed("journal_rotation_usec"))
     Stats.removeMetric(statNamed("set_latency_usec")) // see KestrelHandler
     Stats.removeMetric(statNamed("get_timeout_msec"))
     Stats.removeMetric(statNamed("delivery_latency_msec"))
     Stats.removeMetric(statNamed("get_hit_latency_usec"))
     Stats.removeMetric(statNamed("get_miss_latency_usec"))
+    Stats.removeMetric(statNamed("fill_readbehind_usec"))
+    Stats.removeMetric(statNamed("tx_map_size"))
+    Stats.removeMetric(statNamed("tx_expire_list_size"))
+    Stats.removeMetric(statNamed("queue_size"))
+    Stats.removeMetric(statNamed("request_size"))
   }
 
   private final def nextXid(): Int = {
@@ -588,11 +750,13 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
   }
 
   private final def fillReadBehind() {
+    val elapsed = Stopwatch.start()
+
     // if we're in read-behind mode, scan forward in the journal to keep memory as full as
     // possible. this amortizes the disk overhead across all reads.
     while (config.keepJournal && journal.inReadBehind && _memoryBytes < config.maxMemorySize.inBytes) {
       journal.fillReadBehind { item =>
-        queue += item
+        queue.add(item)
         _memoryBytes += item.data.length
       } { checkpoint =>
         log.info("Rewriting journal file from checkpoint for '%s' (qsize=%d)", name, queueSize)
@@ -602,15 +766,18 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
         log.info("Coming out of read-behind for queue '%s'", name)
       }
     }
+
+    fillReadBehindMetric.add(elapsed().inMicroseconds.toInt)
   }
 
   def replayJournal() {
     if (!config.keepJournal) return
 
+    val sw = Stopwatch.start()
     log.info("Replaying transaction journal for '%s'", name)
     xidCounter = 0
 
-    journal.replay {
+    journal.replay( true , {
       case JournalItem.Add(item) =>
         _add(item)
         // when processing the journal, this has to happen after:
@@ -634,9 +801,9 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
         journal.notifyRemoveDuringReplay()
         _add(item)
       case x => log.error("Unexpected item in journal: %s", x)
-    }
+    })
 
-    log.info("Finished transaction journal for '%s' (%d items, %d bytes) xid=%d, removes=%d", name, queueLength,
+    log.info("Finished scanning the transaction journal for '%s' (%d items, %d bytes) xid=%d, removes=%d", name, queueLength,
              journal.size, xidCounter, journal.removesSinceReadBehind)
     journal.open()
 
@@ -645,15 +812,33 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
       journal.unremove(xid)
       _unremove(xid)
     }
+
+    log.info("Finished replaying the transaction journal for '%s' in %d milliseconds", name, sw().inMilliseconds.toInt)
+
   }
 
+  /**
+   * Retrieves the oldest add time from the queue. This is only meant to be an estimate, which is
+   * why we don't synchronize access to the queue.
+   *
+   * This method is expensive and will return 0 if there are more than 10000 items.
+   * If there are no items in the queue, it will return current timestamp.
+   *
+   * @return oldest add time in milliseconds
+   */
+  def getOldestAddTime: Long = {
+    if (queueLength <= 10000)
+      queue.foldLeft(Time.now.inMilliseconds)((m, i) => scala.math.min(m, i.addTime.inMilliseconds))
+    else
+      0
+  }
 
   //  -----  internal implementations
 
   private def _add(item: QItem) {
     discardExpired()
     if (!journal.inReadBehind) {
-      queue += item
+      queue.add(item)
       _memoryBytes += item.data.length
     }
     putItems.getAndIncrement()
@@ -664,7 +849,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
 
   private def _peek(): Option[QItem] = {
     discardExpired()
-    if (queue.isEmpty) None else Some(queue.front)
+    if (queue.isEmpty) None else Some(queue.peekFirst)
   }
 
   private def _remove(transaction: Boolean, xid: Option[Int]): Option[QItem] = {
@@ -672,7 +857,7 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     if (queue.isEmpty) return None
 
     val now = Time.now
-    val item = queue.dequeue()
+    val item = queue.remove()
     val len = item.data.length
     queueSize -= len
     _memoryBytes -= len
@@ -688,30 +873,35 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     Some(item)
   }
 
-  final def discardExpired(limit: Boolean = false): Int = {
+  final def discardExpired(limit: Int = config.maxExpireSweep): Int = {
     val itemsToRemove = synchronized {
       var continue = true
+      val hasLimit = limit < Int.MaxValue
       val toRemove = new mutable.ListBuffer[QItem]
-      val hasLimit = limit && config.maxExpireSweep > 0
       while (continue) {
-        if (queue.isEmpty || (hasLimit && toRemove.size >= config.maxExpireSweep) || journal.isReplaying) {
+        if (queue.isEmpty || hasLimit && toRemove.length >= limit || journal.isReplaying) {
           continue = false
         } else {
-          val realExpiry = adjustExpiry(queue.front.addTime, queue.front.expiry)
+          val realExpiry = adjustExpiry(queue.peekFirst.addTime, queue.peekFirst.expiry)
           if (realExpiry.isDefined && realExpiry.get < Time.now) {
             totalExpired.incr()
-            val item = queue.dequeue()
+            val item = queue.remove()
             val len = item.data.length
             queueSize -= len
             _memoryBytes -= len
             queueLength -= 1
             if (config.keepJournal) journal.remove()
-            fillReadBehind()
+            if (queue.isEmpty) {
+              fillReadBehind()
+            }
             toRemove += item
           } else {
             continue = false
           }
         }
+      }
+      if (toRemove.length > 0) {
+        fillReadBehind()
       }
       toRemove
     }
@@ -726,8 +916,22 @@ class PersistentQueue(val name: String, persistencePath: String, @volatile var c
     openTransactions.remove(xid) map { item =>
       queueLength += 1
       queueSize += item.data.length
-      item +=: queue
+      queue.addFirst(item)
       _memoryBytes += item.data.length
+    }
+  }
+
+  private def timeOutOldestOpenRead() {
+    config.openTransactionTimeout.flatMap { timeout =>
+      if (transactionExpiryList.size > 0) {
+        Option(transactionExpiryList.entrySet.iterator.next)
+      } else {
+        None
+      }
+    } map { txEntry =>
+      if (txEntry.getValue < Time.now) {
+        unremove(txEntry.getKey)
+      }
     }
   }
 }

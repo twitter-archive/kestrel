@@ -24,8 +24,9 @@ import scala.util.Sorting
 import com.twitter.conversions.time._
 import com.twitter.logging.TestLogging
 import com.twitter.ostrich.stats.Stats
-import com.twitter.util.{TempFolder, Time, Timer}
-import org.specs.Specification
+import com.twitter.util.{Await, TempFolder, Time, Timer}
+import org.scalatest.concurrent.Eventually
+import org.specs.SpecificationWithJUnit
 import org.specs.matcher.Matcher
 import org.specs.mock.{ClassMocker, JMocker}
 import config._
@@ -34,7 +35,7 @@ class FakeKestrelHandler(queues: QueueCollection, maxOpenTransactions: Int,
                          serverStatus: Option[ServerStatus] = None)
   extends KestrelHandler(queues, maxOpenTransactions, () => "none", 0, serverStatus) with SimplePendingReads
 
-class KestrelHandlerSpec extends Specification with JMocker with ClassMocker with TempFolder with TestLogging {
+class KestrelHandlerSpec extends SpecificationWithJUnit with JMocker with ClassMocker with TempFolder with TestLogging with Eventually {
   val config = new QueueBuilder().apply()
 
   case class beString(expected: String) extends Matcher[Option[QItem]]() {
@@ -59,8 +60,8 @@ class KestrelHandlerSpec extends Specification with JMocker with ClassMocker wit
         val handler = new FakeKestrelHandler(queues, 10)
         handler.setItem("test", 0, None, "one".getBytes)
         handler.setItem("test", 0, None, "two".getBytes)
-        handler.getItem("test", None, false, false).get() must beString("one")
-        handler.getItem("test", None, false, false).get() must beString("two")
+        Await.result(handler.getItem("test", None, false, false)) must beString("one")
+        Await.result(handler.getItem("test", None, false, false)) must beString("two")
       }
     }
 
@@ -81,13 +82,13 @@ class KestrelHandlerSpec extends Specification with JMocker with ClassMocker wit
         Stats.getCounter("cmd_set")() mustEqual 1
         Stats.getCounter("cmd_get")() mustEqual 0
 
-        handler.getItem("test", None, false, false).get() must beString("one")
+        Await.result(handler.getItem("test", None, false, false)) must beString("one")
         Stats.getCounter("cmd_set")() mustEqual 1
         Stats.getCounter("cmd_get")() mustEqual 1
         Stats.getCounter("get_hits")() mustEqual 1
         Stats.getCounter("get_misses")() mustEqual 0
 
-        handler.getItem("test2", None, false, false).get() mustEqual None
+        Await.result(handler.getItem("test2", None, false, false)) mustEqual None
         Stats.getCounter("cmd_set")() mustEqual 1
         Stats.getCounter("cmd_get")() mustEqual 2
         Stats.getCounter("get_hits")() mustEqual 1
@@ -158,12 +159,12 @@ class KestrelHandlerSpec extends Specification with JMocker with ClassMocker wit
         queues = new QueueCollection(folderName, timer, scheduler, config, Nil, Nil)
         val handler = new FakeKestrelHandler(queues, 10)
         handler.setItem("test", 0, None, "one".getBytes)
-        handler.getItem("test", None, true, false)() must beString("one")
-        handler.getItem("test", None, true, false)() mustEqual None
+        Await.result(handler.getItem("test", None, true, false)) must beString("one")
+        Await.result(handler.getItem("test", None, true, false)) mustEqual None
         handler.abortRead("test") mustEqual true
-        handler.getItem("test", None, true, false)() must beString("one")
+        Await.result(handler.getItem("test", None, true, false)) must beString("one")
         handler.closeRead("test") mustEqual true
-        handler.getItem("test", None, true, false)() mustEqual None
+        Await.result(handler.getItem("test", None, true, false)) mustEqual None
       }
     }
 
@@ -172,12 +173,28 @@ class KestrelHandlerSpec extends Specification with JMocker with ClassMocker wit
         queues = new QueueCollection(folderName, timer, scheduler, config, Nil, Nil)
         val handler = new FakeKestrelHandler(queues, 10)
         handler.setItem("test", 0, None, "one".getBytes)
-        handler.getItem("test", None, true, false)() must beString("one")
+        Await.result(handler.getItem("test", None, true, false)) must beString("one")
         handler.delete("test")
         queues.queueNames mustEqual Nil
 
         handler.abortRead("test")
         queues.queueNames mustEqual Nil
+      }
+    }
+
+    "abort waiters" in {
+      withTempFolder {
+        queues = new QueueCollection(folderName, timer, scheduler, config, Nil, Nil)
+        val handler = new FakeKestrelHandler(queues, 10)
+        @volatile var got = false
+        handler.monitorUntil("test", Some(1.hour.fromNow), 5, true)({ (itemOption, _) =>
+          itemOption map { case _ =>
+            got = true
+          }
+        })
+        Stats.getGauge("q/test/waiters") mustEqual Some(1.0)
+        handler.finish()
+        eventually { Stats.getGauge("q/test/waiters") mustEqual Some(0.0) }
       }
     }
 
@@ -189,14 +206,14 @@ class KestrelHandlerSpec extends Specification with JMocker with ClassMocker wit
           handler.setItem("test", 0, None, "one".getBytes)
           handler.setItem("test", 0, None, "two".getBytes)
           handler.setItem("test", 0, None, "three".getBytes)
-          handler.getItem("test", None, true, false)() must beString("one")
-          handler.getItem("test", None, true, false)() must beString("two")
+          Await.result(handler.getItem("test", None, true, false)) must beString("one")
+          Await.result(handler.getItem("test", None, true, false)) must beString("two")
           handler.abortRead("test") mustEqual true
-          handler.getItem("test", None, true, false)() must beString("one")
+          Await.result(handler.getItem("test", None, true, false)) must beString("one")
           handler.closeRead("test") mustEqual true
-          handler.getItem("test", None, true, false)() must beString("three")
+          Await.result(handler.getItem("test", None, true, false)) must beString("three")
           handler.abortRead("test") mustEqual true
-          handler.getItem("test", None, true, false)() must beString("one")
+          Await.result(handler.getItem("test", None, true, false)) must beString("one")
         }
       }
 
@@ -211,21 +228,21 @@ class KestrelHandlerSpec extends Specification with JMocker with ClassMocker wit
           handler.setItem("blue", 0, None, "blue1".getBytes)
           handler.setItem("blue", 0, None, "blue2".getBytes)
 
-          handler.getItem("red", None, true, false)() must beString("red1")
-          handler.getItem("green", None, true, false)() must beString("green1")
-          handler.getItem("blue", None, true, false)() must beString("blue1")
+          Await.result(handler.getItem("red", None, true, false)) must beString("red1")
+          Await.result(handler.getItem("green", None, true, false)) must beString("green1")
+          Await.result(handler.getItem("blue", None, true, false)) must beString("blue1")
           handler.abortRead("green") mustEqual true
 
-          handler.getItem("red", None, true, false)() must beString("red2")
+          Await.result(handler.getItem("red", None, true, false)) must beString("red2")
           handler.closeRead("red") mustEqual true
           handler.closeRead("red") mustEqual true
-          handler.getItem("red", None, true, false)() mustEqual None
+          Await.result(handler.getItem("red", None, true, false)) mustEqual None
 
-          handler.getItem("green", None, true, false)() must beString("green1")
+          Await.result(handler.getItem("green", None, true, false)) must beString("green1")
           handler.closeRead("blue") mustEqual true
           handler.abortRead("green") mustEqual true
-          handler.getItem("blue", None, true, false)() must beString("blue2")
-          handler.getItem("green", None, true, false)() must beString("green1")
+          Await.result(handler.getItem("blue", None, true, false)) must beString("blue2")
+          Await.result(handler.getItem("green", None, true, false)) must beString("green1")
         }
       }
 
@@ -235,8 +252,8 @@ class KestrelHandlerSpec extends Specification with JMocker with ClassMocker wit
           val handler = new FakeKestrelHandler(queues, 1)
           handler.setItem("red", 0, None, "red1".getBytes)
           handler.setItem("red", 0, None, "red2".getBytes)
-          handler.getItem("red", None, true, false)() must beString("red1")
-          handler.getItem("red", None, true, false)() must throwA[TooManyOpenReadsException]
+          Await.result(handler.getItem("red", None, true, false)) must beString("red1")
+          Await.result(handler.getItem("red", None, true, false)) must throwA[TooManyOpenReadsException]
         }
       }
 
@@ -261,8 +278,8 @@ class KestrelHandlerSpec extends Specification with JMocker with ClassMocker wit
           val handler = new FakeKestrelHandler(queues, 2)
           handler.setItem("red", 0, None, "red1".getBytes)
           handler.setItem("red", 0, None, "red2".getBytes)
-          handler.getItem("red", None, true, false)() must beString("red1")
-          handler.getItem("red", None, true, false)() must beString("red2")
+          Await.result(handler.getItem("red", None, true, false)) must beString("red1")
+          Await.result(handler.getItem("red", None, true, false)) must beString("red2")
           handler.closeAllReads("red") mustEqual 2
           handler.abortRead("red") mustEqual false
           handler.pendingReads.size("red") mustEqual 0

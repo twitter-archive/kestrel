@@ -14,7 +14,8 @@ SCALA_VERSION="2.9.2"
 APP_HOME="/usr/local/$APP_NAME/current"
 INITIAL_SLEEP=15
 
-JAR_NAME="${APP_NAME}_${SCALA_VERSION}-${VERSION}.jar"
+source base.sh
+JAR=$(find_jar $APP_HOME)
 STAGE="production"
 FD_LIMIT="262144"
 
@@ -54,11 +55,6 @@ case "$1" in
   start)
     echo -n "Starting $APP_NAME... "
 
-    if [ ! -r $APP_HOME/$JAR_NAME ]; then
-      echo "FAIL"
-      echo "*** $APP_NAME jar missing: $APP_HOME/$JAR_NAME - not starting"
-      exit 1
-    fi
     if [ ! -x $JAVA_HOME/bin/java ]; then
       echo "FAIL"
       echo "*** $JAVA_HOME/bin/java doesn't exist -- check JAVA_HOME?"
@@ -80,7 +76,7 @@ case "$1" in
     ulimit -n $FD_LIMIT || echo -n " (no ulimit)"
     ulimit -c unlimited || echo -n " (no coredump)"
 
-    sh -c "echo "'$$'" > $pidfile; exec ${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar ${APP_HOME}/${JAR_NAME} >> /var/log/$APP_NAME/stdout 2>> /var/log/$APP_NAME/error" &
+    sh -c "echo "'$$'" > $pidfile; exec ${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar $JAR >> /var/log/$APP_NAME/stdout 2>> /var/log/$APP_NAME/error" &
     disown %-
     sleep $INITIAL_SLEEP
 

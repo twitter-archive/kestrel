@@ -21,14 +21,14 @@ import java.io.{File, FileInputStream}
 import java.util.concurrent.ScheduledThreadPoolExecutor
 import scala.util.Sorting
 import com.twitter.logging.{Level, TestLogging}
-import com.twitter.util.{TempFolder, Time, Timer}
+import com.twitter.util.{Await,TempFolder, Time, Timer}
 import com.twitter.conversions.time._
 import com.twitter.conversions.storage._
 import com.twitter.ostrich.stats.Stats
-import org.specs.Specification
+import org.specs.SpecificationWithJUnit
 import config._
 
-class QueueCollectionSpec extends Specification with TempFolder with TestLogging with QueueMatchers {
+class QueueCollectionSpec extends SpecificationWithJUnit with TempFolder with TestLogging with QueueMatchers {
   private var qc: QueueCollection = null
 
   val config = new QueueBuilder().apply()
@@ -61,10 +61,10 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
         Stats.getCounter("queue_creates")() mustEqual 2
         Stats.getCounter("queue_deletes")() mustEqual 0
 
-        qc.remove("work1")() must beSomeQItem("stuff")
-        qc.remove("work1")() mustEqual None
-        qc.remove("work2")() must beSomeQItem("other stuff")
-        qc.remove("work2")() mustEqual None
+        Await.result(qc.remove("work1")) must beSomeQItem("stuff")
+        Await.result(qc.remove("work1")) mustEqual None
+        Await.result(qc.remove("work2")) must beSomeQItem("other stuff")
+        Await.result(qc.remove("work2")) mustEqual None
 
         qc.currentBytes mustEqual 0
         qc.currentItems mustEqual 0
@@ -117,7 +117,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
 
         qc = new QueueCollection(folderName, timer, scheduler, config, Nil, Nil)
         qc.queueNames mustEqual Nil
-        qc.remove("ducklings")() must beSomeQItem("huey")
+        Await.result(qc.remove("ducklings")) must beSomeQItem("huey")
         // now the queue should be suddenly instantiated:
         qc.currentBytes mustEqual 10
         qc.currentItems mustEqual 2
@@ -133,20 +133,20 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
         Stats.getCounter("get_hits")() mustEqual 0
         Stats.getCounter("get_misses")() mustEqual 0
 
-        qc.remove("ducklings")() must beSomeQItem("ugly1")
+        Await.result(qc.remove("ducklings")) must beSomeQItem("ugly1")
         Stats.getCounter("get_hits")() mustEqual 1
         Stats.getCounter("get_misses")() mustEqual 0
-        qc.remove("zombie")() mustEqual None
+        Await.result(qc.remove("zombie")) mustEqual None
         Stats.getCounter("get_hits")() mustEqual 1
         Stats.getCounter("get_misses")() mustEqual 1
 
-        qc.remove("ducklings")() must beSomeQItem("ugly2")
+        Await.result(qc.remove("ducklings")) must beSomeQItem("ugly2")
         Stats.getCounter("get_hits")() mustEqual 2
         Stats.getCounter("get_misses")() mustEqual 1
-        qc.remove("ducklings")() mustEqual None
+        Await.result(qc.remove("ducklings")) mustEqual None
         Stats.getCounter("get_hits")() mustEqual 2
         Stats.getCounter("get_misses")() mustEqual 2
-        qc.remove("ducklings")() mustEqual None
+        Await.result(qc.remove("ducklings")) mustEqual None
         Stats.getCounter("get_hits")() mustEqual 2
         Stats.getCounter("get_misses")() mustEqual 3
       }
@@ -195,12 +195,12 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
         withTempFolder {
           qc = new QueueCollection(folderName, timer, scheduler, config, Nil, Nil)
           qc.add("jobs", "job1".getBytes)
-          qc.remove("jobs+client1")() mustEqual None
+          Await.result(qc.remove("jobs+client1")) mustEqual None
           qc.add("jobs", "job2".getBytes)
 
-          qc.remove("jobs+client1")() must beSomeQItem("job2")
-          qc.remove("jobs")() must beSomeQItem("job1")
-          qc.remove("jobs")() must beSomeQItem("job2")
+          Await.result(qc.remove("jobs+client1")) must beSomeQItem("job2")
+          Await.result(qc.remove("jobs")) must beSomeQItem("job1")
+          Await.result(qc.remove("jobs")) must beSomeQItem("job2")
         }
       }
 
@@ -211,12 +211,12 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
           qc = new QueueCollection(folderName, timer, scheduler, config, Nil, Nil)
           qc.loadQueues()
           qc.add("jobs", "job1".getBytes)
-          qc.remove("jobs+client1")() must beSomeQItem("job1")
+          Await.result(qc.remove("jobs+client1")) must beSomeQItem("job1")
           qc.add("jobs", "job2".getBytes)
 
-          qc.remove("jobs+client1")() must beSomeQItem("job2")
-          qc.remove("jobs")() must beSomeQItem("job1")
-          qc.remove("jobs")() must beSomeQItem("job2")
+          Await.result(qc.remove("jobs+client1")) must beSomeQItem("job2")
+          Await.result(qc.remove("jobs")) must beSomeQItem("job1")
+          Await.result(qc.remove("jobs")) must beSomeQItem("job2")
         }
       }
 
@@ -231,11 +231,11 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
           qc.delete("jobs+client1")
 
           new File(folderName).list().toList.sorted mustEqual List("jobs")
-          qc.remove("jobs")() must beSomeQItem("job1")
+          Await.result(qc.remove("jobs")) must beSomeQItem("job1")
 
           qc.add("jobs", "job2".getBytes)
           new File(folderName).list().toList.sorted mustEqual List("jobs")
-          qc.remove("jobs")() must beSomeQItem("job2")
+          Await.result(qc.remove("jobs")) must beSomeQItem("job2")
         }
       }
 
@@ -249,8 +249,8 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
           qc = new QueueCollection(folderName, timer, scheduler, config, List(jobConfig), Nil)
           qc.loadQueues()
           qc.add("jobs", "job1".getBytes)
-          qc.remove("jobs")() mustEqual None
-          qc.remove("jobs+client1")() must beSomeQItem("job1")
+          Await.result(qc.remove("jobs")) mustEqual None
+          Await.result(qc.remove("jobs+client1")) must beSomeQItem("job1")
         }
       }
     }
@@ -265,10 +265,10 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
 
             qc.add("expired", "hello".getBytes, Some(5.seconds.fromNow))
             time.advance(4.seconds)
-            qc.remove("expired")() must beSomeQItem("hello")
+            Await.result(qc.remove("expired")) must beSomeQItem("hello")
             qc.add("expired", "hello".getBytes, Some(5.seconds.fromNow))
             time.advance(6.seconds)
-            qc.remove("expired")() mustEqual None
+            Await.result(qc.remove("expired")) mustEqual None
           }
         }
       }
@@ -291,10 +291,10 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
             time.advance(2.seconds)
             qc.queue("jobs").get.length mustEqual 1
             qc.queue("expired").get.length mustEqual 0
-            qc.remove("jobs")() mustEqual None
+            Await.result(qc.remove("jobs")) mustEqual None
             qc.queue("jobs").get.length mustEqual 0
             qc.queue("expired").get.length mustEqual 1
-            qc.remove("expired")() must beSomeQItem("hello")
+            Await.result(qc.remove("expired")) must beSomeQItem("hello")
           }
         }
       }
@@ -310,7 +310,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
           qc = new QueueCollection(folderName, timer, scheduler, config, Nil, List(aliasConfig))
           qc.loadQueues()
           qc.add("nom-de-guerre", "brie".getBytes)
-          qc.remove("fromage")() must beSomeQItem("brie")
+          Await.result(qc.remove("fromage")) must beSomeQItem("brie")
         }
       }
 
@@ -323,8 +323,8 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
           qc = new QueueCollection(folderName, timer, scheduler, config, Nil, List(aliasConfig))
           qc.loadQueues()
           qc.add("nom-de-guerre", "brie".getBytes)
-          qc.remove("fromage")() must beSomeQItem("brie")
-          qc.remove("formaggio")() must beSomeQItem("brie")
+          Await.result(qc.remove("fromage")) must beSomeQItem("brie")
+          Await.result(qc.remove("formaggio")) must beSomeQItem("brie")
         }
       }
 
@@ -349,12 +349,12 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
           qc.loadQueues()
 
           // create fanouts
-          qc.remove("fromage+brie")() must beNone
-          qc.remove("formaggio+gorgonzola")() must beNone
+          Await.result(qc.remove("fromage+brie")) must beNone
+          Await.result(qc.remove("formaggio+gorgonzola")) must beNone
 
           qc.add("nom-de-guerre", "cheez whiz".getBytes)
-          qc.remove("fromage+brie")() must beSomeQItem("cheez whiz")
-          qc.remove("formaggio+gorgonzola")() must beSomeQItem("cheez whiz")
+          Await.result(qc.remove("fromage+brie")) must beSomeQItem("cheez whiz")
+          Await.result(qc.remove("formaggio+gorgonzola")) must beSomeQItem("cheez whiz")
         }
       }
 
@@ -367,7 +367,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
           qc = new QueueCollection(folderName, timer, scheduler, config, Nil, List(aliasConfig))
           qc.loadQueues()
           qc.add("nom-de-guerre", "brie".getBytes)
-          qc.remove("nom-de-guerre")() must beNone
+          Await.result(qc.remove("nom-de-guerre")) must beNone
         }
       }
 
@@ -402,7 +402,7 @@ class QueueCollectionSpec extends Specification with TempFolder with TestLogging
             "confirmRemove" -> { (qc: QueueCollection, name: String) => qc.confirmRemove(name, 100) },
             "flush" ->         { (qc: QueueCollection, name: String) => qc.flush(name) },
             "delete" ->        { (qc: QueueCollection, name: String) => qc.delete(name) },
-            "flushExpired" ->  { (qc: QueueCollection, name: String) => qc.flushExpired(name, true) },
+            "flushExpired" ->  { (qc: QueueCollection, name: String) => qc.flushExpired(name) },
             "stats" ->         { (qc: QueueCollection, name: String) => qc.stats(name) })
       tests foreach { case (op, test) =>
         "%s should not cause a queue to be created".format(op) in {

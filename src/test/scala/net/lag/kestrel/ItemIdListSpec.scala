@@ -16,9 +16,9 @@
 
 package net.lag.kestrel
 
-import org.specs.Specification
+import org.specs.SpecificationWithJUnit
 
-class ItemIdListSpec extends Specification {
+class ItemIdListSpec extends SpecificationWithJUnit {
   "ItemIdList" should {
     val iil = new ItemIdList()
 

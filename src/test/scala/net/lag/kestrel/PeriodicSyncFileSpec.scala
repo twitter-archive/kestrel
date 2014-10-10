@@ -19,18 +19,20 @@ package net.lag.kestrel
 
 import com.twitter.conversions.time._
 import com.twitter.logging.TestLogging
-import com.twitter.util.Duration
+import com.twitter.util.{Stopwatch, Duration}
+import java.nio.ByteBuffer
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicInteger
-import org.specs.Specification
+import org.specs.SpecificationWithJUnit
 import org.specs.matcher.Matcher
 
-class PeriodicSyncFileSpec extends Specification
+class PeriodicSyncFileSpec extends SpecificationWithJUnit
   with TestLogging
   with QueueMatchers
 {
-  "PeriodicSyncTask" should {
-    val scheduler = new ScheduledThreadPoolExecutor(4)
+  val scheduler = new ScheduledThreadPoolExecutor(4)
+
+  "PeriodicSyncTask" should {  
     val invocations = new AtomicInteger(0)
     val syncTask = new PeriodicSyncTask(scheduler, 0.milliseconds, 20.milliseconds) {
       override def run() {
@@ -44,14 +46,13 @@ class PeriodicSyncFileSpec extends Specification
     }
 
     "only start once" in {
-      val (_, duration) = Duration.inMilliseconds {
-        syncTask.start()
-        syncTask.start()
-        Thread.sleep(100)
-        syncTask.stop()
-      }
+      val sw = Stopwatch.start()
+      syncTask.start()
+      syncTask.start()
+      Thread.sleep(100)
+      syncTask.stop()
 
-      val expectedInvocations = duration.inMilliseconds / 20
+      val expectedInvocations = sw().inMilliseconds / 20
       (invocations.get <= expectedInvocations * 3 / 2) mustBe true
     }
 
@@ -84,5 +85,5 @@ class PeriodicSyncFileSpec extends Specification
       (invocationsPostStop >= invocationsPostIgnoredStop) mustBe true // maybe did more
       invocations.get mustEqual invocationsPostStop                   // stopped
     }
-  }
+  }  
 }

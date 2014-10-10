@@ -26,7 +26,7 @@ import com.twitter.logging.Logger
 import com.twitter.naggati.{Codec, LatchedChannelSource, ProtocolError}
 import com.twitter.naggati.codec.{MemcacheRequest, MemcacheResponse}
 import com.twitter.ostrich.stats.Stats
-import com.twitter.util.{Future, Duration, Time}
+import com.twitter.util.{Future, Time}
 
 /**
  * Memcache protocol handler for a kestrel connection.
@@ -43,10 +43,11 @@ class MemcacheHandler(
   val handler = new KestrelHandler(queueCollection, maxOpenReads, clientDescription _, sessionId,
                                    serverStatus) with SimplePendingReads
   log.debug("New session %d from %s", sessionId, clientDescription)
+  var loggedClientError: Boolean = false
 
-  override def release() {
+  override def close(deadline: Time) = {
     handler.finish()
-    super.release()
+    Future.Unit
   }
 
   protected def clientDescription: String = {
@@ -62,6 +63,13 @@ class MemcacheHandler(
     try {
       handle(request)
     } catch {
+      case e: IndexOutOfBoundsException => {
+        if (!loggedClientError) {
+          log.error("Request %s from client %s encountered IndexOutOfBoundsException", request, clientDescription)
+          loggedClientError = true
+        }
+        Future(new MemcacheResponse("CLIENT_ERROR"))
+      }
       case e: AvailabilityException =>
         // kestrel-client ruby gem will retry (if configured) on SERVER_ERROR, but
         // not on ERROR or CLIENT_ERROR
@@ -103,6 +111,10 @@ class MemcacheHandler(
           }
         } catch {
           case e: NumberFormatException =>
+            if (!loggedClientError) {
+              log.error("Request %s from client %s encountered NumberFormatException", request, clientDescription)
+              loggedClientError = true
+            }
             Future(new MemcacheResponse("CLIENT_ERROR"))
         }
       case "stats" =>

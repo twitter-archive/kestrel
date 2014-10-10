@@ -22,10 +22,10 @@ import com.twitter.logging.TestLogging
 import com.twitter.ostrich.stats.Stats
 import com.twitter.util.{Duration, MockTimer, TempFolder, Time, TimeControl}
 import java.io._
-import org.specs.Specification
+import org.specs.SpecificationWithJUnit
 import org.specs.mock.{ClassMocker, JMocker}
 
-class ServerStatusSpec extends Specification with JMocker with ClassMocker with TempFolder
+class ServerStatusSpec extends SpecificationWithJUnit with JMocker with ClassMocker with TempFolder
 with TestLogging {
   val mockTimer: MockTimer = new MockTimer
 
@@ -138,6 +138,9 @@ with TestLogging {
           serverStatus.markReadOnly()
           serverStatus.status mustEqual ReadOnly
 
+          serverStatus.markWriteAvoid()
+          serverStatus.status mustEqual WriteAvoid
+
           tc.advance(31.seconds)
           mockTimer.tick()
 
@@ -154,6 +157,9 @@ with TestLogging {
           serverStatus.setStatus(ReadOnly)
           serverStatus.status mustEqual ReadOnly
 
+          serverStatus.setStatus(WriteAvoid)
+          serverStatus.status mustEqual WriteAvoid
+
           tc.advance(31.seconds)
           mockTimer.tick()
 
@@ -169,6 +175,9 @@ with TestLogging {
 
           serverStatus.setStatus("readonly")
           serverStatus.status mustEqual ReadOnly
+
+          serverStatus.setStatus("writeavoid")
+          serverStatus.status mustEqual WriteAvoid
 
           tc.advance(31.seconds)
           mockTimer.tick()
@@ -204,6 +213,16 @@ with TestLogging {
         withServerStatus { (serverStatus, _) =>
           new File(statusFile).exists() mustEqual false
           serverStatus.markUp()
+          storedStatus() mustEqual "Up"
+        }
+      }
+
+      "not store status after successful transient change" in {
+        withServerStatus { (serverStatus, _) =>
+          new File(statusFile).exists() mustEqual false
+          serverStatus.markUp()
+          serverStatus.setStatus(WriteAvoid, persistStatus = false)
+          serverStatus.status == WriteAvoid
           storedStatus() mustEqual "Up"
         }
       }
@@ -278,6 +297,12 @@ with TestLogging {
           Stats.getGauge("status/readable") mustEqual Some(1.0)
           Stats.getGauge("status/writeable") mustEqual Some(1.0)
 
+          serverStatus.setStatus(WriteAvoid)
+          serverStatus.status mustEqual WriteAvoid
+          Stats.getLabel("status") mustEqual Some("WriteAvoid")
+          Stats.getGauge("status/readable") mustEqual Some(1.0)
+          Stats.getGauge("status/writeable") mustEqual Some(1.0)          
+
           serverStatus.setStatus(ReadOnly)
           serverStatus.status mustEqual ReadOnly
           Stats.getLabel("status") mustEqual Some("ReadOnly")
@@ -294,6 +319,24 @@ with TestLogging {
     }
 
     "blocked operations" in {
+      "do not block write operations when switching to WriteAvoid" in {
+        withServerStatus { (serverStatus, tc) =>
+          serverStatus.markUp()
+          serverStatus.blockWrites mustEqual false
+          serverStatus.blockReads mustEqual false
+          serverStatus.setStatus(WriteAvoid) mustEqual WriteAvoid
+
+          serverStatus.blockWrites mustEqual false
+          serverStatus.blockReads mustEqual false
+
+          tc.advance(31.seconds)
+          mockTimer.tick()
+
+          serverStatus.blockWrites mustEqual false
+          serverStatus.blockReads mustEqual false
+        }
+      }
+
       "block write operations when switching to ReadOnly, after a delay" in {
         withServerStatus { (serverStatus, tc) =>
           serverStatus.markUp()

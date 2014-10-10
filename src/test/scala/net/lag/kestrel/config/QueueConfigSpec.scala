@@ -18,12 +18,12 @@ package net.lag.kestrel.config
 
 import com.twitter.conversions.time._
 import com.twitter.conversions.storage._
-import org.specs.Specification
+import org.specs.SpecificationWithJUnit
 
-class QueueConfigSpec extends Specification {
+class QueueConfigSpec extends SpecificationWithJUnit {
   "QueueBuilder" should {
     val sampleConfig =
-      QueueConfig(1, 1.byte, 1.byte, None, 1.byte, 1.byte, 1.byte, Some(0.seconds), false, false, 0.seconds, None, 1, false, None, false, false)
+      QueueConfig(1, 1.byte, 1.byte, None, 1.byte, 1.byte, 1.byte, Some(0.seconds), false, false, 0.seconds, None, 1, false, None, false, false, None, None, None)
 
     val unconfiguredBuilder = new QueueBuilder()
     val configSettings = unconfiguredBuilder.getClass.getMethods.filter {

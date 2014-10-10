@@ -243,16 +243,32 @@ trait KestrelConfig extends ServerConfig[Kestrel] {
   var enableSessionTrace: Boolean = false
 
   /**
+   * When set refuses write after the specified number of connections
+   */
+  var connectionLimitRefuseWrites: Option[Int] = None
+
+  /**
+   * When set refuses reads after the specified number of connections
+   */
+  var connectionLimitRefuseReads: Option[Int] = None
+
+  /**
    * Optional Apache Zookeeper configuration used to publish serverset-based availability of Kestrel
    * instances. By default no such information is published.
    */
   var zookeeper: Option[ZooKeeperBuilder] = None
 
+  /**
+   * Fully qualified class name for extension backend.
+   */
+  var beFactoryClass: Option[String] = None
+
   def apply(runtime: RuntimeEnvironment) = {
     new Kestrel(
       default(), queues, aliases, listenAddress, memcacheListenPort, textListenPort, thriftListenPort,
       queuePath, expirationTimerFrequency, clientTimeout, maxOpenTransactions, connectionBacklog,
-      statusFile, defaultStatus, statusChangeGracePeriod, enableSessionTrace, zookeeper.map { _() }
+      statusFile, defaultStatus, statusChangeGracePeriod, enableSessionTrace,
+      connectionLimitRefuseWrites, connectionLimitRefuseReads, zookeeper.map { _()}, beFactoryClass
     )
   }
 

@@ -20,9 +20,8 @@ package net.lag.kestrel
 import com.twitter.conversions.time._
 import com.twitter.logging.Logger
 import com.twitter.ostrich.stats.Stats
-import com.twitter.util.{Duration, FutureTask, Timer, TimerTask}
+import com.twitter.util.{Duration, Timer, TimerTask}
 import java.io._
-import java.net.InetSocketAddress
 import java.util.concurrent.atomic.AtomicBoolean
 
 abstract sealed class Status(val strictness: Int) {
@@ -38,16 +37,22 @@ case object Down extends Status(100) {
   val gracefulShutdown = false
 }
 
-case object Quiescent extends Status(3) {
+case object Quiescent extends Status(4) {
   val blocksReads = true
   val blocksWrites = true
   val gracefulShutdown = true
 }
 
-case object ReadOnly extends Status(2) {
+case object ReadOnly extends Status(3) {
   val blocksReads = false
   val blocksWrites = true
   val gracefulShutdown = true
+}
+
+case object WriteAvoid extends Status(2) {
+  val blocksReads = false
+  val blocksWrites = false
+  val gracefulShutdown = false
 }
 
 case object Up extends Status(1) {
@@ -63,6 +68,7 @@ object Status {
       case Some("QUIESCENT") => Some(Quiescent)
       case Some("READONLY") => Some(ReadOnly)
       case Some("UP") => Some(Up)
+      case Some("WRITEAVOID") => Some(WriteAvoid)
       case _ => None
     }
   }
@@ -72,8 +78,16 @@ class ForbiddenStatusException extends Exception("Status forbidden.")
 class UnknownStatusException extends Exception("Unknown status.")
 class AlreadyStartedException extends Exception("Already started.")
 
-class ServerStatus(val statusFile: String, val timer: Timer, val defaultStatus: Status = Quiescent,
-                   val statusChangeGracePeriod: Duration = 30.seconds) {
+class ServerStatus(val statusStore: PersistentMetadataStore, val timer: Timer, val defaultStatus: Status,
+                   val statusChangeGracePeriod: Duration,
+                   val statusName: Option[String]) {
+  def this(statusFile: String, timer: Timer, defaultStatus: Status = Quiescent,
+                     statusChangeGracePeriod: Duration = 30.seconds,
+                     statusName: Option[String] = None) {
+    this(new LocalMetadataStore(statusFile, statusName.map("status/%s".format(_)).getOrElse("status")),
+      timer, defaultStatus, statusChangeGracePeriod, statusName)
+  }
+
   private val log = Logger.get(getClass.getName)
 
   private[this] var currentStatus: Status = defaultStatus
@@ -81,10 +95,11 @@ class ServerStatus(val statusFile: String, val timer: Timer, val defaultStatus: 
 
   private[this] var timerTask: Option[TimerTask] = None
 
-  private val statusStore = new File(statusFile)
-  if (!statusStore.getParentFile.isDirectory) statusStore.getParentFile.mkdirs()
-
   private[this] val started = new AtomicBoolean(false)
+
+  protected def statusStatName(statName: String) =
+    statusName.map("status/%s%s".format(_, statName)).getOrElse("status%s".format(statName))
+  protected val statusLabel = statusStatName("")
 
   def start() {
     if (!started.compareAndSet(false, true)) {
@@ -93,23 +108,21 @@ class ServerStatus(val statusFile: String, val timer: Timer, val defaultStatus: 
 
     loadStatus()
 
-    Stats.addGauge("status/readable") {
+    Stats.addGauge(statusStatName("/readable")) {
       if (status.blocksReads) 0.0 else 1.0
     }
 
-    Stats.addGauge("status/writeable") {
+    Stats.addGauge(statusStatName("/writeable")) {
       if (status.blocksWrites) 0.0 else 1.0
     }
   }
-
-  def addEndpoints(mainEndpoint: String, endpoints: Map[String, InetSocketAddress]) { }
 
   def shutdown() {
     synchronized {
       // Force completion of pending task
       timerTask.foreach { t =>
         t.cancel()
-        log.debug("status change grace period canceled due shutdown")
+        log.debug("%s change grace period canceled due shutdown", statusLabel)
       }
       timerTask = None
 
@@ -126,40 +139,40 @@ class ServerStatus(val statusFile: String, val timer: Timer, val defaultStatus: 
    *
    * Note: cannot be used to mark this server as Down. Use Quiescent.
    */
-  def setStatus(newStatus: Status): Status = {
+  def setStatus(newStatus: Status, persistStatus: Boolean = true): Status = {
     if (newStatus eq null) throw new UnknownStatusException
     if (newStatus == Down) throw new ForbiddenStatusException
 
-    setStatus(newStatus, persistStatus = true, immediate = false)
+    setStatus(newStatus, persistStatus, immediate = false)
   }
 
   private def setStatus(newStatus: Status, persistStatus: Boolean, immediate: Boolean): Status = synchronized {
     val oldStatus = currentStatus
     try {
       if (proposeStatusChange(oldStatus, newStatus)) {
-        log.debug("Status change from %s to %s accepted", oldStatus, newStatus)
+        log.debug("%s change from %s to %s accepted", statusLabel, oldStatus, newStatus)
         currentStatus = newStatus
         statusChanged(oldStatus, newStatus, immediate)
         if (persistStatus) {
           storeStatus()
         }
 
-        Stats.setLabel("status", currentStatus.toString)
+        Stats.setLabel(statusLabel, currentStatus.toString)
 
-        log.info("switched to status '%s' (previously '%s')", currentStatus, oldStatus)
+        log.info("%s switched to '%s' (previously '%s')", statusLabel, currentStatus, oldStatus)
       } else {
-        log.warning("status change from '%s' to '%s' rejected", oldStatus, newStatus)
+        log.warning("%s change from '%s' to '%s' rejected", statusLabel, oldStatus, newStatus)
       }
     } catch { case e =>
-      log.error(e, "unable to update server status from '%s' to '%s'", oldStatus, newStatus)
+      log.error(e, "unable to update %s from '%s' to '%s'", statusLabel, oldStatus, newStatus)
       timerTask.foreach { task =>
         task.cancel()
-        log.warning("status change grace period canceled due to error")
+        log.warning("%s change grace period canceled due to error", statusLabel)
       }
       timerTask = None
       currentStatus = oldStatus
       currentOperationStatus = oldStatus
-      Stats.setLabel("status", currentStatus.toString)
+      Stats.setLabel(statusLabel, currentStatus.toString)
       throw e
     }
 
@@ -186,7 +199,7 @@ class ServerStatus(val statusFile: String, val timer: Timer, val defaultStatus: 
         val task = timer.schedule(statusChangeGracePeriod.fromNow) {
           currentOperationStatus = newStatus
           timerTask = None
-          log.info("status change grace period expired; status '%s' now enforced", newStatus)
+          log.info("%s change grace period expired; status '%s' now enforced", statusLabel, newStatus)
         }
         timerTask = Some(task)
       } else {
@@ -196,7 +209,7 @@ class ServerStatus(val statusFile: String, val timer: Timer, val defaultStatus: 
       // less or same strictness
       timerTask.foreach { task =>
         task.cancel()
-        log.debug("status change grace period canceled due to subsequent status change")
+        log.debug("%s change grace period canceled due to subsequent status change", statusLabel)
       }
       timerTask = None
       currentOperationStatus = newStatus
@@ -212,6 +225,13 @@ class ServerStatus(val statusFile: String, val timer: Timer, val defaultStatus: 
    */
   def markQuiescent() {
     setStatus(Quiescent)
+  }
+
+  /**
+   * Mark this host as avoiding writes (out of write serverset).
+   */
+  def markWriteAvoid() {
+    setStatus(WriteAvoid)
   }
 
   /**
@@ -241,39 +261,27 @@ class ServerStatus(val statusFile: String, val timer: Timer, val defaultStatus: 
   }
 
   private def loadStatus() {
-    if (statusStore.exists()) {
-      val reader =
-        new BufferedReader(new InputStreamReader(new FileInputStream(statusStore), "UTF-8"))
+    if (statusStore.exists) {
       val statusName =
         try {
-          reader.readLine
+          statusStore.readMetadata
         } catch { case e =>
-          log.error(e, "unable to read stored status at '%s'; status remains '%s'", statusStore, currentStatus)
+          log.error(e, "unable to read stored %s at '%s'; status remains '%s'", statusLabel, statusStore, currentStatus)
           defaultStatus.toString
-        } finally {
-          reader.close()
         }
 
       statusName match {
         case Status(newStatus) =>
           setStatus(newStatus, persistStatus = false, immediate = true)
         case _ =>
-          log.error("unable to parse stored status '%s'; status remains '%s'", statusName, defaultStatus)
+          log.error("unable to parse stored %s '%s'; %s remains '%s'", statusLabel, statusName, statusLabel, defaultStatus)
       }
     } else {
-      log.info("no status stored at '%s'; status remains '%s'", statusStore, defaultStatus)
+      log.info("no %s stored at '%s'; %s remains '%s'", statusLabel, statusStore, statusLabel, defaultStatus)
     }
   }
 
   private def storeStatus() {
-    val writer = new OutputStreamWriter(new FileOutputStream(statusStore), "UTF-8")
-    try {
-      writer.write(status.toString + "\n")
-      log.debug("stored status '%s' in '%s'", status, statusStore)
-    } catch { case e =>
-      log.error(e, "unable store status at '%s'", statusStore)
-    } finally {
-      writer.close()
-    }
+    statusStore.storeMetadata(status.toString)
   }
 }

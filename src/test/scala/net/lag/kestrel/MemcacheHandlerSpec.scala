@@ -21,14 +21,14 @@ import com.twitter.finagle.ClientConnection
 import com.twitter.naggati.{Codec, LatchedChannelSource}
 import com.twitter.naggati.codec.{MemcacheRequest, MemcacheResponse}
 import com.twitter.ostrich.admin.RuntimeEnvironment
-import com.twitter.util.{Future, Promise, Time}
+import com.twitter.util.{Await, Future, Promise, Time}
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
-import org.specs.Specification
+import org.specs.SpecificationWithJUnit
 import org.specs.mock.{ClassMocker, JMocker}
 import scala.collection.mutable
 
-class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
+class MemcacheHandlerSpec extends SpecificationWithJUnit with JMocker with ClassMocker {
   type ClientDesc = Option[() => String]
 
   "MemcacheHandler" should {
@@ -69,7 +69,7 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
 
         memcacheHandler.handler.pendingReads.add("test", 100)
         memcacheHandler.handler.pendingReads.peek("test") mustEqual List(100)
-        memcacheHandler(toReq("get test/close/open"))() mustEqual toResp("test", qitem)
+        Await.result(memcacheHandler(toReq("get test/close/open"))) mustEqual toResp("test", qitem)
         memcacheHandler.handler.pendingReads.peek("test") mustEqual List(qitem.xid)
       }
 
@@ -80,7 +80,7 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
               one(queueCollection).remove(equal("test"), equal(Some(500.milliseconds.fromNow)), equal(true), equal(false), any[ClientDesc]) willReturn Future.value(Some(qitem))
             }
 
-            memcacheHandler(toReq("get test/t=500/close/open"))() mustEqual toResp("test", qitem)
+            Await.result(memcacheHandler(toReq("get test/t=500/close/open"))) mustEqual toResp("test", qitem)
             memcacheHandler.handler.pendingReads.peek("test") mustEqual List(qitem.xid)
           }
         }
@@ -96,7 +96,7 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
             val future = memcacheHandler(toReq("get test/t=500/close/open"))
 
             promise.setValue(Some(qitem))
-            future() mustEqual toResp("test", qitem)
+            Await.result(future) mustEqual toResp("test", qitem)
             memcacheHandler.handler.pendingReads.peek("test") mustEqual List(qitem.xid)
           }
         }
@@ -116,7 +116,7 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
             val future = memcacheHandler(toReq("get test/t=500/close/open"))
 
             promise.setValue(None)
-            future() mustEqual endResponse
+            Await.result(future) mustEqual endResponse
             memcacheHandler.handler.pendingReads.peek("test") mustEqual List()
           }
         }
@@ -130,7 +130,7 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
 
         memcacheHandler.handler.pendingReads.add("test", 100)
         memcacheHandler.handler.pendingReads.peek("test") mustEqual List(100)
-        memcacheHandler(toReq("get test/close/open"))() mustEqual endResponse
+        Await.result(memcacheHandler(toReq("get test/close/open"))) mustEqual endResponse
         memcacheHandler.handler.pendingReads.peek("test") mustEqual List()
       }
 
@@ -139,7 +139,7 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
           one(queueCollection).remove(equal("test"), equal(None), equal(true), equal(false), any[ClientDesc]) willReturn Future.value(Some(qitem))
         }
 
-        memcacheHandler(toReq("get test/close/open"))() mustEqual toResp("test", qitem)
+        Await.result(memcacheHandler(toReq("get test/close/open"))) mustEqual toResp("test", qitem)
         memcacheHandler.handler.pendingReads.peek("test") mustEqual List(qitem.xid)
       }
 
@@ -151,19 +151,19 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
           one(queueCollection).unremove("test", 100)
         }
 
-        memcacheHandler(toReq("get test/abort"))() mustEqual endResponse
+        Await.result(memcacheHandler(toReq("get test/abort"))) mustEqual endResponse
         memcacheHandler.handler.pendingReads.peek("test") mustEqual List()
       }
 
       "forbidden option combinations" in {
-        memcacheHandler(toReq("get test/open/peek"))() mustEqual clientErrorResponse
-        memcacheHandler(toReq("get test/close/peek"))() mustEqual clientErrorResponse
-        memcacheHandler(toReq("get test/open/abort"))() mustEqual clientErrorResponse
-        memcacheHandler(toReq("get test/close/abort"))() mustEqual clientErrorResponse
+        Await.result(memcacheHandler(toReq("get test/open/peek"))) mustEqual clientErrorResponse
+        Await.result(memcacheHandler(toReq("get test/close/peek"))) mustEqual clientErrorResponse
+        Await.result(memcacheHandler(toReq("get test/open/abort"))) mustEqual clientErrorResponse
+        Await.result(memcacheHandler(toReq("get test/close/abort"))) mustEqual clientErrorResponse
       }
 
       "queue name required" in {
-        memcacheHandler(toReq("get /close/open"))() mustEqual clientErrorResponse
+        Await.result(memcacheHandler(toReq("get /close/open"))) mustEqual clientErrorResponse
       }
     }
 
@@ -181,7 +181,7 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
               one(queueCollection).remove(equal("test"), equal(Some(500.milliseconds.fromNow)), equal(false), equal(false), any[ClientDesc]) willReturn Future.value(Some(qitem))
             }
 
-            memcacheHandler(toReq("get test/t=500"))() mustEqual toResp("test", qitem)
+            Await.result(memcacheHandler(toReq("get test/t=500"))) mustEqual toResp("test", qitem)
             memcacheHandler.handler.pendingReads.peek("test") mustEqual List()
           }
         }
@@ -197,7 +197,7 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
             val future = memcacheHandler(toReq("get test/t=500"))
 
             promise.setValue(Some(qitem))
-            future() mustEqual toResp("test", qitem)
+            Await.result(future) mustEqual toResp("test", qitem)
             memcacheHandler.handler.pendingReads.peek("test") mustEqual List()
           }
         }
@@ -208,7 +208,7 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
           one(queueCollection).remove(equal("test"), equal(None), equal(false), equal(false), any[ClientDesc]) willReturn Future.value(Some(qitem))
         }
 
-        memcacheHandler(toReq("get test"))() mustEqual toResp("test", qitem)
+        Await.result(memcacheHandler(toReq("get test"))) mustEqual toResp("test", qitem)
         memcacheHandler.handler.pendingReads.peek("test") mustEqual List()
       }
 
@@ -217,7 +217,7 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
           one(queueCollection).remove(equal("test"), equal(None), equal(false), equal(true), any[ClientDesc]) willReturn Future.value(Some(qitem))
         }
 
-        memcacheHandler(toReq("get test/peek"))() mustEqual toResp("test", qitem)
+        Await.result(memcacheHandler(toReq("get test/peek"))) mustEqual toResp("test", qitem)
       }
     }
 
@@ -250,7 +250,7 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
           }
           val memcacheHandler = new MemcacheHandler(connection, queueCollection, 10)
 
-          val response = memcacheHandler(toReq("monitor test 100 3"))()
+          val response = Await.result(memcacheHandler(toReq("monitor test 100 3")))
           val received = responseStreamToList(response)
           received mustEqual List(qitem, qitem2, qitem3).map { i => toResp("test", i) } ++ List(endResponse)
         }
@@ -274,7 +274,7 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
           tc.advance(1.second)
           promise2.setValue(Some(qitem2))
 
-          val received = responseStreamToList(response())
+          val received = responseStreamToList(Await.result(response))
           received mustEqual List(qitem, qitem2).map { i => toResp("test", i) } ++ List(endResponse)
         }
       }
@@ -291,7 +291,7 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
           }
           val memcacheHandler = new MemcacheHandler(connection, queueCollection, 10)
 
-          val response = memcacheHandler(toReq("monitor test 100 5"))()
+          val response = Await.result(memcacheHandler(toReq("monitor test 100 5")))
           val received = responseStreamToList(response)
           received mustEqual List(qitem, qitem2, qitem3).map { i => toResp("test", i) } ++ List(endResponse)
         }
@@ -312,7 +312,7 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
           tc.advance(101.seconds)
           promise.setValue(Some(qitem))
 
-          val received = responseStreamToList(response())
+          val received = responseStreamToList(Await.result(response))
           received mustEqual List(toResp("test", qitem), endResponse)
         }
       }
@@ -333,7 +333,7 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
 
           val response = memcacheHandler(toReq("monitor test 100 2"))
 
-          val received = responseStreamToList(response())
+          val received = responseStreamToList(Await.result(response))
           received mustEqual List(toResp("test", qitem), endResponse)
         }
       }
@@ -348,7 +348,7 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
 
         val memcacheHandler = new MemcacheHandler(connection, queueCollection, 10)
         memcacheHandler.handler.pendingReads.add("test", 100)
-        memcacheHandler(toReq("confirm test 1"))() mustEqual MemcacheResponse("END", None)
+        Await.result(memcacheHandler(toReq("confirm test 1"))) mustEqual MemcacheResponse("END", None)
         memcacheHandler.handler.pendingReads.size("test") mustEqual 0
       }
 
@@ -363,7 +363,7 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
         memcacheHandler.handler.pendingReads.add("test", 100)
         memcacheHandler.handler.pendingReads.add("test", 101)
         memcacheHandler.handler.pendingReads.add("test", 102)
-        memcacheHandler(toReq("confirm test 2"))() mustEqual MemcacheResponse("END", None)
+        Await.result(memcacheHandler(toReq("confirm test 2"))) mustEqual MemcacheResponse("END", None)
         memcacheHandler.handler.pendingReads.peek("test") mustEqual List(102)
       }
     }
@@ -376,7 +376,7 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
         }
 
         val memcacheHandler = new MemcacheHandler(connection, queueCollection, 10)
-        memcacheHandler(toReq("set test 0 0 5", Some("hello")))() mustEqual MemcacheResponse("STORED", None)
+        Await.result(memcacheHandler(toReq("set test 0 0 5", Some("hello")))) mustEqual MemcacheResponse("STORED", None)
       }
     }
 
@@ -387,7 +387,7 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
       }
 
       val memcacheHandler = new MemcacheHandler(connection, queueCollection, 10)
-      memcacheHandler(toReq("delete test"))() mustEqual MemcacheResponse("DELETED", None)
+      Await.result(memcacheHandler(toReq("delete test"))) mustEqual MemcacheResponse("DELETED", None)
     }
 
     "flush request" in {
@@ -397,7 +397,7 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
       }
 
       val memcacheHandler = new MemcacheHandler(connection, queueCollection, 10)
-      memcacheHandler(toReq("flush test"))() mustEqual MemcacheResponse("END", None)
+      Await.result(memcacheHandler(toReq("flush test"))) mustEqual MemcacheResponse("END", None)
     }
 
     "version request" in {
@@ -409,7 +409,7 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
       Kestrel.runtime = runtime
 
       val memcacheHandler = new MemcacheHandler(connection, queueCollection, 10)
-      val response = memcacheHandler(toReq("version"))()
+      val response = Await.result(memcacheHandler(toReq("version")))
       response.line mustEqual ("VERSION " + runtime.jarVersion)
     }
 
@@ -422,11 +422,11 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
         val memcacheHandler = new MemcacheHandler(connection, queueCollection, 10)
 
         "check status should return an error" in {
-          memcacheHandler(toReq("status"))() mustEqual errorResponse
+          Await.result(memcacheHandler(toReq("status"))) mustEqual errorResponse
         }
 
         "set status should return an error" in {
-          memcacheHandler(toReq("status up"))() mustEqual errorResponse
+          Await.result(memcacheHandler(toReq("status up"))) mustEqual errorResponse
         }
       }
 
@@ -444,7 +444,7 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
             one(serverStatus).status willReturn Up
           }
 
-          memcacheHandler(toReq("status"))() mustEqual MemcacheResponse("UP", None)
+          Await.result(memcacheHandler(toReq("status"))) mustEqual MemcacheResponse("UP", None)
         }
 
         "set status should set current status" in {
@@ -452,7 +452,7 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
             one(serverStatus).setStatus("readonly")
           }
 
-          memcacheHandler(toReq("status readonly"))() mustEqual endResponse
+          Await.result(memcacheHandler(toReq("status readonly"))) mustEqual endResponse
         }
 
         "set status should report client error on invalid status" in {
@@ -460,7 +460,7 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
             one(serverStatus).setStatus("spongebob") willThrow new UnknownStatusException
           }
 
-          memcacheHandler(toReq("status spongebob"))() mustEqual clientErrorResponse
+          Await.result(memcacheHandler(toReq("status spongebob"))) mustEqual clientErrorResponse
         }
       }
     }
@@ -474,7 +474,7 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
 
       val memcacheHandler = new MemcacheHandler(connection, queueCollection, 10, Some(serverStatus))
 
-      memcacheHandler(toReq("get q"))() mustEqual MemcacheResponse("SERVER_ERROR", None)
+      Await.result(memcacheHandler(toReq("get q"))) mustEqual MemcacheResponse("SERVER_ERROR", None)
     }
 
     "unknown command" in {
@@ -483,7 +483,7 @@ class MemcacheHandlerSpec extends Specification with JMocker with ClassMocker {
       }
 
       val memcacheHandler = new MemcacheHandler(connection, queueCollection, 10)
-      memcacheHandler(toReq("die in a fire"))() mustEqual clientErrorResponse
+      Await.result(memcacheHandler(toReq("die in a fire"))) mustEqual clientErrorResponse
     }
 
     // FIXME: shutdown

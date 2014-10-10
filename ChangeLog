@@ -1,3 +1,22 @@
+2.4.7
+-----
+- Make storage pluggable
+- ClientId whitelisting for enqueues and deqeuues
+- Support for making server status persistent state pluggable
+- Fix for server side leaking of open transactions
+- Open Transaction Timeout support
+- Upgrade Finagle and Util to versions 6.*
+- Upgrade to a corresponding version of Naggati
+- Performance Improvements for queues in read behind
+- Support for limiting incoming connections
+- Make Journal Storage Pluggable
+- Disabling aggressive rewrites to the journal
+- Improve reliability for read-behind queues - fix data loss
+- Bug fixes to rewrite/rotation/pack interaction
+- Clean shutdown support
+- Miscellaneous improvements to debugability and monitoring
+- Miscellaneous bug fixes
+
 2.4.2
 -----
 - Journal rotation and rewrite metric

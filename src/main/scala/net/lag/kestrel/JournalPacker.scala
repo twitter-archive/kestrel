@@ -17,7 +17,7 @@
 
 package net.lag.kestrel
 
-import java.io.FileOutputStream
+import java.io.{FileOutputStream, File}
 import scala.annotation.tailrec
 import scala.collection.mutable
 import com.twitter.logging.Logger
@@ -30,10 +30,15 @@ import com.twitter.util.Duration
 class JournalPacker(filenames: Seq[String], newFilename: String) {
   private val log = Logger.get
 
-  val journals = filenames.map { filename => new Journal(filename, Duration.MaxValue) }
+  def mkJournal(filename: String) = {
+    val container = new LocalDirectory(new File(filename).getParent, null)
+    val queueName = new File(filename).getName
+    new Journal(container, queueName, Duration.Top)
+  }
+
+  val journals = filenames.map { filename => mkJournal(filename) }
   val remover = journals.map { _.walk() }.iterator.flatten
   val adder = journals.map { _.walk() }.iterator.flatten
-  val writer = new FileOutputStream(newFilename, false).getChannel
 
   val adderStack = new mutable.ListBuffer[QItem]
   val openTransactions = new mutable.HashMap[Int, QItem]
@@ -111,7 +116,7 @@ class JournalPacker(filenames: Seq[String], newFilename: String) {
     }
     val remaining = next()
 
-    val out = new Journal(newFilename, Duration.MaxValue)
+    val out = mkJournal(newFilename)
     out.open()
     out.dump(openTransactions.values.toList, remaining)
     out.close()

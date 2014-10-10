@@ -29,15 +29,17 @@ import com.twitter.naggati.Codec
 import com.twitter.naggati.codec.{MemcacheResponse, MemcacheRequest, MemcacheCodec}
 import com.twitter.ostrich.admin.{PeriodicBackgroundProcess, RuntimeEnvironment, Service, ServiceTracker}
 import com.twitter.ostrich.stats.Stats
-import com.twitter.util.{Duration, Eval, Future, Time, Timer}
+import com.twitter.util.{Duration, Eval, FuturePool, Future, Time, Timer}
 import java.net.InetSocketAddress
+import java.net.URI
 import java.util.Collections._
+import config._
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicInteger
 import org.apache.thrift.protocol.TBinaryProtocol
-import org.jboss.netty.util.{HashedWheelTimer, Timer => NettyTimer}
-import scala.collection.{immutable, mutable}
-import config._
+import org.jboss.netty.channel.{ChannelPipelineFactory, Channels}
+import org.jboss.netty.util.HashedWheelTimer
+import java.io.File
 
 class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], aliases: List[AliasBuilder],
               listenAddress: String, memcacheListenPort: Option[Int], textListenPort: Option[Int],
@@ -45,7 +47,8 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
               expirationTimerFrequency: Option[Duration], clientTimeout: Option[Duration],
               maxOpenTransactions: Int, connectionBacklog: Option[Int], statusFile: String,
               defaultStatus: Status, statusChangeGracePeriod: Duration, enableSessionTrace: Boolean,
-              zkConfig: Option[ZooKeeperConfig])
+              connectionLimitRefuseWrites: Option[Int], connectionLimitRefuseReads: Option[Int],
+              zkConfig: Option[ZooKeeperConfig], beFactoryClass: Option[String])
       extends Service {
   private val log = Logger.get(getClass.getName)
 
@@ -62,10 +65,16 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
   def thriftCodec = ThriftServerFramedCodec()
 
   def traceSessions: Boolean = enableSessionTrace
+  def checkConnectionLimits(currentCount: Int): (Boolean,Boolean) = {
+    (connectionLimitRefuseWrites.map { v:Int => currentCount > v} getOrElse(false),
+     connectionLimitRefuseReads.map { v:Int => currentCount > v} getOrElse(false))
+  }
 
   private def finagledCodec[Req, Resp](codec: => Codec[Resp]) = {
     new FinagleCodec[Req, Resp] {
-      def pipelineFactory = codec.pipelineFactory
+      def pipelineFactory = new ChannelPipelineFactory {
+        def getPipeline = Channels.pipeline(codec)
+      }
     }
   }
 
@@ -78,6 +87,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
     var builder = ServerBuilder()
       .codec(finagleCodec)
       .name(name)
+      .keepAlive(true)
       .reportTo(new OstrichStatsReceiver)
       .bindTo(address)
     connectionBacklog.foreach { backlog => builder = builder.backlog(backlog) }
@@ -96,6 +106,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
     var builder = ServerBuilder()
       .codec(thriftCodec)
       .name(name)
+      .keepAlive(true)
       .reportTo(new OstrichStatsReceiver)
       .bindTo(address)
     connectionBacklog.foreach { backlog => builder = builder.backlog(backlog) }
@@ -120,10 +131,12 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
   def start() {
     log.info("Kestrel config: listenAddress=%s memcachePort=%s textPort=%s queuePath=%s " +
              "expirationTimerFrequency=%s clientTimeout=%s maxOpenTransactions=%d connectionBacklog=%s " +
-             "statusFile=%s defaultStatus=%s statusChangeGracePeriod=%s enableSessionTrace=%s zookeeper=<%s>",
+             "statusFile=%s defaultStatus=%s statusChangeGracePeriod=%s enableSessionTrace=%s " +
+             "connectionLimitRefuseWrites=%s connectionLimitRefuseReads=%s zookeeper=<%s> beFactoryClass=<%s>",
              listenAddress, memcacheListenPort, textListenPort, queuePath,
              expirationTimerFrequency, clientTimeout, maxOpenTransactions, connectionBacklog,
-             statusFile, defaultStatus, statusChangeGracePeriod, enableSessionTrace, zkConfig)
+             statusFile, defaultStatus, statusChangeGracePeriod, enableSessionTrace,
+             connectionLimitRefuseWrites, connectionLimitRefuseReads, zkConfig, beFactoryClass)
 
     Stats.setLabel("version", Kestrel.runtime.jarVersion)
 
@@ -143,18 +156,33 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
     Journal.packer.start()
 
     try {
-      queueCollection = new QueueCollection(queuePath, timer, journalSyncScheduler,
-        defaultQueueConfig, builders, aliases)
+      val beFactory = beFactoryClass map { className =>
+        StreamContainerFactory(className)
+      } getOrElse new LocalFSContainerFactory(queuePath, statusFile, journalSyncScheduler)
+      
+      val streamContainer = beFactory.createStreamContainer()
+      val statusStore = beFactory.createStatusStore()
+
+      queueCollection = new QueueCollection(streamContainer, timer, defaultQueueConfig, builders, aliases)
       queueCollection.loadQueues()
+
+      Stats.addGauge("items") { queueCollection.currentItems.toDouble }
+      Stats.addGauge("bytes") { queueCollection.currentBytes.toDouble }
+      Stats.addGauge("reserved_memory_ratio") { queueCollection.reservedMemoryRatio }
+
+      serverStatus =
+        zkConfig.map { cfg =>
+          new ZooKeeperServerStatus(cfg, statusStore, timer, defaultStatus,
+                                    statusChangeGracePeriod, None)
+        } getOrElse {
+          new ServerStatus(statusStore, timer, defaultStatus, statusChangeGracePeriod, None)
+        }
+      serverStatus.start()
     } catch {
       case e: InaccessibleQueuePath =>
         e.printStackTrace()
         throw e
     }
-
-    Stats.addGauge("items") { queueCollection.currentItems.toDouble }
-    Stats.addGauge("bytes") { queueCollection.currentBytes.toDouble }
-    Stats.addGauge("reserved_memory_ratio") { queueCollection.reservedMemoryRatio }
 
     serverStatus =
       zkConfig.map { cfg =>
@@ -194,7 +222,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
       val taskDesc = Some(() => "<background expiration task>")
       val proc = new PeriodicBackgroundProcess("background-expiration", period) {
         def periodic() {
-          Kestrel.this.queueCollection.flushAllExpired(true, taskDesc)
+          Kestrel.this.queueCollection.flushAllExpired(taskDesc)
 
           // Now that we've cleaned out the queue, lets see if any of them are
           // ready to be expired.
@@ -207,17 +235,23 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
 
     // Order is important: the main endpoint published in zookeeper is the
     // first configured protocol in the list: memcache, thrift, text.
-    val endpoints =
-      memcacheService.map { s => "memcache" -> s.localAddress } ++
-      thriftService.map { s => "thrift" -> s.localAddress } ++
-      textService.map { s => "text" -> s.localAddress }
-    if (endpoints.nonEmpty) {
-      val mainEndpoint = endpoints.head._1
-      val inetEndpoints =
-        endpoints.map { case (name, addr) => (name, addr.asInstanceOf[InetSocketAddress]) }
-      serverStatus.addEndpoints(mainEndpoint, inetEndpoints.toMap)
-    } else {
-      log.error("No protocols configured; set a listener port for at least one protocol.")
+    serverStatus match {
+      // register server sets iff it is zookeeper server status
+      case zss: ZooKeeperServerStatus =>
+        val endpoints =
+          memcacheService.map { s => "memcache" -> s.localAddress } ++
+          thriftService.map { s => "thrift" -> s.localAddress } ++
+          textService.map { s => "text" -> s.localAddress }
+        if (endpoints.nonEmpty) {
+          val mainEndpoint = endpoints.head._1
+          val inetEndpoints =
+            endpoints.map { case (name, addr) => (name, addr.asInstanceOf[InetSocketAddress]) }
+          zss.addEndpoints(mainEndpoint, inetEndpoints.toMap)
+        } else {
+          log.error("No protocols configured; set a listener port for at least one protocol.")
+        }
+      // do nothing for other type of server status
+      case _ =>
     }
   }
 
@@ -237,15 +271,15 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
 
     try {
       memcacheService.foreach { svc =>
-        svc.close(30.seconds)
+        svc.close(30.seconds.fromNow)
         log.info("kestrel-memcache server stopped")
       }
       textService.foreach { svc =>
-        svc.close(30.seconds)
+        svc.close(30.seconds.fromNow)
         log.info("kestrel-text server stopped")
       }
       thriftService.foreach { svc =>
-        svc.close(30.seconds)
+        svc.close(30.seconds.fromNow)
         log.info("kestrel-thrift server stopped")
       }
     } finally {
@@ -262,7 +296,7 @@ class Kestrel(defaultQueueConfig: QueueConfig, builders: List[QueueBuilder], ali
     Journal.packer.shutdown()
 
     if (queueCollection ne null) {
-      queueCollection.shutdown(serverStatus.gracefulShutdown)
+      queueCollection.shutdown((serverStatus ne null) && serverStatus.gracefulShutdown)
       queueCollection = null
     }
 
@@ -333,6 +367,15 @@ object Kestrel {
     }
     else {
       false
+    }
+  }
+
+  def checkConnectionLimits(currentCount: Int): (Boolean,Boolean) = {
+    if (kestrel != null) {
+      kestrel.checkConnectionLimits(currentCount)
+    }
+    else {
+      (false, false)
     }
   }
 }

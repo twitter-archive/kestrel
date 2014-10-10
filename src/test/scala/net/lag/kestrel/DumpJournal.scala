@@ -6,9 +6,9 @@ import com.twitter.util.TempFolder
 import com.twitter.util.Time
 
 trait DumpJournal { self: TempFolder =>
-  def dumpJournal(qname: String, dumpTimestamps: Boolean = false): String = {
+  def dumpJournal(qname: String, storageContainer: PersistentStreamContainer = new LocalDirectory(folderName, null), dumpTimestamps: Boolean = false): String = {
     var rv = new mutable.ListBuffer[JournalItem]
-    new Journal(new File(folderName, qname).getCanonicalPath).replay { item => rv += item }
+    new Journal(storageContainer, qname, null).replay { item => rv += item }
     rv map {
       case JournalItem.Add(item) =>
         if (!dumpTimestamps) {
