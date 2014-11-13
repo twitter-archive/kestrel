@@ -84,7 +84,7 @@ class ItemIdList {
       tail = start
     } else {
       // now find string of filled items.
-      var h2 = h1 + 1
+      var h2 = h1
       while (h2 < tail && ids(h2) != 0) h2 += 1
       if (h1 != start) System.arraycopy(ids, h1, ids, start, h2 - h1)
       val newStart = start + h2 - h1
