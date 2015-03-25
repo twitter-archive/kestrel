@@ -530,7 +530,7 @@ Global stats reported by kestrel are:
 - `time` - current time in unix epoch
 - `version` - version string, like "1.2"
 - `curr_items` - total of items waiting in all queues
-- `total_itmes` - total of items that have ever been added in this server's
+- `total_items` - total of items that have ever been added in this server's
   lifetime
 - `bytes` - total byte size of items waiting in all queues
 - `curr_connections` - current open connections from clients
