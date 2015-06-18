@@ -3,7 +3,7 @@ import Keys._
 import com.twitter.sbt._
 
 object Kestrel extends Build {
-  val finagleVersion = "6.20.0"
+  val finagleVersion = "6.19.0"
 
   lazy val root = Project(
     id = "kestrel",
@@ -23,7 +23,7 @@ object Kestrel extends Build {
     parallelExecution in Test := false,
 
     libraryDependencies ++= Seq(
-      "com.twitter" % "ostrich" % "8.2.9",
+      "com.twitter" % "ostrich" % "9.5.6",
       "com.twitter" %% "naggati" % "4.1.0",
       "com.twitter" % "finagle-core" % finagleVersion,
       "com.twitter" % "finagle-ostrich4" % finagleVersion,
