@@ -22,7 +22,8 @@ class BlockingStreamWriter(blockPeriod: Duration) extends PersistentStreamWriter
   implicit val timer = new JavaTimer(true)
   def write(data: ByteBuffer): Future[Unit] = {
     if (blockPeriod > Duration.Bottom) {
-      Future.sleep(blockPeriod)  
+      Thread.sleep(blockPeriod.inMilliseconds)
+      Future.Done
     } else {
       Future.Done
     }
