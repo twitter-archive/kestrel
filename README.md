@@ -1,6 +1,7 @@
-
 Kestrel
 =======
+
+[![Project status](https://img.shields.io/badge/status-deprecated-orange.svg)](#status)
 
 Kestrel is based on Blaine Cook's "starling" simple, distributed message
 queue, with added features and bulletproofing, as well as the scalability
@@ -24,6 +25,11 @@ Kestrel has a mailing list here:
 
 Author's address: Robey Pointer \<robeypointer@gmail.com>
 
+Status
+------
+
+Kestrel is currently used in production at Twitter, but it is being replaced by
+other solutions, and it depends on outdated versions of Scala, Finagle, and SBT.
 
 Features
 --------
