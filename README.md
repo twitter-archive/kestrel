@@ -251,4 +251,4 @@ Like "many-clients", it's just a load test.
 
 ## See also
 
-(Siberite)[https://github.com/bogdanovich/siberite] - Kestrel rewritten with Go.
+[Siberite](https://github.com/bogdanovich/siberite) - Kestrel rewritten with Go.
