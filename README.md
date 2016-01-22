@@ -82,11 +82,11 @@ Downloading it
 
 The latest release is always on the homepage here:
 
-- [http://robey.github.com/kestrel](http://robey.github.com/kestrel)
+- [http://robey.github.io/kestrel/](http://robey.github.io/kestrel/)
 
 Or the latest development versions & branches are on github:
 
-- [http://gitub.com/robey/kestrel](http://github.com/robey/kestrel)
+- [http://gitub.com/robey/kestrel](https://github.com/twitter/kestrel)
 
 
 Building it
@@ -141,7 +141,7 @@ Configuration
 
 Queue configuration is described in detail in `docs/guide.md` (an operational
 guide). Scala docs for the config variables are
-[here](http://robey.github.com/kestrel/api/main/api/net/lag/kestrel/config/KestrelConfig.html).
+[here](http://robey.github.io/kestrel/api/main/api/net/lag/kestrel/config/KestrelConfig.html).
 
 
 Performance
