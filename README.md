@@ -233,7 +233,7 @@ You can see the journals being packed in the kestrel log. Like
 This test starts a producer and several consumers, with the consumers
 occasionally "forgetting" to acknowledge an item that they've read. It
 verifies that the un-acknowledged items are eventually handed off to another
-consmer.
+consumer.
 
 A sample run:
 
