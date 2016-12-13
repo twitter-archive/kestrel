@@ -129,8 +129,10 @@ case "$1" in
   status)
     if running; then
       echo "$APP_NAME is running."
+      exit 0
     else
       echo "$APP_NAME is NOT running."
+      exit 3
     fi
   ;;
 
