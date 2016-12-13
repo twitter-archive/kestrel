@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 echo "Starting kestrel in development mode..."
 
 if ! [ -d /var/log/kestrel ] || ! [ -d /var/spool/kestrel ] ; then
