@@ -1,0 +1,4 @@
+dist/kestrel.jar usr/share/kestrel
+dist/kestrel-2.4.1/libs/* usr/share/kestrel/libs
+debian/kestrel.conf etc
+debian/limits.d/kestrel.conf etc/security/limits.d

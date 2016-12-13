@@ -21,3 +21,9 @@ kcluster-*.gem
 .ensime
 .ensime/
 .ensime_lucene/
+/debian/*-stamp
+/debian/*.debhelper*
+/debian/*.substvars
+/debian/files
+/debian/kestrel/
+/debian/sbt/

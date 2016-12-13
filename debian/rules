@@ -1,0 +1,32 @@
+#!/usr/bin/make -f
+# -*- makefile -*-
+
+# Uncomment this to turn on verbose mode.
+#export DH_VERBOSE=1
+
+include /usr/share/cdbs/1/rules/debhelper.mk
+
+export JAVA_HOME := /usr/lib/jvm/default-java
+PACKAGE := $(DEB_SOURCE_PACKAGE)
+VERSION	:= $(DEB_UPSTREAM_VERSION)
+SCALA_VERSION := 2.9.2
+SBT := /usr/bin/sbt
+SBT_DIR := $(CURDIR)/debian/sbt
+SBT_OPTS := -batch -sbt-dir $(SBT_DIR)
+
+configure: $(CURDIR)/debian/configure-stamp
+$(CURDIR)/debian/configure-stamp:
+	sbt $(SBT_OPTS) update
+	touch $@
+
+build-indep: $(CURDIR)/debian/build-indep-stamp
+$(CURDIR)/debian/build-indep-stamp:
+	sbt $(SBT_OPTS) package-dist
+	cp $(CURDIR)/dist/$(PACKAGE)-$(VERSION)/kestrel_$(SCALA_VERSION)-$(VERSION).jar $(CURDIR)/dist/kestrel.jar
+	touch $@
+
+clean::
+	-sbt $(SBT_OPTS) clean > /dev/null 2>&1 || true
+	-rm -f $(CURDIR)/debian/*-stamp
+	-rm -rf $(SBT_DIR)
+	dh_clean

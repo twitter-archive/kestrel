@@ -1,0 +1,25 @@
+Source: kestrel
+Section: net
+Priority: extra
+Maintainer: Kyle Ambroff <ambroff@jawbone.com>
+Build-Depends: debhelper (>= 8.0.0),
+ cdbs,
+ default-jdk,
+ devscripts,
+ sbt
+Standards-Version: 3.9.3
+Homepage: http://robey.github.com/kestrel/
+#Vcs-Git: git://github.com/ambroff/kestrel.git
+#Vcs-Browser: http://github.com/ambroff/kestrel
+
+Package: kestrel
+Architecture: all
+Pre-Depends: adduser (>= 3.40),
+ curl,
+ lsb-base (>= 3.0-6),
+ default-jre-headless,
+ openjdk-7-jre | openjdk-6-jre | java7-runtime | java6-runtime
+Depends: ${misc:Depends}
+Description: Simple, distributed message queue.
+ Kestrel is a simple, distributed message queue written on the JVM, based on
+ Blaine Cook's "starling".
